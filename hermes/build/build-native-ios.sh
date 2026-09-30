@@ -57,13 +57,11 @@ checkout_cpython "$CPYTHON_ROOT"
 
 if [ ! -x "$HOST_PYTHON" ]; then
   HOST_ROOT=$BUILD_ROOT/host-cpython
-  if [ ! -x "$HOST_PYTHON" ]; then
-    checkout_cpython "$HOST_ROOT"
-    (cd "$HOST_ROOT" && env -u SDKROOT -u CC -u CFLAGS -u CPPFLAGS -u LDFLAGS \
-      ./configure --prefix="$BUILD_ROOT/host-python" --without-ensurepip --disable-test-modules)
-    (cd "$HOST_ROOT" && env -u SDKROOT -u CC -u CFLAGS -u CPPFLAGS -u LDFLAGS make -j"${JOBS:-16}")
-    (cd "$HOST_ROOT" && env -u SDKROOT -u CC -u CFLAGS -u CPPFLAGS -u LDFLAGS make install)
-  fi
+  checkout_cpython "$HOST_ROOT"
+  (cd "$HOST_ROOT" && env -u SDKROOT -u CC -u CFLAGS -u CPPFLAGS -u LDFLAGS \
+    ./configure --prefix="$BUILD_ROOT/host-python" --without-ensurepip --disable-test-modules)
+  (cd "$HOST_ROOT" && env -u SDKROOT -u CC -u CFLAGS -u CPPFLAGS -u LDFLAGS make -j"${JOBS:-16}")
+  (cd "$HOST_ROOT" && env -u SDKROOT -u CC -u CFLAGS -u CPPFLAGS -u LDFLAGS make install)
 fi
 "$HOST_PYTHON" --version
 
