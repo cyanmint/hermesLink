@@ -106,18 +106,57 @@ path.write_text(text, encoding="utf-8", newline="\n")
 if len(sys.argv) > 2:
     workspace_path = Path(sys.argv[2])
     workspace_text = workspace_path.read_text(encoding="utf-8")
+
+    ios_workspace_helper = '''def _ios_documents_workspace() -> str | None:
+    documents_root = os.environ.get("HERMES_IOS_DOCUMENTS_ROOT")
+    if not documents_root:
+        return None
+    workspace = Path(documents_root) / "workspace"
+    workspace.mkdir(parents=True, exist_ok=True)
+    return str(_resolve_path(workspace))
+
+
+'''
+    if "def _ios_documents_workspace() -> str | None:" not in workspace_text:
+        workspace_text = workspace_text.replace(
+            "def _profile_default_workspace() -> str:\n",
+            ios_workspace_helper + "def _profile_default_workspace() -> str:\n",
+            1,
+        )
+
     workspace_default_anchor = "def _profile_default_workspace() -> str:\n"
     workspace_default_injection = '''def _profile_default_workspace() -> str:
+    ios_workspace = _ios_documents_workspace()
+    if ios_workspace:
+        return ios_workspace
     ios_default_workspace = os.environ.get("HERMES_WEBUI_DEFAULT_WORKSPACE")
     if ios_default_workspace:
         return str(_resolve_path(ios_default_workspace))
 '''
-    if workspace_default_anchor in workspace_text:
+    if "ios_workspace = _ios_documents_workspace()" not in workspace_text:
+        if workspace_default_anchor not in workspace_text:
+            raise SystemExit("workspace default selection patch anchor not found")
         workspace_text = workspace_text.replace(
             workspace_default_anchor, workspace_default_injection, 1
         )
-    elif 'ios_default_workspace = os.environ.get("HERMES_WEBUI_DEFAULT_WORKSPACE")' not in workspace_text:
-        raise SystemExit("workspace default selection patch anchor not found")
+
+    for function_name, signature, variable in (
+        (
+            "get_profile_default_workspace",
+            "def get_profile_default_workspace() -> str:\n",
+            "ios_profile_workspace",
+        ),
+        ("get_last_workspace", "def get_last_workspace() -> str:\n", "ios_last_workspace"),
+    ):
+        ios_override = (
+            f"    {variable} = _ios_documents_workspace()\n"
+            f"    if {variable}:\n"
+            f"        return {variable}\n"
+        )
+        if variable not in workspace_text:
+            if signature not in workspace_text:
+                raise SystemExit(f"{function_name} patch anchor not found")
+            workspace_text = workspace_text.replace(signature, signature + ios_override, 1)
 
     saved_workspace_anchor = '''        if Path(raw).is_dir():
             return raw

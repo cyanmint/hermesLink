@@ -96,13 +96,13 @@ class UserVisiblePathTests(unittest.TestCase):
                 "    return Path(candidate).resolve()\n"
                 "def _profile_default_workspace() -> str:\n"
                 "    return '/app-support/home/workspace'\n"
-                "def get_last_workspace():\n"
-                "    def valid_last_workspace(raw):\n"
-                "        if Path(raw).is_dir():\n"
-                "            return raw\n"
-                "        return None\n"
-                "    return valid_last_workspace(os.path.join(os.environ['HOME'], 'workspace'))\n"
-                "def get_profile_default_workspace():\n"
+                "def _last_workspace_file():\n"
+                "    return Path(__file__).with_name('last_workspace.txt')\n"
+                "def get_last_workspace() -> str:\n"
+                "    if _last_workspace_file().exists():\n"
+                "        return _last_workspace_file().read_text()\n"
+                "    return os.path.join(os.environ['HOME'], 'workspace')\n"
+                "def get_profile_default_workspace() -> str:\n"
                 "    def _valid(raw):\n"
                 "        if Path(raw).is_dir():\n"
                 "            return raw\n"
@@ -139,15 +139,19 @@ class UserVisiblePathTests(unittest.TestCase):
             documents_workspace.mkdir(parents=True)
             hidden_workspace = hidden_home / "workspace"
             hidden_workspace.mkdir(parents=True)
-            os.environ["HOME"] = str(root / "unrelated-home")
+            (workspace.parent / "last_workspace.txt").write_text(str(hidden_workspace))
+            os.environ["HOME"] = str(hidden_home)
             os.environ["HERMES_IOS_HOME_ROOT"] = str(hidden_home)
             os.environ["HERMES_IOS_DOCUMENTS_ROOT"] = str(documents)
-            os.environ["HERMES_WEBUI_DEFAULT_WORKSPACE"] = str(documents_workspace)
+            os.environ["HERMES_WEBUI_DEFAULT_WORKSPACE"] = str(hidden_workspace)
             try:
+                subprocess.run([sys.executable, str(PATCH_PATH), str(config), str(workspace)], check=True)
                 self.assertEqual(
                     patched_workspace._profile_default_workspace(), str(documents_workspace.resolve())
                 )
-                self.assertIsNone(patched_workspace.get_last_workspace())
+                self.assertEqual(
+                    patched_workspace.get_last_workspace(), str(documents_workspace.resolve())
+                )
                 self.assertEqual(
                     patched_workspace.get_profile_default_workspace(), str(documents_workspace.resolve())
                 )
