@@ -38,6 +38,7 @@
 
 + (NSString *) groupContainerPath;
 + (NSString *) documentsPath;
++ (NSString *) hermesHomePath;
 + (NSString *) iCloudDriveDocuments;
 
 // ~/.blink

@@ -17,13 +17,17 @@ class UserVisiblePathTests(unittest.TestCase):
     def test_app_uses_actual_shared_documents_directory_for_hermes_home(self):
         app_delegate = (ROOT / "Blink" / "AppDelegate.m").read_text(encoding="utf-8")
         mcp_session = (ROOT / "Sessions" / "MCPSession.m").read_text(encoding="utf-8")
+        blink_paths = (ROOT / "BlinkConfig" / "BlinkPaths.m").read_text(encoding="utf-8")
 
-        self.assertIn('NSString *documentsPath = [BlinkPaths documentsPath];', app_delegate)
-        self.assertIn('setenv("HERMES_HOME", documentsPath.UTF8String, 1);', app_delegate)
+        self.assertIn('NSString *hermesHomePath = [BlinkPaths hermesHomePath];', app_delegate)
+        self.assertIn('setenv("HERMES_HOME", hermesHomePath.UTF8String, 1);', app_delegate)
         self.assertIn('NSString *workspacePath = [BlinkPaths documentsPath];', mcp_session)
+        self.assertIn('NSString *hermesHomePath = [BlinkPaths hermesHomePath];', mcp_session)
+        self.assertIn('setenv("HERMES_HOME", hermesHomePath.UTF8String, 1);', mcp_session)
         self.assertIn('setenv("TERMINAL_CWD", workspacePath.UTF8String, 1);', mcp_session)
         self.assertIn('setenv("PWD", workspacePath.UTF8String, 1);', mcp_session)
         self.assertNotIn('stringByAppendingPathComponent:@"Documents"', mcp_session)
+        self.assertIn('[[self documentsPath] stringByAppendingPathComponent:@"HermesHome"]', blink_paths)
 
     def test_app_documents_are_enabled_for_files_and_file_sharing(self):
         with (ROOT / "Blink" / "Info.plist").open("rb") as stream:

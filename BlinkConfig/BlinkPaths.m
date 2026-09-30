@@ -64,6 +64,13 @@ NSString *__iCloudsDriveDocumentsPath = nil;
   return __documentsPath;
 }
 
++ (NSString *)hermesHomePath
+{
+  NSString *path = [[self documentsPath] stringByAppendingPathComponent:@"HermesHome"];
+  [self _ensureFolderAtPath:path];
+  return path;
+}
+
 + (NSString *)groupContainerPath {
   if (__groupContainerPath == nil) {
 

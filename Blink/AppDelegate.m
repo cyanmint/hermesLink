@@ -113,11 +113,12 @@ void __setupProcessEnv(void) {
                              withIntermediateDirectories:YES
                                               attributes:nil
                                                    error:nil];
+  NSString *hermesHomePath = [BlinkPaths hermesHomePath];
   NSString *homePath = BlinkPaths.homePath;
   setenv("HOME", homePath.UTF8String, 1);
   setenv("SSH_HOME", homePath.UTF8String, 1);
   setenv("CURL_HOME", homePath.UTF8String, 1);
-  setenv("HERMES_HOME", documentsPath.UTF8String, 1);
+  setenv("HERMES_HOME", hermesHomePath.UTF8String, 1);
   setenv("TERMINAL_CWD", documentsPath.UTF8String, 1);
   setenv("PWD", documentsPath.UTF8String, 1);
   

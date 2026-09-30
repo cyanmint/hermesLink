@@ -92,11 +92,12 @@
     // latter is a symlink created asynchronously and can become a private
     // shadow folder if a session starts before that link is installed.
     NSString *workspacePath = [BlinkPaths documentsPath];
+    NSString *hermesHomePath = [BlinkPaths hermesHomePath];
     [[NSFileManager defaultManager] createDirectoryAtPath:workspacePath
                                withIntermediateDirectories:YES
                                                 attributes:nil
-                                                     error:nil];
-    setenv("HERMES_HOME", workspacePath.UTF8String, 1);
+                                                 error:nil];
+    setenv("HERMES_HOME", hermesHomePath.UTF8String, 1);
     setenv("TERMINAL_CWD", workspacePath.UTF8String, 1);
     setenv("PWD", workspacePath.UTF8String, 1);
     chdir(workspacePath.UTF8String);
