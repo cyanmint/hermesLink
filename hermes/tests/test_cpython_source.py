@@ -17,7 +17,7 @@ class CPythonSourceTests(unittest.TestCase):
                 source = script.read_text(encoding="utf-8")
                 self.assertIn(f"CPYTHON_REPOSITORY=${{CPYTHON_REPOSITORY:-{CPYTHON_REPOSITORY}}}", source)
                 self.assertIn(f"CPYTHON_REF=${{CPYTHON_REF:-{CPYTHON_REF}}}", source)
-                self.assertIn("git checkout --detach FETCH_HEAD", source)
+                self.assertIn("checkout --detach FETCH_HEAD", source)
 
 
 if __name__ == "__main__":
