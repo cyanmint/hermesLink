@@ -5,7 +5,7 @@ on:
   workflow_dispatch:
     inputs:
       runtime:
-        description: Run the Linux runtime stage
+        description: Rebuild runtime ZIP and native iOS runtime
         required: true
         type: choice
         options:
@@ -45,7 +45,8 @@ jobs:
     name: Decide build stages
     runs-on: ubuntu-latest
     outputs:
-      run_runtime: ${{ steps.decision.outputs.run_runtime }}
+      run_runtime_zip: ${{ steps.decision.outputs.run_runtime_zip }}
+      run_native_runtime: ${{ steps.decision.outputs.run_native_runtime }}
       run_app: ${{ steps.decision.outputs.run_app }}
     steps:
       - name: Check out HermesLink
@@ -79,20 +80,29 @@ jobs:
             fi
           fi
 
-          runtime_changed=false
+          runtime_zip_changed=false
+          native_runtime_changed=false
           app_changed=false
           while IFS= read -r path; do
             [ -n "$path" ] || continue
             case "$path" in
-              hermes/*|install_hermes_runtime.sh|.github/workflows/*)
-                runtime_changed=true
+              hermes/build/build-hermesrt-zip.sh|hermes/build/fetch-sources.sh|hermes/build/validate-runtime-zip.py|hermes/overlay/hermes/*|hermes/overlay/patches/*)
+                runtime_zip_changed=true
+                ;;
+              hermes/build/build-native-ios.sh|hermes/build/package-native-ios.sh|hermes/overlay/cpython/*|hermes/patches/*)
+                native_runtime_changed=true
                 ;;
             esac
             case "$path" in
-              Blink/*|BlinkTests/*|Settings/*|Sessions/*|Resources/*|Media.xcassets/*|*.xcodeproj/*|*.xcconfig|Frameworks/*|get_frameworks.sh|get_resources.sh|install_hermes_runtime.sh|hermes/*|.github/workflows/*)
+              Blink/*|BlinkTests/*|Settings/*|Sessions/*|Resources/*|Media.xcassets/*|*.xcodeproj/*|*.xcconfig|Frameworks/*|get_frameworks.sh|get_resources.sh)
                 app_changed=true
                 ;;
             esac
+            if [[ "$path" == .github/workflows/* ]]; then
+              runtime_zip_changed=true
+              native_runtime_changed=true
+              app_changed=true
+            fi
           done <<< "$changed_files"
 
           choose() {
@@ -103,18 +113,36 @@ jobs:
               *) echo "invalid override: $1" >&2; exit 2 ;;
             esac
           }
-          run_runtime="$(choose "$RUNTIME_OVERRIDE" "$runtime_changed")"
+          run_runtime_zip="$(choose "$RUNTIME_OVERRIDE" "$runtime_zip_changed")"
+          run_native_runtime="$(choose "$RUNTIME_OVERRIDE" "$native_runtime_changed")"
           run_app="$(choose "$APP_OVERRIDE" "$app_changed")"
-          printf 'runtime_changed=%s app_changed=%s override_runtime=%s override_app=%s\n' \
-            "$runtime_changed" "$app_changed" "$RUNTIME_OVERRIDE" "$APP_OVERRIDE"
-          printf 'run_runtime=%s\n' "$run_runtime" >> "$GITHUB_OUTPUT"
+          printf 'runtime_zip_changed=%s native_runtime_changed=%s app_changed=%s override_runtime=%s override_app=%s\n' \
+            "$runtime_zip_changed" "$native_runtime_changed" "$app_changed" "$RUNTIME_OVERRIDE" "$APP_OVERRIDE"
+          printf 'run_runtime_zip=%s\n' "$run_runtime_zip" >> "$GITHUB_OUTPUT"
+          printf 'run_native_runtime=%s\n' "$run_native_runtime" >> "$GITHUB_OUTPUT"
           printf 'run_app=%s\n' "$run_app" >> "$GITHUB_OUTPUT"
-          printf 'run_runtime=%s run_app=%s\n' "$run_runtime" "$run_app"
+          printf 'run_runtime_zip=%s run_native_runtime=%s run_app=%s\n' \
+            "$run_runtime_zip" "$run_native_runtime" "$run_app"
+
+  ensure-release:
+    name: Ensure runtime release exists
+    needs: decide
+    runs-on: ubuntu-latest
+    steps:
+      - name: Create fixed release if missing
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+          gh release view "$HERMES_RUNTIME_RELEASE_TAG" >/dev/null 2>&1 || \
+            gh release create "$HERMES_RUNTIME_RELEASE_TAG" \
+              --title 'Hermes runtime (latest)' \
+              --notes 'HermesLink app component and runtime assets.'
 
   build-runtime-zip:
     name: Build pure-Python hermesrt.zip (Linux)
-    needs: decide
-    if: needs.decide.outputs.run_runtime == 'true'
+    needs: [decide, ensure-release]
+    if: needs.decide.outputs.run_runtime_zip == 'true'
     runs-on: ubuntu-latest
     steps:
       - name: Check out HermesLink
@@ -139,18 +167,15 @@ jobs:
           chmod +x hermes/build/*.sh
           bash hermes/build/build-hermesrt-zip.sh
 
-      - name: Upload pure-Python runtime archive
-        uses: actions/upload-artifact@v4
-        with:
-          name: hermesrt-zip
-          path: hermes/hermesrt.zip
-          if-no-files-found: error
-          retention-days: 1
+      - name: Publish pure-Python runtime archive
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: gh release upload "$HERMES_RUNTIME_RELEASE_TAG" hermes/hermesrt.zip --clobber
 
   build-linux-native-runtime:
     name: Build static Linux Hermes runtime
-    needs: [decide, build-runtime-zip]
-    if: needs.decide.outputs.run_runtime == 'true'
+    needs: [ensure-release, build-runtime-zip]
+    if: always()
     runs-on: ubuntu-latest
     steps:
       - name: Check out HermesLink
@@ -170,10 +195,15 @@ jobs:
             libssl-dev uuid-dev zlib1g-dev
 
       - name: Download pure-Python runtime archive
-        uses: actions/download-artifact@v4
-        with:
-          name: hermesrt-zip
-          path: linux-runtime
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+          mkdir -p linux-runtime
+          curl --fail --location --retry 5 --retry-all-errors \
+            --header "Authorization: token $GH_TOKEN" \
+            --output linux-runtime/hermesrt.zip \
+            "https://github.com/${GITHUB_REPOSITORY}/releases/download/${HERMES_RUNTIME_RELEASE_TAG}/hermesrt.zip"
 
       - name: Build static Linux executable
         env:
@@ -214,8 +244,8 @@ jobs:
 
   build-native-runtime:
     name: Build native iOS runtime (macOS)
-    needs: decide
-    if: needs.decide.outputs.run_runtime == 'true'
+    needs: [decide, ensure-release]
+    if: needs.decide.outputs.run_native_runtime == 'true'
     runs-on: macos-latest
     steps:
       - name: Check out HermesLink
@@ -260,105 +290,26 @@ jobs:
             hermes/Frameworks/HermesRuntime.framework \
             hermes/HermesRuntime.framework.zip
 
-      - name: Upload native framework
-        uses: actions/upload-artifact@v4
-        with:
-          name: hermes-native-framework
-          path: hermes/HermesRuntime.framework.zip
-          if-no-files-found: error
-          retention-days: 1
-
-  publish-runtime:
-    name: Publish runtime artifacts
-    needs: [decide, build-runtime-zip, build-native-runtime]
-    if: needs.decide.outputs.run_runtime == 'true'
-    runs-on: ubuntu-latest
-    steps:
-      - name: Check out HermesLink
-        uses: actions/checkout@v4
-
-      - name: Download pure-Python archive
-        uses: actions/download-artifact@v4
-        with:
-          name: hermesrt-zip
-          path: runtime-artifact
-
-      - name: Download native framework archive
-        uses: actions/download-artifact@v4
-        with:
-          name: hermes-native-framework
-          path: runtime-artifact
-
-      - name: Validate release payloads
-        run: |
-          set -euo pipefail
-          test -s runtime-artifact/hermesrt.zip
-          test -s runtime-artifact/HermesRuntime.framework.zip
-          python3 hermes/build/validate-runtime-zip.py runtime-artifact/hermesrt.zip
-          unzip -t runtime-artifact/HermesRuntime.framework.zip
-
-      - name: Publish assets to fixed release
+      - name: Publish native framework
         env:
           GH_TOKEN: ${{ github.token }}
-        run: |
-          set -euo pipefail
-          # Recreate the mutable release instead of using --clobber. GitHub
-          # can retain a stale asset id after an interrupted upload; gh then
-          # receives 404 while trying to replace an asset that still appears
-          # in the release metadata.
-          if gh release view "$HERMES_RUNTIME_RELEASE_TAG" >/dev/null 2>&1; then
-            gh release delete "$HERMES_RUNTIME_RELEASE_TAG" --yes
-          fi
-          gh release create "$HERMES_RUNTIME_RELEASE_TAG" \
-            --title 'Hermes runtime (latest)' \
-            --notes 'Pure-Python runtime archive and native iOS framework used by HermesLink app builds.'
-          gh release upload "$HERMES_RUNTIME_RELEASE_TAG" \
-            runtime-artifact/hermesrt.zip runtime-artifact/HermesRuntime.framework.zip
+        run: gh release upload "$HERMES_RUNTIME_RELEASE_TAG" hermes/HermesRuntime.framework.zip --clobber
 
-  build-app:
-    name: Build HermesLink app
-    needs: [decide, build-runtime-zip, build-native-runtime]
-    if: >-
-      always() &&
-      needs.decide.outputs.run_app == 'true' &&
-      (
-        (
-          needs.decide.outputs.run_runtime == 'true' &&
-          needs.build-runtime-zip.result == 'success' &&
-          needs.build-native-runtime.result == 'success'
-        ) ||
-        (
-          needs.decide.outputs.run_runtime != 'true' &&
-          needs.build-runtime-zip.result == 'skipped' &&
-          needs.build-native-runtime.result == 'skipped'
-        )
-      )
+  build-app-without-runtime:
+    name: Build HermesLink app without runtime (macOS)
+    needs: [decide, ensure-release]
+    if: needs.decide.outputs.run_app == 'true'
     runs-on: macos-latest
     permissions:
-      actions: read
-      contents: read
+      contents: write
     steps:
       - name: Check out HermesLink
         uses: actions/checkout@v4
         with:
           submodules: true
 
-      - name: Download pure-Python archive from runtime build
-        if: needs.decide.outputs.run_runtime == 'true'
-        uses: actions/download-artifact@v4
-        with:
-          name: hermesrt-zip
-          path: runtime-artifact/python
-
-      - name: Download native framework from runtime build
-        if: needs.decide.outputs.run_runtime == 'true'
-        uses: actions/download-artifact@v4
-        with:
-          name: hermes-native-framework
-          path: runtime-artifact/native
-
       - name: Download runtime assets from fixed release
-        if: needs.decide.outputs.run_runtime != 'true'
+        if: ${{ false }}
         env:
           GH_TOKEN: ${{ github.token }}
         run: |
@@ -380,13 +331,39 @@ jobs:
       - name: Install uv
         uses: astral-sh/setup-uv@v5
 
+      - name: Prepare link-only runtime placeholders
+        run: |
+          set -euo pipefail
+          mkdir -p Frameworks/HermesRuntime.framework Resources
+          cat > "$RUNNER_TEMP/hermes_runtime_stub.c" <<'EOF'
+          int hermes_runtime_main(int argc, char **argv) {
+            (void)argc;
+            (void)argv;
+            return 70;
+          }
+          EOF
+          xcrun --sdk iphoneos clang \
+            -target arm64-apple-ios16.1 \
+            -isysroot "$(xcrun --sdk iphoneos --show-sdk-path)" \
+            -dynamiclib "$RUNNER_TEMP/hermes_runtime_stub.c" \
+            -install_name '@rpath/HermesRuntime.framework/HermesRuntime' \
+            -o Frameworks/HermesRuntime.framework/HermesRuntime
+          cat > Frameworks/HermesRuntime.framework/Info.plist <<'EOF'
+          <?xml version="1.0" encoding="UTF-8"?>
+          <!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+          <plist version="1.0"><dict>
+            <key>CFBundleExecutable</key><string>HermesRuntime</string>
+            <key>CFBundleIdentifier</key><string>com.cyan.hermes-runtime-link-stub</string>
+            <key>CFBundlePackageType</key><string>FMWK</string>
+          </dict></plist>
+          EOF
+          printf 'runtime omitted from app component\n' > "$RUNNER_TEMP/runtime-stub.txt"
+          (cd "$RUNNER_TEMP" && zip -q "$GITHUB_WORKSPACE/Resources/hermesrt.zip" runtime-stub.txt)
+
       - name: Compute runtime cache key
         id: runtime_hash
         run: |
-          set -euo pipefail
-          python_hash="$(shasum -a 256 runtime-artifact/python/hermesrt.zip | awk '{print $1}')"
-          framework_hash="$(shasum -a 256 runtime-artifact/native/HermesRuntime.framework.zip | awk '{print $1}')"
-          printf 'sha256=%s-%s\n' "$python_hash" "$framework_hash" >> "$GITHUB_OUTPUT"
+          echo 'sha256=runtime-free' >> "$GITHUB_OUTPUT"
 
       - name: Cache unsigned app archive
         id: app_build_cache
@@ -396,15 +373,6 @@ jobs:
             ${{ runner.temp }}/HermesLink.xcarchive
             ${{ runner.temp }}/hermeslink-archive.log
           key: ${{ runner.os }}-hermes-app-${{ github.sha }}-${{ steps.runtime_hash.outputs.sha256 }}-${{ hashFiles('Blink.xcodeproj/**', 'Blink/**', 'Settings/**', 'Sessions/**', 'Resources/**', 'Media.xcassets/**', 'Frameworks/**', '*.xcconfig', 'hermes/build/**', 'install_hermes_runtime.sh') }}
-
-      - name: Install downloaded runtime assets
-        run: |
-          set -euo pipefail
-          mkdir -p hermes/Frameworks
-          unzip -q runtime-artifact/native/HermesRuntime.framework.zip -d hermes/Frameworks
-          cp runtime-artifact/python/hermesrt.zip hermes/hermesrt.zip
-          test -x hermes/Frameworks/HermesRuntime.framework/HermesRuntime
-          bash install_hermes_runtime.sh hermes
 
       - name: Cache framework builds
         id: cache
@@ -459,48 +427,52 @@ jobs:
           test -d "$RUNNER_TEMP/HermesLink.xcarchive/Products/Applications"
           test -n "$(find "$RUNNER_TEMP/HermesLink.xcarchive/Products/Applications" -maxdepth 1 -type d -name '*.app' -print -quit)"
 
-      - name: Refresh embedded runtime in archive
+      - name: Remove link-only runtime placeholders
         run: |
           set -euo pipefail
           app="$(find "$RUNNER_TEMP/HermesLink.xcarchive/Products/Applications" -maxdepth 1 -type d -name '*.app' -print -quit)"
           test -n "$app"
-          install -m 644 runtime-artifact/python/hermesrt.zip "$app/hermesrt.zip"
-          test -s "$app/hermesrt.zip"
+          rm -rf "$app/Frameworks/HermesRuntime.framework" "$app/hermesrt.zip"
+          test ! -e "$app/Frameworks/HermesRuntime.framework"
+          test ! -e "$app/hermesrt.zip"
 
-      - name: Package IPA
+      - name: Package and publish runtime-free app
         run: |
           set -euo pipefail
           app="$(find "$RUNNER_TEMP/HermesLink.xcarchive/Products/Applications" -maxdepth 1 -type d -name '*.app' -print -quit)"
           test -n "$app"
-          test -x "$app/Frameworks/HermesRuntime.framework/HermesRuntime"
-          codesign --force --sign - --timestamp=none "$app/Frameworks/HermesRuntime.framework"
-          codesign --force --deep --sign - --timestamp=none "$app"
-          codesign --verify --deep --strict --verbose=2 "$app"
-          rm -rf "$RUNNER_TEMP/Payload" "$RUNNER_TEMP/HermesLink.ipa"
-          mkdir -p "$RUNNER_TEMP/Payload/HermesLink.app"
-          /usr/bin/ditto "$app" "$RUNNER_TEMP/Payload/HermesLink.app"
-          test "$(find "$RUNNER_TEMP/Payload" -mindepth 1 -maxdepth 1 -type d -name '*.app' | wc -l | tr -d ' ')" = 1
-          test -f "$RUNNER_TEMP/Payload/HermesLink.app/Info.plist"
-          test -x "$RUNNER_TEMP/Payload/HermesLink.app/HermesLink"
-          (cd "$RUNNER_TEMP" && /usr/bin/zip -qry -X HermesLink.ipa Payload)
-          unzip -Z1 "$RUNNER_TEMP/HermesLink.ipa" | grep -Fx 'Payload/HermesLink.app/Info.plist'
-          unzip -Z1 "$RUNNER_TEMP/HermesLink.ipa" | grep -Fx 'Payload/HermesLink.app/HermesLink'
-          unzip -Z1 "$RUNNER_TEMP/HermesLink.ipa" | grep -Fx 'Payload/HermesLink.app/hermesrt.zip'
-          unzip -Z1 "$RUNNER_TEMP/HermesLink.ipa" | grep -Fx 'Payload/HermesLink.app/Frameworks/HermesRuntime.framework/HermesRuntime'
-
-      - name: Upload universal HermesLink IPA
-        uses: actions/upload-artifact@v4
-        with:
-          name: hermeslink-ipa
-          path: ${{ runner.temp }}/HermesLink.ipa
-          if-no-files-found: error
-          retention-days: 14
+          test -x "$app/HermesLink"
+          mkdir -p "$RUNNER_TEMP/runtime-free-app"
+          /usr/bin/ditto -c -k --sequesterRsrc --keepParent "$app" \
+            "$RUNNER_TEMP/runtime-free-app/HermesLink.app.zip"
+          if unzip -Z1 "$RUNNER_TEMP/runtime-free-app/HermesLink.app.zip" | grep -E 'HermesRuntime\.framework|hermesrt\.zip'; then
+            echo "runtime-free app unexpectedly contains Hermes runtime assets" >&2
+            exit 1
+          fi
+          GH_TOKEN="${{ github.token }}" gh release upload "$HERMES_RUNTIME_RELEASE_TAG" \
+            "$RUNNER_TEMP/runtime-free-app/HermesLink.app.zip" --clobber
 
       - name: Set up Python for simulator Copilot E2E
         if: ${{ inputs.run_tests == true }}
         uses: actions/setup-python@v5
         with:
           python-version: '3.13'
+
+      - name: Install released runtime for simulator Copilot E2E
+        if: ${{ inputs.run_tests == true }}
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+          mkdir -p "$RUNNER_TEMP/runtime-e2e"
+          gh release download "$HERMES_RUNTIME_RELEASE_TAG" \
+            --pattern hermesrt.zip \
+            --pattern HermesRuntime.framework.zip \
+            --dir "$RUNNER_TEMP/runtime-e2e"
+          mkdir -p hermes/Frameworks
+          unzip -q "$RUNNER_TEMP/runtime-e2e/HermesRuntime.framework.zip" -d hermes/Frameworks
+          cp "$RUNNER_TEMP/runtime-e2e/hermesrt.zip" hermes/hermesrt.zip
+          bash install_hermes_runtime.sh hermes
 
       - name: Build HermesLink simulator app for Copilot E2E
         if: ${{ inputs.run_tests == true }}
@@ -546,3 +518,71 @@ jobs:
           name: hermeslink-archive-log
           path: ${{ runner.temp }}/hermeslink-archive.log
           if-no-files-found: ignore
+
+  assemble-hermeslink-ipa:
+    name: Assemble HermesLink IPA
+    needs:
+      - ensure-release
+      - build-runtime-zip
+      - build-native-runtime
+      - build-app-without-runtime
+      - build-linux-native-runtime
+    if: always()
+    runs-on: macos-latest
+    permissions:
+      contents: read
+    steps:
+      - name: Check out HermesLink
+        uses: actions/checkout@v4
+
+      - name: Download app and runtime components from release
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+          mkdir -p "$RUNNER_TEMP/hermeslink-components/app" "$RUNNER_TEMP/Payload"
+          release_url="https://github.com/${GITHUB_REPOSITORY}/releases/download/${HERMES_RUNTIME_RELEASE_TAG}"
+          for asset in HermesLink.app.zip HermesRuntime.framework.zip hermesrt.zip; do
+            curl --fail --location --retry 5 --retry-all-errors \
+              --header "Authorization: token $GH_TOKEN" \
+              --header 'Accept: application/octet-stream' \
+              --output "$RUNNER_TEMP/hermeslink-components/$asset" \
+              "$release_url/$asset"
+            test -s "$RUNNER_TEMP/hermeslink-components/$asset"
+          done
+          python3 hermes/build/validate-runtime-zip.py "$RUNNER_TEMP/hermeslink-components/hermesrt.zip"
+          unzip -t "$RUNNER_TEMP/hermeslink-components/HermesRuntime.framework.zip"
+          unzip -q "$RUNNER_TEMP/hermeslink-components/HermesLink.app.zip" \
+            -d "$RUNNER_TEMP/hermeslink-components/app"
+          app="$(find "$RUNNER_TEMP/hermeslink-components/app" -type d -name '*.app' -print -quit)"
+          test -n "$app"
+          /usr/bin/ditto "$app" "$RUNNER_TEMP/Payload/HermesLink.app"
+          mkdir -p "$RUNNER_TEMP/Payload/HermesLink.app/Frameworks"
+          unzip -q "$RUNNER_TEMP/hermeslink-components/HermesRuntime.framework.zip" \
+            -d "$RUNNER_TEMP/Payload/HermesLink.app/Frameworks"
+          install -m 644 "$RUNNER_TEMP/hermeslink-components/hermesrt.zip" \
+            "$RUNNER_TEMP/Payload/HermesLink.app/hermesrt.zip"
+          test -x "$RUNNER_TEMP/Payload/HermesLink.app/Frameworks/HermesRuntime.framework/HermesRuntime"
+          test -s "$RUNNER_TEMP/Payload/HermesLink.app/hermesrt.zip"
+
+      - name: Sign and package IPA
+        run: |
+          set -euo pipefail
+          app="$RUNNER_TEMP/Payload/HermesLink.app"
+          codesign --force --sign - --timestamp=none "$app/Frameworks/HermesRuntime.framework"
+          codesign --force --deep --sign - --timestamp=none "$app"
+          codesign --verify --deep --strict --verbose=2 "$app"
+          rm -f "$RUNNER_TEMP/HermesLink.ipa"
+          (cd "$RUNNER_TEMP" && /usr/bin/zip -qry -X HermesLink.ipa Payload)
+          unzip -Z1 "$RUNNER_TEMP/HermesLink.ipa" | grep -Fx 'Payload/HermesLink.app/Info.plist'
+          unzip -Z1 "$RUNNER_TEMP/HermesLink.ipa" | grep -Fx 'Payload/HermesLink.app/HermesLink'
+          unzip -Z1 "$RUNNER_TEMP/HermesLink.ipa" | grep -Fx 'Payload/HermesLink.app/hermesrt.zip'
+          unzip -Z1 "$RUNNER_TEMP/HermesLink.ipa" | grep -Fx 'Payload/HermesLink.app/Frameworks/HermesRuntime.framework/HermesRuntime'
+
+      - name: Upload universal HermesLink IPA
+        uses: actions/upload-artifact@v4
+        with:
+          name: hermeslink-ipa
+          path: ${{ runner.temp }}/HermesLink.ipa
+          if-no-files-found: error
+          retention-days: 14

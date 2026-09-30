@@ -57,6 +57,7 @@ class UserVisiblePathTests(unittest.TestCase):
         build_script = (ROOT / "hermes" / "build" / "build-hermesrt-zip.sh").read_text(encoding="utf-8")
         patch_script = (ROOT / "hermes" / "overlay" / "patches" / "patch-webui-zip.py").read_text(encoding="utf-8")
 
+        self.assertIn('setenv("HERMES_IOS_HOME_ROOT", BlinkPaths.homePath.UTF8String, 1);', command)
         self.assertIn('setenv("HERMES_IOS_DOCUMENTS_ROOT", documentsPath.UTF8String, 1);', command)
         self.assertIn('setenv("HERMES_WEBUI_DEFAULT_WORKSPACE", documentsPath.UTF8String, 1);', command)
         self.assertIn('"$STAGE/hermes-webui/api/workspace.py"', build_script)
@@ -125,6 +126,7 @@ class UserVisiblePathTests(unittest.TestCase):
             patched_workspace = importlib.util.module_from_spec(spec)
             spec.loader.exec_module(patched_workspace)
             old_documents_root = os.environ.get("HERMES_IOS_DOCUMENTS_ROOT")
+            old_ios_home_root = os.environ.get("HERMES_IOS_HOME_ROOT")
             old_default_workspace = os.environ.get("HERMES_WEBUI_DEFAULT_WORKSPACE")
             old_home = os.environ.get("HOME")
             documents = root / "Documents"
@@ -132,7 +134,8 @@ class UserVisiblePathTests(unittest.TestCase):
             documents.mkdir()
             hidden_workspace = hidden_home / "workspace"
             hidden_workspace.mkdir(parents=True)
-            os.environ["HOME"] = str(hidden_home)
+            os.environ["HOME"] = str(root / "unrelated-home")
+            os.environ["HERMES_IOS_HOME_ROOT"] = str(hidden_home)
             os.environ["HERMES_IOS_DOCUMENTS_ROOT"] = str(documents)
             os.environ["HERMES_WEBUI_DEFAULT_WORKSPACE"] = str(documents)
             try:
@@ -162,6 +165,10 @@ class UserVisiblePathTests(unittest.TestCase):
                     os.environ.pop("HERMES_IOS_DOCUMENTS_ROOT", None)
                 else:
                     os.environ["HERMES_IOS_DOCUMENTS_ROOT"] = old_documents_root
+                if old_ios_home_root is None:
+                    os.environ.pop("HERMES_IOS_HOME_ROOT", None)
+                else:
+                    os.environ["HERMES_IOS_HOME_ROOT"] = old_ios_home_root
                 if old_default_workspace is None:
                     os.environ.pop("HERMES_WEBUI_DEFAULT_WORKSPACE", None)
                 else:

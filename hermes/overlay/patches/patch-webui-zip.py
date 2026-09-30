@@ -164,7 +164,7 @@ if len(sys.argv) > 2:
             if resolved_candidate == documents_root or documents_root in resolved_candidate.parents:
                 return False
 
-    ios_home_root = os.environ.get("HOME")
+    ios_home_root = os.environ.get("HERMES_IOS_HOME_ROOT") or os.environ.get("HOME")
     if ios_home_root:
         try:
             home_root = Path(ios_home_root).resolve()

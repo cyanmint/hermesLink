@@ -89,6 +89,7 @@ int hermes_main(int argc, char *argv[]) {
 
   setenv("HERMES_RUNTIME_ROOT", [BlinkPaths hermesHomePath].UTF8String, 1);
   NSString *documentsPath = [BlinkPaths documentsPath];
+  setenv("HERMES_IOS_HOME_ROOT", BlinkPaths.homePath.UTF8String, 1);
   setenv("HERMES_IOS_DOCUMENTS_ROOT", documentsPath.UTF8String, 1);
   setenv("HERMES_WEBUI_DEFAULT_WORKSPACE", documentsPath.UTF8String, 1);
 
