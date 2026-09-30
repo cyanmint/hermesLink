@@ -151,9 +151,17 @@ class NativeModuleRegistryTests(unittest.TestCase):
             / "mach"
             / "boolean.h"
         ).read_text(encoding="utf-8")
+        target_conditionals = (
+            Path(__file__).resolve().parents[1]
+            / "overlay"
+            / "cpython"
+            / "linux-shims"
+            / "TargetConditionals.h"
+        ).read_text(encoding="utf-8")
 
         self.assertIn("linux-shims", build_script)
         self.assertIn("typedef int boolean_t;", shim)
+        self.assertIn("#define TARGET_OS_IPHONE 0", target_conditionals)
 
 
 if __name__ == "__main__":
