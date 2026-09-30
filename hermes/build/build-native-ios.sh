@@ -151,7 +151,7 @@ clang --target=arm64-apple-ios${DEPLOYMENT_TARGET} -isysroot "$SDK_ROOT" \
 (cd "$TARGET_ROOT" && \
   PATH="$TOOLBIN:/usr/bin:/bin" CC=arm64-apple-ios-clang AR=arm64-apple-ios-ar RANLIB=arm64-apple-ios-ranlib \
     CPPFLAGS="-DOPENSSL_THREADS -I$OPENSSL_INSTALL/include -I$IOS_SYSTEM_FRAMEWORK/Headers -I$ROOT/overlay/cpython" \
-    LDFLAGS="-L$OPENSSL_INSTALL/lib" \
+    LDFLAGS="-L$OPENSSL_INSTALL/lib -F$(dirname "$IOS_SYSTEM_FRAMEWORK") -framework ios_system" \
     LIBS="$TARGET_ROOT/ios_compat.o -lssl -lcrypto" \
     py_cv_module__lzma=n/a py_cv_module__bz2=n/a py_cv_module__dbm=n/a \
     py_cv_module__gdbm=n/a py_cv_module_readline=n/a py_cv_module__curses=n/a \
