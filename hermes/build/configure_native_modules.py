@@ -28,6 +28,20 @@ def ensure_required_static_modules(lines: list[str]) -> list[str]:
     return result
 
 
+def module_object_paths(lines: list[str]) -> list[str]:
+    """Return object paths for C sources enabled in a CPython Setup file."""
+    objects = set()
+    for line in lines:
+        line = line.strip()
+        if not line or line.startswith("#") or line.startswith("*"):
+            continue
+        for token in line.split()[1:]:
+            if token.endswith(".c"):
+                source_path = token[2:] if token.startswith("$(srcdir)/") else token
+                objects.add("Modules/" + source_path[:-2] + ".o")
+    return sorted(objects)
+
+
 def configure_setup_file(path: Path) -> list[str]:
     lines = ensure_required_static_modules(path.read_text(encoding="utf-8").splitlines())
     path.write_text("\n".join(lines) + "\n", encoding="utf-8", newline="\n")

@@ -181,16 +181,7 @@ for i, line in enumerate(lines):
     if line.startswith("_decimal "): lines[i] += " -IModules/_decimal/libmpdec Modules/_decimal/libmpdec/libmpdec.a"
 lines = ensure_required_static_modules(lines)
 pathlib.Path(target).write_text("\n".join(lines) + "\n")
-objects = []
-for line in lines:
-    line = line.strip()
-    if not line or line.startswith("#") or line.startswith("*"):
-        continue
-    for token in line.split()[1:]:
-        if token.endswith(".c"):
-            source_path = token[2:] if token.startswith("$(srcdir)/") else token
-            objects.append("Modules/" + source_path[:-2] + ".o")
-objects = sorted(set(objects))
+objects = module_object_paths(lines)
 pathlib.Path(pathlib.Path(makefile).parent / "native-module-objects.txt").write_text("\n".join(objects) + "\n")
 PY
 (cd "$TARGET_ROOT" && \
@@ -221,6 +212,11 @@ for index, line in enumerate(make_lines):
         value = value.rstrip()[:-1] + " " + make_lines[cursor]
         cursor += 1
     objects.update(token for token in value.split() if token.endswith(".o"))
+objects.update(
+    token
+    for token in output.read_text(encoding="utf-8").splitlines()
+    if token.endswith(".o")
+)
 if not objects:
     raise SystemExit("could not extract libpython object list from Makefile dry-run")
 output.write_text("\n".join(sorted(objects)) + "\n", encoding="utf-8", newline="\n")

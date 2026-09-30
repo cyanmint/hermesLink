@@ -50,6 +50,16 @@ class NativeModuleRegistryTests(unittest.TestCase):
 
         self.assertEqual(module_config.ensure_required_static_modules(setup_lines), setup_lines)
 
+    def test_includes_objects_for_required_ssl_extensions(self):
+        setup_lines = module_config.ensure_required_static_modules(
+            ["*static*", "#_ssl _ssl.c", "#_hashlib _hashopenssl.c"]
+        )
+
+        self.assertEqual(
+            module_config.module_object_paths(setup_lines),
+            ["Modules/_hashopenssl.o", "Modules/_ssl.o"],
+        )
+
 
     def test_fails_build_validation_if_ssl_initializer_is_missing(self):
         with self.assertRaisesRegex(RuntimeError, "_ssl"):
