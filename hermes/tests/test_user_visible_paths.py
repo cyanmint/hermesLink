@@ -21,6 +21,7 @@ class UserVisiblePathTests(unittest.TestCase):
 
         self.assertIn('NSString *hermesHomePath = [BlinkPaths hermesHomePath];', app_delegate)
         self.assertIn('setenv("HERMES_HOME", hermesHomePath.UTF8String, 1);', app_delegate)
+        self.assertIn('setenv("HERMES_RUNTIME_ROOT", hermesHomePath.UTF8String, 1);', app_delegate)
         self.assertIn('NSString *workspacePath = [BlinkPaths documentsPath];', mcp_session)
         self.assertIn('NSString *hermesHomePath = [BlinkPaths hermesHomePath];', mcp_session)
         self.assertIn('setenv("HERMES_HOME", hermesHomePath.UTF8String, 1);', mcp_session)
@@ -35,6 +36,21 @@ class UserVisiblePathTests(unittest.TestCase):
 
         self.assertIs(info["UIFileSharingEnabled"], True)
         self.assertIs(info["LSSupportsOpeningDocumentsInPlace"], True)
+
+    def test_app_installs_embedded_runtime_only_when_newer_and_loads_external_zip(self):
+        app_delegate = (ROOT / "Blink" / "AppDelegate.m").read_text(encoding="utf-8")
+        command = (ROOT / "Blink" / "Commands" / "hermes.m").read_text(encoding="utf-8")
+
+        self.assertIn('InstallBundledHermesRuntime();', app_delegate)
+        self.assertIn('installedTimestamp >= bundledTimestamp', app_delegate)
+        self.assertIn('HermesRuntimeTimestamp(installedPath, YES)', app_delegate)
+        self.assertIn('localNameLength > localHeaderRemainder', app_delegate)
+        self.assertIn('compressedSize > centralOffset - dataOffset', app_delegate)
+        self.assertIn('HermesCRCMatches(bytes + dataOffset, uncompressedSize, crc)', app_delegate)
+        self.assertIn('rename(temporaryPath.fileSystemRepresentation, installedPath.fileSystemRepresentation)', app_delegate)
+        self.assertIn('stringByAppendingPathComponent:@"hermesrt.zip"', command)
+        self.assertIn('setenv("HERMES_RUNTIME_ROOT", [BlinkPaths hermesHomePath].UTF8String, 1);', command)
+        self.assertNotIn('bundle pathForResource:@"hermesrt"', command)
 
     def test_zip_agent_and_webui_assets_extract_to_visible_named_directories(self):
         with tempfile.TemporaryDirectory() as temporary:

@@ -86,10 +86,12 @@ cp "$ROOT/overlay/python/sitecustomize.py" "$STAGE/python/sitecustomize.py"
 cp -a "$ROOT/overlay" "$STAGE/overlay"
 
 "$HOST_PYTHON" - "$STAGE" "$ARCHIVE" <<'PY'
-import os, sys, zipfile
+import os, sys, time, zipfile
 root, output = sys.argv[1:]
 with zipfile.ZipFile(output, 'w', compression=zipfile.ZIP_STORED) as archive:
+    archive.writestr('timestamp.txt', f'{time.time_ns() // 1_000_000}\n')
     seen = set()
+    seen.add('timestamp.txt')
     for directory, _, names in os.walk(root):
         for name in sorted(names):
             source = os.path.join(directory, name)

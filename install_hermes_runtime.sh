@@ -23,6 +23,17 @@ with zipfile.ZipFile(sys.argv[1]) as archive:
     names = archive.namelist()
     if len(names) != len(set(names)):
         raise SystemExit("duplicate ZIP paths")
+    if any(info.compress_type != zipfile.ZIP_STORED for info in archive.infolist() if not info.is_dir()):
+        raise SystemExit("runtime ZIP entries must use ZIP_STORED")
+    timestamps = [info for info in archive.infolist() if info.filename == "timestamp.txt"]
+    if len(timestamps) != 1 or timestamps[0].compress_type != zipfile.ZIP_STORED:
+        raise SystemExit("runtime archive must contain one stored timestamp.txt")
+    try:
+        timestamp = archive.read(timestamps[0]).decode("ascii").strip()
+        if not timestamp.isdecimal() or not 0 < int(timestamp) <= 2**63 - 1:
+            raise ValueError
+    except (UnicodeDecodeError, ValueError):
+        raise SystemExit("runtime timestamp.txt must contain a positive Unix timestamp in milliseconds")
     if any(part == ".git" for name in names for part in name.split("/")):
         raise SystemExit("runtime archive contains .git")
     required = {

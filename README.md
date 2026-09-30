@@ -34,6 +34,13 @@ are extracted into `Documents/HermesHome/HermesAgent` and
 rather than Blink's asynchronously linked `home/Documents` alias, which could
 otherwise create a private, non-shared directory.
 
+`hermesrt.zip` contains a root-level `timestamp.txt` with its packaging time in
+Unix epoch milliseconds. On app launch, HermesLink copies the IPA runtime into
+`Documents/HermesHome/hermesrt.zip` only when the bundled timestamp is newer;
+an independently upgraded external runtime is kept. Hermes always loads the
+external archive, and `hermes upgrade` refreshes its timestamp when it rebuilds
+that archive.
+
 Do Blink! [Blink](https://blink.sh) is the first professional, desktop-grade terminal for iOS that leverages the support of Mosh and SSH. Thus, we can unequivocally guarantee stable connections, lightning-fast speeds, and full configurations. It can and should be your all-day-long tool.
 
 We did not create another terminal to fix your website on the go. Blink was built as a professional grade product from the onset. We started by analyzing what the must-haves were and we ended up grounding Blink on these three concepts:

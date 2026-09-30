@@ -1,6 +1,7 @@
 /* HermesLink AI-generated glue code; created by cyanmint's coding agent.
  * AI-generated content has no copyright holder and is not subject to copyright. */
 #import <Foundation/Foundation.h>
+#import <BlinkConfig/BlinkPaths.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
@@ -75,18 +76,18 @@ int hermes_main(int argc, char *argv[]) {
 
   NSBundle *bundle = [NSBundle mainBundle];
   NSString *framework = [bundle.privateFrameworksPath stringByAppendingPathComponent:@"HermesRuntime.framework/HermesRuntime"];
-  NSString *runtime = [bundle pathForResource:@"hermesrt" ofType:@"zip"];
+  NSString *runtimePath = [[BlinkPaths hermesHomePath] stringByAppendingPathComponent:@"hermesrt.zip"];
 
-  if (![[NSFileManager defaultManager] fileExistsAtPath:framework] || runtime.length == 0) {
+  if (![[NSFileManager defaultManager] fileExistsAtPath:framework] ||
+      ![[NSFileManager defaultManager] fileExistsAtPath:runtimePath]) {
     fprintf(thread_stderr,
-            "hermes: embedded runtime is incomplete (framework=%s, hermesrt.zip=%s)\n",
+            "hermes: runtime is incomplete (framework=%s, external hermesrt.zip=%s)\n",
             [[NSFileManager defaultManager] fileExistsAtPath:framework] ? "ok" : "missing",
-            runtime.length ? "ok" : "missing");
+            [[NSFileManager defaultManager] fileExistsAtPath:runtimePath] ? "ok" : "missing");
     return 127;
   }
 
-  NSString *runtimeRoot = bundle.resourcePath;
-  setenv("HERMES_RUNTIME_ROOT", runtimeRoot.UTF8String, 1);
+  setenv("HERMES_RUNTIME_ROOT", [BlinkPaths hermesHomePath].UTF8String, 1);
 
   // The runtime is linked into HermesRuntime.framework. Calling its exported
   // entry point keeps execution in this ios_system command thread and avoids

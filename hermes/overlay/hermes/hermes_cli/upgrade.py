@@ -8,6 +8,7 @@ import runpy
 import shutil
 import sys
 import tempfile
+import time
 import zipfile
 from urllib.parse import urlparse
 from pathlib import Path
@@ -37,6 +38,18 @@ def _copytree_contents(source: Path, target: Path) -> None:
             shutil.copytree(item, destination, dirs_exist_ok=True)
         else:
             shutil.copy2(item, destination)
+
+
+def _runtime_archive() -> Path:
+    runtime_root = os.environ.get("HERMES_RUNTIME_ROOT")
+    if runtime_root:
+        return Path(runtime_root) / "hermesrt.zip"
+    hermes_home = os.environ.get("HERMES_HOME")
+    if hermes_home:
+        archive = Path(hermes_home) / "hermesrt.zip"
+        if archive.is_file():
+            return archive
+    return Path("hermesrt.zip").resolve()
 
 
 def _git_pull(path: Path, default_remote: str) -> None:
@@ -180,6 +193,7 @@ def _write_archive(archive: Path, root: Path, destination: Path) -> None:
     temporary = destination.with_suffix(".upgrade.tmp")
     try:
         with zipfile.ZipFile(temporary, "w", compression=zipfile.ZIP_STORED) as output:
+            output.writestr("timestamp.txt", f"{time.time_ns() // 1_000_000}\n")
             for name, data in sorted(python_entries.items()):
                 output.writestr(name, data)
             for directory in ("hermes", "hermes-webui", "overlay"):
@@ -198,7 +212,7 @@ def _write_archive(archive: Path, root: Path, destination: Path) -> None:
 
 
 def main() -> int:
-    archive = Path("hermesrt.zip").resolve()
+    archive = _runtime_archive()
     if not archive.is_file():
         print(f"upgrade: missing {archive}", file=sys.stderr)
         return 2

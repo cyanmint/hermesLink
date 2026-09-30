@@ -10,6 +10,7 @@ from pathlib import Path
 
 
 REQUIRED_ENTRIES = {
+    "timestamp.txt",
     "hermes/hermes_cli/main.py",
     "python/encodings/__init__.py",
     "python/site-packages/openai/__init__.py",
@@ -62,10 +63,23 @@ def validate_archive(path: str | Path) -> int:
         if missing:
             raise ValueError(f"missing required runtime entries: {', '.join(missing)}")
 
+        timestamps = [info for info in archive.infolist() if info.filename == "timestamp.txt"]
+        if len(timestamps) != 1 or timestamps[0].compress_type != zipfile.ZIP_STORED:
+            raise ValueError("timestamp.txt must be a single stored ZIP entry")
+        try:
+            timestamp_text = archive.read(timestamps[0]).decode("ascii").strip()
+            timestamp = int(timestamp_text)
+        except (UnicodeDecodeError, ValueError) as exc:
+            raise ValueError("timestamp.txt must contain a Unix timestamp in milliseconds") from exc
+        if not timestamp_text.isdecimal() or not 0 < timestamp <= 2**63 - 1:
+            raise ValueError("timestamp.txt must contain a positive Unix timestamp in milliseconds")
+
         for info in archive.infolist():
             if info.is_dir():
                 continue
             name = info.filename
+            if info.compress_type != zipfile.ZIP_STORED:
+                raise ValueError(f"runtime ZIP entries must use ZIP_STORED: {name}")
             lowered = name.lower()
             suffix = Path(lowered).suffix
             if suffix in NATIVE_SUFFIXES or any(
