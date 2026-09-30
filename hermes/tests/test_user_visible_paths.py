@@ -60,6 +60,7 @@ class UserVisiblePathTests(unittest.TestCase):
         self.assertIn('setenv("HERMES_IOS_DOCUMENTS_ROOT", documentsPath.UTF8String, 1);', command)
         self.assertIn('setenv("HERMES_WEBUI_DEFAULT_WORKSPACE", documentsPath.UTF8String, 1);', command)
         self.assertIn('"$STAGE/hermes-webui/api/workspace.py"', build_script)
+        self.assertIn('ios_default_workspace = os.environ.get("HERMES_WEBUI_DEFAULT_WORKSPACE")', patch_script)
         self.assertIn('if resolved_candidate == documents_root or documents_root in resolved_candidate.parents:', patch_script)
 
     def test_zip_agent_and_webui_assets_extract_to_visible_named_directories(self):
@@ -84,6 +85,10 @@ class UserVisiblePathTests(unittest.TestCase):
             workspace.write_text(
                 "import os\n"
                 "from pathlib import Path\n"
+                "def _resolve_path(candidate):\n"
+                "    return Path(candidate).resolve()\n"
+                "def _profile_default_workspace() -> str:\n"
+                "    return '/app-support/home/workspace'\n"
                 "def _is_blocked_workspace_path(candidate, raw_path=None):\n"
                 '    """Reject blocked OS paths."""\n'
                 "    raw = None\n"
@@ -98,10 +103,15 @@ class UserVisiblePathTests(unittest.TestCase):
             patched_workspace = importlib.util.module_from_spec(spec)
             spec.loader.exec_module(patched_workspace)
             old_documents_root = os.environ.get("HERMES_IOS_DOCUMENTS_ROOT")
+            old_default_workspace = os.environ.get("HERMES_WEBUI_DEFAULT_WORKSPACE")
             documents = root / "Documents"
             documents.mkdir()
             os.environ["HERMES_IOS_DOCUMENTS_ROOT"] = str(documents)
+            os.environ["HERMES_WEBUI_DEFAULT_WORKSPACE"] = str(documents)
             try:
+                self.assertEqual(
+                    patched_workspace._profile_default_workspace(), str(documents.resolve())
+                )
                 self.assertFalse(patched_workspace._is_blocked_workspace_path(documents / "workspace"))
                 self.assertTrue(patched_workspace._is_blocked_workspace_path(Path("/etc")))
             finally:
@@ -109,6 +119,10 @@ class UserVisiblePathTests(unittest.TestCase):
                     os.environ.pop("HERMES_IOS_DOCUMENTS_ROOT", None)
                 else:
                     os.environ["HERMES_IOS_DOCUMENTS_ROOT"] = old_documents_root
+                if old_default_workspace is None:
+                    os.environ.pop("HERMES_WEBUI_DEFAULT_WORKSPACE", None)
+                else:
+                    os.environ["HERMES_WEBUI_DEFAULT_WORKSPACE"] = old_default_workspace
 
             archive = root / "hermesrt.zip"
             with zipfile.ZipFile(archive, "w") as bundle:

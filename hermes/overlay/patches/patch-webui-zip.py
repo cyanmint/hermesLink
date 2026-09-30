@@ -106,6 +106,19 @@ path.write_text(text, encoding="utf-8", newline="\n")
 if len(sys.argv) > 2:
     workspace_path = Path(sys.argv[2])
     workspace_text = workspace_path.read_text(encoding="utf-8")
+    workspace_default_anchor = "def _profile_default_workspace() -> str:\n"
+    workspace_default_injection = '''def _profile_default_workspace() -> str:
+    ios_default_workspace = os.environ.get("HERMES_WEBUI_DEFAULT_WORKSPACE")
+    if ios_default_workspace:
+        return str(_resolve_path(ios_default_workspace))
+'''
+    if workspace_default_anchor in workspace_text:
+        workspace_text = workspace_text.replace(
+            workspace_default_anchor, workspace_default_injection, 1
+        )
+    elif 'ios_default_workspace = os.environ.get("HERMES_WEBUI_DEFAULT_WORKSPACE")' not in workspace_text:
+        raise SystemExit("workspace default selection patch anchor not found")
+
     workspace_anchor = '''    raw = None
     if raw_path not in (None, ""):
 '''
