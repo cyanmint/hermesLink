@@ -167,7 +167,7 @@ jobs:
           path: |
             ${{ runner.temp }}/hermes-build/native-ios
             xcfs/.build
-          key: ${{ runner.os }}-hermes-ios-${{ hashFiles('.github/workflows/build.yml', 'hermes/build/*.sh', 'hermes/overlay/**', 'hermes/patches/**', 'xcfs/Package.resolved') }}
+          key: ${{ runner.os }}-hermes-ios-${{ hashFiles('.github/workflows/build.yml', 'hermes/build/*.sh', 'hermes/overlay/**', 'hermes/patches/**', 'xcfs/Package.swift', 'xcfs/Package.resolved') }}
           restore-keys: |
             ${{ runner.os }}-hermes-ios-
 

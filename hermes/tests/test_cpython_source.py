@@ -26,10 +26,16 @@ class CPythonSourceTests(unittest.TestCase):
         package_build = (ROOT / "hermes" / "build" / "package-native-ios.sh").read_text(
             encoding="utf-8"
         )
+        ios_error_header = (ROOT / "hermes" / "overlay" / "cpython" / "ios_error.h").read_text(
+            encoding="utf-8"
+        )
+        package_manifest = (ROOT / "xcfs" / "Package.swift").read_text(encoding="utf-8")
 
         self.assertIn("ios_system.xcframework/ios-arm64/ios_system.framework", native_build)
-        self.assertIn("-I$IOS_SYSTEM_FRAMEWORK/Headers", native_build)
+        self.assertIn("-I$ROOT/overlay/cpython", native_build)
+        self.assertIn("ios_full_waitpid", ios_error_header)
         self.assertIn('-framework ios_system', package_build)
+        self.assertIn("releases/download/v3.0.6/ios_system.xcframework.zip", package_manifest)
 
 
 if __name__ == "__main__":

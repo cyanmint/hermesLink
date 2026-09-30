@@ -34,8 +34,8 @@ var binaryTargets: [PackageDescription.Target] = [
   ),
   (
     "ios_system",
-    "50f1692873e73fd862f45f73f2c08745e822c01ff5e0a0e0aec7fed6bb946e7f",
-    "https://github.com/holzschu/ios_system/releases/download/v3.0.3/ios_system.xcframework.zip"
+    "d2deb9f77dff839e069f21efdb11f16864a8173e33956cd1b4d174a76f1b0e99",
+    "https://github.com/holzschu/ios_system/releases/download/v3.0.6/ios_system.xcframework.zip"
   ),
   (
     "awk",

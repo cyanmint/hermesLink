@@ -53,8 +53,9 @@ if [ "$HOST_OS" != Darwin ] && [ ! -d "$SDK_ROOT" ]; then
   fi
 fi
 [ -d "$SDK_ROOT/usr/include" ] || { echo "missing iOS SDK: $SDK_ROOT" >&2; exit 3; }
-[ -f "$IOS_SYSTEM_FRAMEWORK/Headers/ios_error.h" ] || {
-  echo "missing ios_system iOS framework headers: $IOS_SYSTEM_FRAMEWORK" >&2
+[ -f "$IOS_SYSTEM_FRAMEWORK/Headers/ios_system.h" ] &&
+  [ -f "$IOS_SYSTEM_FRAMEWORK/ios_system" ] || {
+  echo "missing ios_system iOS framework: $IOS_SYSTEM_FRAMEWORK" >&2
   exit 3
 }
 
@@ -149,7 +150,7 @@ clang --target=arm64-apple-ios${DEPLOYMENT_TARGET} -isysroot "$SDK_ROOT" \
   -c "$TARGET_ROOT/ios_compat.c" -o "$TARGET_ROOT/ios_compat.o"
 (cd "$TARGET_ROOT" && \
   PATH="$TOOLBIN:/usr/bin:/bin" CC=arm64-apple-ios-clang AR=arm64-apple-ios-ar RANLIB=arm64-apple-ios-ranlib \
-    CPPFLAGS="-DOPENSSL_THREADS -I$OPENSSL_INSTALL/include -I$IOS_SYSTEM_FRAMEWORK/Headers" \
+    CPPFLAGS="-DOPENSSL_THREADS -I$OPENSSL_INSTALL/include -I$IOS_SYSTEM_FRAMEWORK/Headers -I$ROOT/overlay/cpython" \
     LDFLAGS="-L$OPENSSL_INSTALL/lib" \
     LIBS="$TARGET_ROOT/ios_compat.o -lssl -lcrypto" \
     py_cv_module__lzma=n/a py_cv_module__bz2=n/a py_cv_module__dbm=n/a \
