@@ -139,6 +139,22 @@ class NativeModuleRegistryTests(unittest.TestCase):
             source,
         )
 
+    def test_linux_build_supplies_mach_boolean_compatibility_header(self):
+        build_script = (
+            Path(__file__).resolve().parents[1] / "build" / "build-native-linux.sh"
+        ).read_text(encoding="utf-8")
+        shim = (
+            Path(__file__).resolve().parents[1]
+            / "overlay"
+            / "cpython"
+            / "linux-shims"
+            / "mach"
+            / "boolean.h"
+        ).read_text(encoding="utf-8")
+
+        self.assertIn("linux-shims", build_script)
+        self.assertIn("typedef int boolean_t;", shim)
+
 
 if __name__ == "__main__":
     unittest.main()

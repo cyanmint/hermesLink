@@ -28,7 +28,7 @@ if [ ! -f "$TARGET_ROOT/Makefile" ] ||
   git -C "$CPYTHON_ROOT" archive HEAD | tar -x -C "$TARGET_ROOT"
   (
     cd "$TARGET_ROOT"
-    CPPFLAGS="${CPPFLAGS:-}" \
+    CPPFLAGS="-I$ROOT/overlay/cpython/linux-shims ${CPPFLAGS:-}" \
     LDFLAGS="${LDFLAGS:-}" \
       ./configure --prefix="$BUILD_ROOT/install" --disable-shared \
         --with-openssl=/usr --with-openssl-rpath=no \
