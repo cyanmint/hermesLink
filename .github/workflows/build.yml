@@ -129,6 +129,9 @@ jobs:
     needs: decide
     runs-on: ubuntu-latest
     steps:
+      - name: Check out HermesLink
+        uses: actions/checkout@v4
+
       - name: Create fixed release if missing
         env:
           GH_TOKEN: ${{ github.token }}
