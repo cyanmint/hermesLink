@@ -89,6 +89,17 @@ int hermes_main(int argc, char *argv[]) {
 
   setenv("HERMES_RUNTIME_ROOT", [BlinkPaths hermesHomePath].UTF8String, 1);
   NSString *documentsPath = [BlinkPaths documentsPath];
+  const char *previousHomeValue = getenv("HOME");
+  char *previousHome = previousHomeValue ? strdup(previousHomeValue) : NULL;
+  if (previousHomeValue && !previousHome) {
+    fprintf(thread_stderr, "hermes: could not preserve the current HOME value\n");
+    return 1;
+  }
+  if (setenv("HOME", documentsPath.UTF8String, 1) != 0) {
+    free(previousHome);
+    fprintf(thread_stderr, "hermes: could not set HOME to Documents\n");
+    return 1;
+  }
   setenv("HERMES_IOS_HOME_ROOT", BlinkPaths.homePath.UTF8String, 1);
   setenv("HERMES_IOS_DOCUMENTS_ROOT", documentsPath.UTF8String, 1);
   setenv("HERMES_WEBUI_DEFAULT_WORKSPACE", documentsPath.UTF8String, 1);
@@ -98,6 +109,12 @@ int hermes_main(int argc, char *argv[]) {
   // ios_execv redispatching the registered "hermes" command recursively.
   HermesLinkAppendLog("starting embedded Hermes runtime framework");
   int result = hermes_runtime_main(argc, argv);
+  if (previousHome) {
+    setenv("HOME", previousHome, 1);
+    free(previousHome);
+  } else {
+    unsetenv("HOME");
+  }
   char resultMessage[96];
   snprintf(resultMessage, sizeof(resultMessage), "embedded Hermes runtime returned %d", result);
   HermesLinkAppendLog(resultMessage);
