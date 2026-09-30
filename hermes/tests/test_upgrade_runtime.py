@@ -43,6 +43,10 @@ class RuntimeUpgradeTests(unittest.TestCase):
                 webui_call[1][2],
                 str(root / "hermes-webui" / "api" / "workspace.py"),
             )
+            self.assertEqual(
+                webui_call[1][4],
+                str(root / "hermes-webui" / "server.py"),
+            )
 
     def test_upgrade_rewrites_archive_timestamp_and_preserves_python_runtime(self):
         with tempfile.TemporaryDirectory() as temporary:

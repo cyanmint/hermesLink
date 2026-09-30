@@ -164,6 +164,7 @@ def _apply_overlay(root: Path) -> None:
             str(root / "hermes-webui" / "api" / "config.py"),
             str(root / "hermes-webui" / "api" / "workspace.py"),
             str(root / "hermes-webui" / "static" / "onboarding.js"),
+            str(root / "hermes-webui" / "server.py"),
         ),
     ):
         patch = patches / name

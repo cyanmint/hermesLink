@@ -56,6 +56,7 @@ class UserVisiblePathTests(unittest.TestCase):
         command = (ROOT / "Blink" / "Commands" / "hermes.m").read_text(encoding="utf-8")
         build_script = (ROOT / "hermes" / "build" / "build-hermesrt-zip.sh").read_text(encoding="utf-8")
         patch_script = (ROOT / "hermes" / "overlay" / "patches" / "patch-webui-zip.py").read_text(encoding="utf-8")
+        upgrade_script = (ROOT / "hermes" / "overlay" / "hermes" / "hermes_cli" / "upgrade.py").read_text(encoding="utf-8")
 
         self.assertIn('setenv("HERMES_IOS_HOME_ROOT", BlinkPaths.homePath.UTF8String, 1);', command)
         self.assertIn('setenv("HERMES_IOS_DOCUMENTS_ROOT", documentsPath.UTF8String, 1);', command)
@@ -66,6 +67,10 @@ class UserVisiblePathTests(unittest.TestCase):
         self.assertIn('unsetenv("HOME");', command)
         self.assertIn('"$STAGE/hermes-webui/api/workspace.py"', build_script)
         self.assertIn('"$STAGE/hermes-webui/static/onboarding.js"', build_script)
+        self.assertIn('"$STAGE/hermes-webui/server.py"', build_script)
+        self.assertIn('str(root / "hermes-webui" / "server.py")', upgrade_script)
+        self.assertIn('arg in ("--verbose", "-v")', patch_script)
+        self.assertIn('parsed.path == "/api/session/draft"', patch_script)
         self.assertIn('ios_default_workspace = os.environ.get("HERMES_WEBUI_DEFAULT_WORKSPACE")', patch_script)
         self.assertIn("if _is_blocked_workspace_path(candidate, raw):", patch_script)
         self.assertIn("if _is_blocked_workspace_path(p, path):", patch_script)
@@ -76,6 +81,24 @@ class UserVisiblePathTests(unittest.TestCase):
         with tempfile.TemporaryDirectory() as temporary:
             root = Path(temporary)
             config = root / "config.py"
+            server = root / "server.py"
+            server.write_text(
+                "import logging\n"
+                "import sys\n"
+                "import threading\n"
+                "import time\n"
+                "import traceback\n"
+                "logger = logging.getLogger(__name__)\n"
+                "def _handle_write(self, route_func):\n"
+                "        try:\n"
+                "            result = route_func(self, parsed)\n"
+                "            if result is False:\n"
+                "                return None\n"
+                "        finally:\n"
+                "            clear_request_profile()\n",
+                encoding="utf-8",
+                newline="\n",
+            )
             config.write_text(
                 "import os\n"
                 "import sys\n"
@@ -171,9 +194,14 @@ class UserVisiblePathTests(unittest.TestCase):
                 newline="\n",
             )
             subprocess.run(
-                [sys.executable, str(PATCH_PATH), str(config), str(workspace), str(onboarding)],
+                [sys.executable, str(PATCH_PATH), str(config), str(workspace), str(onboarding), str(server)],
                 check=True,
             )
+            patched_server = server.read_text(encoding="utf-8")
+            self.assertIn('arg in ("--verbose", "-v")', patched_server)
+            self.assertIn("[webui][verbose] request started", patched_server)
+            self.assertIn("_verbose_request_stalled", patched_server)
+            compile(patched_server, str(server), "exec")
             patched_onboarding = onboarding.read_text(encoding="utf-8")
             self.assertIn(
                 "ONBOARDING.form.model||(_getOnboardingCurrentSetup()||{}).model",
@@ -303,8 +331,9 @@ class UserVisiblePathTests(unittest.TestCase):
                 agent_root = module._discover_agent_dir()
                 self.assertEqual(static_root, visible_home / "WebUIStatic")
                 self.assertEqual((static_root / "index.html").read_text(encoding="utf-8"), "visible webui assets")
-                self.assertEqual(agent_root, visible_home / "HermesAgent")
-                self.assertTrue((agent_root / "hermes_cli" / "main.py").is_file())
+                self.assertEqual(agent_root, Path(str(archive) + "/hermes"))
+                self.assertFalse((visible_home / "HermesAgent").exists())
+                self.assertIn(str(archive), sys.path)
                 self.assertFalse(static_root.name.startswith("."))
                 self.assertFalse(agent_root.name.startswith("."))
             finally:

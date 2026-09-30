@@ -75,28 +75,15 @@ if "_discover_agent_dir" in text:
 # Inject at the start of the discovery function, before filesystem candidates.
 anchor = 'def _discover_agent_dir() -> Path:\n'
 injection = '''def _discover_agent_dir() -> Path:
-    # The bundled Agent lives inside hermesrt.zip.  Extract it to the writable
-    # HERMES_HOME so filesystem-based config/discovery code can use it on iOS.
+    # The bundled Agent is already importable through zipimport.
     _origin = str(Path(__file__).resolve()).replace(os.sep, "/")
     if ".zip/" in _origin:
         _archive = Path(_origin.split(".zip/", 1)[0] + ".zip")
-        _target = Path(os.getenv("HERMES_HOME", str(Path.home()))) / "HermesAgent"
-        try:
-            with zipfile.ZipFile(_archive) as _bundle:
-                _prefix = "hermes/"
-                for _name in _bundle.namelist():
-                    if not _name.startswith(_prefix) or _name.endswith("/"):
-                        continue
-                    _destination = _target / _name[len(_prefix):]
-                    _destination.parent.mkdir(parents=True, exist_ok=True)
-                    _data = _bundle.read(_name)
-                    if not _destination.exists() or _destination.read_bytes() != _data:
-                        _destination.write_bytes(_data)
-            return _target
-        except (OSError, KeyError, zipfile.BadZipFile):
-            pass
+        _bundled_agent = Path(str(_archive) + "/hermes")
+        if _archive.is_file():
+            return _bundled_agent
 '''
-if 'The bundled Agent lives at hermesrt.zip/hermes.' not in text:
+if "The bundled Agent is already importable through zipimport." not in text:
     if anchor not in text:
         raise SystemExit("agent discovery anchor not found")
     text = text.replace(anchor, injection, 1)
@@ -330,3 +317,73 @@ if len(sys.argv) > 3:
             raise SystemExit("onboarding setup payload patch anchor not found")
         onboarding_text = onboarding_text.replace(setup_body_anchor, setup_body_replacement, 1)
     onboarding_path.write_text(onboarding_text, encoding="utf-8", newline="\n")
+
+if len(sys.argv) > 4:
+    server_path = Path(sys.argv[4])
+    server_text = server_path.read_text(encoding="utf-8")
+    verbose_marker = "_WEBUI_VERBOSE = any(arg in (\"--verbose\", \"-v\")"
+    verbose_helpers = '''_WEBUI_VERBOSE = any(arg in ("--verbose", "-v") for arg in sys.argv[1:])
+
+
+def _verbose_request_stalled(method: str, path: str, thread_id: int, started: float) -> None:
+    frame = sys._current_frames().get(thread_id)
+    if frame is None:
+        return
+    elapsed = time.monotonic() - started
+    print(
+        f"[webui][verbose] request still running method={method} path={path} "
+        f"thread={thread_id} elapsed={elapsed:.1f}s",
+        flush=True,
+    )
+    traceback.print_stack(frame, file=sys.stderr)
+
+
+'''
+    if verbose_marker not in server_text:
+        logger_anchor = 'logger = logging.getLogger(__name__)\n'
+        if logger_anchor not in server_text:
+            raise SystemExit("WebUI logger patch anchor not found")
+        server_text = server_text.replace(
+            logger_anchor, logger_anchor + "\n" + verbose_helpers, 1
+        )
+
+    request_anchor = '''            result = route_func(self, parsed)
+            if result is False:
+'''
+    request_replacement = '''            verbose_started = time.monotonic()
+            verbose_timer = None
+            if _WEBUI_VERBOSE:
+                content_length = self.headers.get("Content-Length", "unknown")
+                print(
+                    f"[webui][verbose] request started method={self.command} "
+                    f"path={parsed.path} thread={threading.get_ident()} "
+                    f"content_length={content_length[:32]}",
+                    flush=True,
+                )
+                if parsed.path == "/api/session/draft":
+                    verbose_timer = threading.Timer(
+                        5.0,
+                        _verbose_request_stalled,
+                        args=(self.command, parsed.path, threading.get_ident(), verbose_started),
+                    )
+                    verbose_timer.daemon = True
+                    verbose_timer.start()
+            try:
+                result = route_func(self, parsed)
+            finally:
+                if verbose_timer is not None:
+                    verbose_timer.cancel()
+                if _WEBUI_VERBOSE:
+                    elapsed = time.monotonic() - verbose_started
+                    print(
+                        f"[webui][verbose] request finished method={self.command} "
+                        f"path={parsed.path} elapsed={elapsed:.3f}s",
+                        flush=True,
+                    )
+            if result is False:
+'''
+    if "[webui][verbose] request started" not in server_text:
+        if request_anchor not in server_text:
+            raise SystemExit("WebUI write request logging patch anchor not found")
+        server_text = server_text.replace(request_anchor, request_replacement, 1)
+    server_path.write_text(server_text, encoding="utf-8", newline="\n")
