@@ -108,6 +108,17 @@ class UserVisiblePathTests(unittest.TestCase):
                 "            return raw\n"
                 "        return None\n"
                 "    return _valid(os.path.join(os.environ['HOME'], 'workspace')) or _profile_default_workspace()\n"
+                "def _workspace_access_error(candidate):\n"
+                "    return None if candidate.is_dir() else f'Path does not exist: {candidate}'\n"
+                "def resolve_trusted_workspace(path: str | Path | None = None) -> Path:\n"
+                "    candidate = _resolve_path(path)\n"
+                "\n"
+                "    access_error = _workspace_access_error(candidate)\n"
+                "    if access_error:\n"
+                "        raise ValueError(access_error)\n"
+                "    if _is_blocked_workspace_path(candidate, path):\n"
+                "        raise ValueError(f'Path points to a system directory: {candidate}')\n"
+                "    return candidate\n"
                 "def _clean_workspace_list(workspaces):\n"
                 "    result = []\n"
                 "    for w in workspaces:\n"
@@ -121,7 +132,7 @@ class UserVisiblePathTests(unittest.TestCase):
                 "    raw = None\n"
                 '    if raw_path not in (None, ""):\n'
                 "        raw = Path(raw_path)\n"
-                "    return candidate == Path('/etc')\n",
+                "    return candidate == Path('/etc') or str(candidate).startswith(os.environ.get('HERMES_IOS_HOME_ROOT', '/never'))\n",
                 encoding="utf-8",
                 newline="\n",
             )
@@ -137,8 +148,9 @@ class UserVisiblePathTests(unittest.TestCase):
             documents_workspace = documents / "workspace"
             hidden_home = root / "AppGroup" / "home"
             documents_workspace.mkdir(parents=True)
+            (documents_workspace / "nested").mkdir()
             hidden_workspace = hidden_home / "workspace"
-            hidden_workspace.mkdir(parents=True)
+            (hidden_workspace / "nested").mkdir(parents=True)
             (workspace.parent / "last_workspace.txt").write_text(str(hidden_workspace))
             os.environ["HOME"] = str(hidden_home)
             os.environ["HERMES_IOS_HOME_ROOT"] = str(hidden_home)
@@ -154,6 +166,14 @@ class UserVisiblePathTests(unittest.TestCase):
                 )
                 self.assertEqual(
                     patched_workspace.get_profile_default_workspace(), str(documents_workspace.resolve())
+                )
+                self.assertEqual(
+                    patched_workspace.resolve_trusted_workspace(hidden_workspace),
+                    documents_workspace.resolve(),
+                )
+                self.assertEqual(
+                    patched_workspace.resolve_trusted_workspace(hidden_workspace / "nested"),
+                    (documents_workspace / "nested").resolve(),
                 )
                 self.assertTrue(
                     patched_workspace._is_blocked_workspace_path(hidden_workspace.resolve())
