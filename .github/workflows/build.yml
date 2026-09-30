@@ -525,11 +525,9 @@ jobs:
   assemble-hermeslink-ipa:
     name: Assemble HermesLink IPA
     needs:
-      - ensure-release
       - build-runtime-zip
       - build-native-runtime
       - build-app-without-runtime
-      - build-linux-native-runtime
     if: always()
     runs-on: macos-latest
     permissions:
