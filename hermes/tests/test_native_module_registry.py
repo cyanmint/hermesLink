@@ -45,28 +45,57 @@ class NativeModuleRegistryTests(unittest.TestCase):
 
         self.assertEqual(result[-2:], ["_ssl _ssl.c", "_hashlib _hashopenssl.c"])
 
+    def test_enables_runtime_extensions_when_configure_disables_them(self):
+        setup_lines = ["*static*", "#_posixsubprocess _posixsubprocess.c", "#_blake2"]
+
+        result = module_config.ensure_required_static_modules(setup_lines)
+
+        self.assertIn("_posixsubprocess _posixsubprocess.c", result)
+        self.assertIn(
+            "_blake2 _blake2/blake2module.c _blake2/blake2b_impl.c "
+            "_blake2/blake2s_impl.c",
+            result,
+        )
+
     def test_does_not_duplicate_ssl_extensions_already_enabled(self):
         setup_lines = ["*static*", "_ssl _ssl.c", "_hashlib _hashopenssl.c"]
 
-        self.assertEqual(module_config.ensure_required_static_modules(setup_lines), setup_lines)
+        result = module_config.ensure_required_static_modules(setup_lines)
+
+        self.assertEqual(result.count("_ssl _ssl.c"), 1)
+        self.assertEqual(result.count("_hashlib _hashopenssl.c"), 1)
 
     def test_includes_objects_for_required_ssl_extensions(self):
         setup_lines = module_config.ensure_required_static_modules(
             ["*static*", "#_ssl _ssl.c", "#_hashlib _hashopenssl.c"]
         )
 
-        self.assertEqual(
-            module_config.module_object_paths(setup_lines),
-            ["Modules/_hashopenssl.o", "Modules/_ssl.o"],
+        objects = module_config.module_object_paths(setup_lines)
+
+        self.assertIn("Modules/_hashopenssl.o", objects)
+        self.assertIn("Modules/_ssl.o", objects)
+
+    def test_includes_objects_for_required_runtime_extensions(self):
+        setup_lines = module_config.ensure_required_static_modules(
+            ["*static*", "#_posixsubprocess _posixsubprocess.c", "#_blake2"]
         )
+
+        objects = module_config.module_object_paths(setup_lines)
+
+        self.assertIn("Modules/_posixsubprocess.o", objects)
+        self.assertIn("Modules/_blake2/blake2module.o", objects)
+        self.assertIn("Modules/_blake2/blake2b_impl.o", objects)
+        self.assertIn("Modules/_blake2/blake2s_impl.o", objects)
 
 
     def test_fails_build_validation_if_ssl_initializer_is_missing(self):
         with self.assertRaisesRegex(RuntimeError, "_ssl"):
-            registry.require_native_modules(["_hashlib", "zlib"])
+            registry.require_native_modules(["_hashlib", "_blake2", "_posixsubprocess", "zlib"])
 
     def test_accepts_required_tls_initializers(self):
-        registry.require_native_modules(["_ssl", "_hashlib"])
+        registry.require_native_modules(
+            ["_ssl", "_hashlib", "_blake2", "_posixsubprocess"]
+        )
 
 
 if __name__ == "__main__":

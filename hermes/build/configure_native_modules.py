@@ -8,6 +8,11 @@ from pathlib import Path
 
 
 REQUIRED_STATIC_MODULES = (
+    ("_posixsubprocess", "_posixsubprocess.c"),
+    (
+        "_blake2",
+        "_blake2/blake2module.c _blake2/blake2b_impl.c _blake2/blake2s_impl.c",
+    ),
     ("_ssl", "_ssl.c"),
     ("_hashlib", "_hashopenssl.c"),
 )
