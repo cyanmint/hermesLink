@@ -101,6 +101,26 @@ if 'The bundled Agent lives at hermesrt.zip/hermes.' not in text:
         raise SystemExit("agent discovery anchor not found")
     text = text.replace(anchor, injection, 1)
 
+workspace_candidates_anchor = '''def _workspace_candidates(raw: str | Path | None = None) -> list[Path]:
+    """Return ordered candidate workspace paths, de-duplicated."""
+    candidates: list[Path] = []
+'''
+workspace_candidates_injection = '''def _workspace_candidates(raw: str | Path | None = None) -> list[Path]:
+    """Return ordered candidate workspace paths, de-duplicated."""
+    ios_documents_root = os.environ.get("HERMES_IOS_DOCUMENTS_ROOT")
+    if ios_documents_root:
+        workspace = (Path(ios_documents_root) / "workspace").expanduser().resolve()
+        workspace.mkdir(parents=True, exist_ok=True)
+        return [workspace]
+    candidates: list[Path] = []
+'''
+if 'ios_documents_root = os.environ.get("HERMES_IOS_DOCUMENTS_ROOT")' not in text:
+    if workspace_candidates_anchor not in text:
+        raise SystemExit("config workspace discovery patch anchor not found")
+    text = text.replace(
+        workspace_candidates_anchor, workspace_candidates_injection, 1
+    )
+
 path.write_text(text, encoding="utf-8", newline="\n")
 
 if len(sys.argv) > 2:
@@ -284,3 +304,29 @@ if len(sys.argv) > 2:
     elif "HERMES_IOS_DOCUMENTS_ROOT" not in workspace_text:
         raise SystemExit("workspace path validation patch anchor not found")
     workspace_path.write_text(workspace_text, encoding="utf-8", newline="\n")
+
+if len(sys.argv) > 3:
+    onboarding_path = Path(sys.argv[3])
+    onboarding_text = onboarding_path.read_text(encoding="utf-8")
+    model_anchor = '''  const provider=(ONBOARDING.form.provider||'').trim();
+  const model=(ONBOARDING.form.model||'').trim();
+'''
+    model_replacement = '''  const provider=(ONBOARDING.form.provider||'').trim();
+  const setupProvider=_getOnboardingSetupProvider(provider);
+  const model=(ONBOARDING.form.model||(_getOnboardingCurrentSetup()||{}).model||(setupProvider&&setupProvider.default_model)||'').trim();
+'''
+    if "setupProvider&&setupProvider.default_model" not in onboarding_text:
+        if model_anchor not in onboarding_text:
+            raise SystemExit("onboarding model fallback patch anchor not found")
+        onboarding_text = onboarding_text.replace(model_anchor, model_replacement, 1)
+
+    setup_body_anchor = '''  const body={provider,model};
+'''
+    setup_body_replacement = '''  if(!model) throw new Error(t('onboarding_error_model_required')||'A model is required.');
+  const body={provider,model};
+'''
+    if "if(!model) throw new Error(t('onboarding_error_model_required')" not in onboarding_text:
+        if setup_body_anchor not in onboarding_text:
+            raise SystemExit("onboarding setup payload patch anchor not found")
+        onboarding_text = onboarding_text.replace(setup_body_anchor, setup_body_replacement, 1)
+    onboarding_path.write_text(onboarding_text, encoding="utf-8", newline="\n")

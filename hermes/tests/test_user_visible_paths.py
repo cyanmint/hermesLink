@@ -65,10 +65,12 @@ class UserVisiblePathTests(unittest.TestCase):
         self.assertIn('setenv("HOME", previousHome, 1);', command)
         self.assertIn('unsetenv("HOME");', command)
         self.assertIn('"$STAGE/hermes-webui/api/workspace.py"', build_script)
+        self.assertIn('"$STAGE/hermes-webui/static/onboarding.js"', build_script)
         self.assertIn('ios_default_workspace = os.environ.get("HERMES_WEBUI_DEFAULT_WORKSPACE")', patch_script)
         self.assertIn("if _is_blocked_workspace_path(candidate, raw):", patch_script)
         self.assertIn("if _is_blocked_workspace_path(p, path):", patch_script)
         self.assertIn('if resolved_candidate == documents_root or documents_root in resolved_candidate.parents:', patch_script)
+        self.assertIn("setupProvider&&setupProvider.default_model", patch_script)
 
     def test_zip_agent_and_webui_assets_extract_to_visible_named_directories(self):
         with tempfile.TemporaryDirectory() as temporary:
@@ -81,6 +83,16 @@ class UserVisiblePathTests(unittest.TestCase):
                 "REPO_ROOT = Path(__file__).parent.parent\n"
                 'HOST = os.getenv("HERMES_WEBUI_HOST", "127.0.0.1")\n'
                 'PORT = int(os.getenv("HERMES_WEBUI_PORT", "8787"))\n'
+                "def _workspace_candidates(raw: str | Path | None = None) -> list[Path]:\n"
+                '    """Return ordered candidate workspace paths, de-duplicated."""\n'
+                "    candidates: list[Path] = []\n"
+                "    if raw:\n"
+                "        candidates.append(Path(raw))\n"
+                "    candidates.append(Path.home() / 'workspace')\n"
+                "    return candidates\n"
+                "def resolve_default_workspace(raw: str | Path | None = None) -> Path:\n"
+                "    return _workspace_candidates(raw)[0]\n"
+                "DEFAULT_WORKSPACE = resolve_default_workspace()\n"
                 "def get_static_root() -> Path:\n"
                 '    return REPO_ROOT / "static"\n'
                 "def _discover_agent_dir() -> Path:\n"
@@ -89,6 +101,16 @@ class UserVisiblePathTests(unittest.TestCase):
                 newline="\n",
             )
             workspace = root / "workspace.py"
+            onboarding = root / "onboarding.js"
+            onboarding.write_text(
+                "async function _saveOnboardingProviderSetup(){\n"
+                "  const provider=(ONBOARDING.form.provider||'').trim();\n"
+                "  const model=(ONBOARDING.form.model||'').trim();\n"
+                "  const body={provider,model};\n"
+                "}\n",
+                encoding="utf-8",
+                newline="\n",
+            )
             workspace.write_text(
                 "import os\n"
                 "from pathlib import Path\n"
@@ -148,7 +170,16 @@ class UserVisiblePathTests(unittest.TestCase):
                 encoding="utf-8",
                 newline="\n",
             )
-            subprocess.run([sys.executable, str(PATCH_PATH), str(config), str(workspace)], check=True)
+            subprocess.run(
+                [sys.executable, str(PATCH_PATH), str(config), str(workspace), str(onboarding)],
+                check=True,
+            )
+            patched_onboarding = onboarding.read_text(encoding="utf-8")
+            self.assertIn(
+                "ONBOARDING.form.model||(_getOnboardingCurrentSetup()||{}).model",
+                patched_onboarding,
+            )
+            self.assertIn("if(!model) throw new Error", patched_onboarding)
             spec = importlib.util.spec_from_file_location("patched_workspace", workspace)
             patched_workspace = importlib.util.module_from_spec(spec)
             spec.loader.exec_module(patched_workspace)
@@ -169,7 +200,20 @@ class UserVisiblePathTests(unittest.TestCase):
             os.environ["HERMES_IOS_DOCUMENTS_ROOT"] = str(documents)
             os.environ["HERMES_WEBUI_DEFAULT_WORKSPACE"] = str(hidden_workspace)
             try:
-                subprocess.run([sys.executable, str(PATCH_PATH), str(config), str(workspace)], check=True)
+                subprocess.run(
+                    [sys.executable, str(PATCH_PATH), str(config), str(workspace), str(onboarding)],
+                    check=True,
+                )
+                spec = importlib.util.spec_from_file_location("patched_config", config)
+                patched_config = importlib.util.module_from_spec(spec)
+                spec.loader.exec_module(patched_config)
+                self.assertEqual(
+                    patched_config.DEFAULT_WORKSPACE, documents_workspace.resolve()
+                )
+                self.assertEqual(
+                    patched_config.resolve_default_workspace(Path("/etc")),
+                    documents_workspace.resolve(),
+                )
                 self.assertEqual(
                     patched_workspace._profile_default_workspace(), str(documents_workspace.resolve())
                 )
