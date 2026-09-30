@@ -10,7 +10,19 @@ from pathlib import Path
 
 
 INITIALIZER_RE = re.compile(r"^_?PyInit_([A-Za-z_][A-Za-z0-9_]*)$")
-REQUIRED_NATIVE_MODULES = ("_ssl", "_hashlib", "_blake2", "_posixsubprocess")
+REQUIRED_NATIVE_MODULES = (
+    "_ssl",
+    "_hashlib",
+    "_blake2",
+    "_posixsubprocess",
+    "_asyncio",
+    "_socket",
+    "_sqlite3",
+    "fcntl",
+    "select",
+    "termios",
+    "zlib",
+)
 
 
 def parse_defined_initializers(nm_output: str) -> list[str]:

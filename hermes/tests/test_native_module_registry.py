@@ -93,9 +93,13 @@ class NativeModuleRegistryTests(unittest.TestCase):
             registry.require_native_modules(["_hashlib", "_blake2", "_posixsubprocess", "zlib"])
 
     def test_accepts_required_tls_initializers(self):
-        registry.require_native_modules(
-            ["_ssl", "_hashlib", "_blake2", "_posixsubprocess"]
-        )
+        registry.require_native_modules(list(registry.REQUIRED_NATIVE_MODULES))
+
+    def test_rejects_missing_runtime_critical_initializers(self):
+        with self.assertRaisesRegex(RuntimeError, "_socket"):
+            registry.require_native_modules(
+                [name for name in registry.REQUIRED_NATIVE_MODULES if name != "_socket"]
+            )
 
 
 if __name__ == "__main__":
