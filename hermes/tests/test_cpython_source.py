@@ -34,6 +34,7 @@ class CPythonSourceTests(unittest.TestCase):
         self.assertIn("ios_system.xcframework/ios-arm64/ios_system.framework", native_build)
         self.assertIn("-I$ROOT/overlay/cpython", native_build)
         self.assertIn("ios_full_waitpid", ios_error_header)
+        self.assertIn("ios_startInteractive", ios_error_header)
         self.assertIn('-framework ios_system', native_build)
         self.assertIn('-framework ios_system', package_build)
         self.assertIn("releases/download/v3.0.6/ios_system.xcframework.zip", package_manifest)
