@@ -6,6 +6,10 @@
 #include <unistd.h>
 #include <limits.h>
 #include <dlfcn.h>
+#include <pthread.h>
+
+static pthread_mutex_t runtime_entry_lock = PTHREAD_MUTEX_INITIALIZER;
+static int runtime_entry_started;
 
 static void report_runtime_message(const char *message) {
     typedef void (*append_log_fn)(const char *);
@@ -124,6 +128,16 @@ int hermes_runtime_main(int argc, char **argv) {
         (void)write(STDOUT_FILENO, version, sizeof(version) - 1);
         return 0;
     }
+    pthread_mutex_lock(&runtime_entry_lock);
+    if (runtime_entry_started || Py_IsInitialized()) {
+        pthread_mutex_unlock(&runtime_entry_lock);
+        report_runtime_message(
+            "hermes: refusing to reinitialize embedded CPython in the same process");
+        return 70;
+    }
+    runtime_entry_started = 1;
+    pthread_mutex_unlock(&runtime_entry_lock);
+
     char **python_argv = build_argv(argc, argv);
     if (python_argv == NULL) {
         report_runtime_message("hermes: unable to allocate argument vector");

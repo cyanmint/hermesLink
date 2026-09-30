@@ -13,6 +13,14 @@ CONFIG_SPEC = importlib.util.spec_from_file_location("native_module_config", CON
 module_config = importlib.util.module_from_spec(CONFIG_SPEC)
 CONFIG_SPEC.loader.exec_module(module_config)
 
+RUNTIME_SOURCE_PATH = (
+    Path(__file__).resolve().parents[1]
+    / "overlay"
+    / "cpython"
+    / "Programs"
+    / "hermes_main.c"
+)
+
 
 class NativeModuleRegistryTests(unittest.TestCase):
     def test_discovers_only_defined_python_module_initializers(self):
@@ -100,6 +108,16 @@ class NativeModuleRegistryTests(unittest.TestCase):
             registry.require_native_modules(
                 [name for name in registry.REQUIRED_NATIVE_MODULES if name != "_socket"]
             )
+
+    def test_runtime_rejects_reinitialization_before_registering_builtin_modules(self):
+        source = RUNTIME_SOURCE_PATH.read_text(encoding="utf-8")
+        guard = source.index("if (runtime_entry_started || Py_IsInitialized())")
+        registration = source.index("hermes_register_native_modules();")
+
+        self.assertIn("pthread_mutex_lock(&runtime_entry_lock);", source)
+        self.assertIn("runtime_entry_started = 1;", source)
+        self.assertLess(guard, registration)
+        self.assertIn("refusing to reinitialize embedded CPython", source)
 
 
 if __name__ == "__main__":
