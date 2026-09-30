@@ -59,7 +59,8 @@ class UserVisiblePathTests(unittest.TestCase):
 
         self.assertIn('setenv("HERMES_IOS_HOME_ROOT", BlinkPaths.homePath.UTF8String, 1);', command)
         self.assertIn('setenv("HERMES_IOS_DOCUMENTS_ROOT", documentsPath.UTF8String, 1);', command)
-        self.assertIn('setenv("HERMES_WEBUI_DEFAULT_WORKSPACE", documentsPath.UTF8String, 1);', command)
+        self.assertIn('stringByAppendingPathComponent:@"workspace"', command)
+        self.assertIn('setenv("HERMES_WEBUI_DEFAULT_WORKSPACE", workspacePath.UTF8String, 1);', command)
         self.assertIn('setenv("HOME", documentsPath.UTF8String, 1) != 0', command)
         self.assertIn('setenv("HOME", previousHome, 1);', command)
         self.assertIn('unsetenv("HOME");', command)
@@ -133,21 +134,22 @@ class UserVisiblePathTests(unittest.TestCase):
             old_default_workspace = os.environ.get("HERMES_WEBUI_DEFAULT_WORKSPACE")
             old_home = os.environ.get("HOME")
             documents = root / "Documents"
+            documents_workspace = documents / "workspace"
             hidden_home = root / "AppGroup" / "home"
-            documents.mkdir()
+            documents_workspace.mkdir(parents=True)
             hidden_workspace = hidden_home / "workspace"
             hidden_workspace.mkdir(parents=True)
             os.environ["HOME"] = str(root / "unrelated-home")
             os.environ["HERMES_IOS_HOME_ROOT"] = str(hidden_home)
             os.environ["HERMES_IOS_DOCUMENTS_ROOT"] = str(documents)
-            os.environ["HERMES_WEBUI_DEFAULT_WORKSPACE"] = str(documents)
+            os.environ["HERMES_WEBUI_DEFAULT_WORKSPACE"] = str(documents_workspace)
             try:
                 self.assertEqual(
-                    patched_workspace._profile_default_workspace(), str(documents.resolve())
+                    patched_workspace._profile_default_workspace(), str(documents_workspace.resolve())
                 )
                 self.assertIsNone(patched_workspace.get_last_workspace())
                 self.assertEqual(
-                    patched_workspace.get_profile_default_workspace(), str(documents.resolve())
+                    patched_workspace.get_profile_default_workspace(), str(documents_workspace.resolve())
                 )
                 self.assertTrue(
                     patched_workspace._is_blocked_workspace_path(hidden_workspace.resolve())
@@ -161,7 +163,7 @@ class UserVisiblePathTests(unittest.TestCase):
                 self.assertEqual(
                     cleaned, [{"path": str(documents.resolve()), "name": "Documents"}]
                 )
-                self.assertFalse(patched_workspace._is_blocked_workspace_path(documents / "workspace"))
+                self.assertFalse(patched_workspace._is_blocked_workspace_path(documents_workspace))
                 self.assertTrue(patched_workspace._is_blocked_workspace_path(Path("/etc")))
             finally:
                 if old_documents_root is None:

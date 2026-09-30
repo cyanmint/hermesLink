@@ -102,7 +102,12 @@ int hermes_main(int argc, char *argv[]) {
   }
   setenv("HERMES_IOS_HOME_ROOT", BlinkPaths.homePath.UTF8String, 1);
   setenv("HERMES_IOS_DOCUMENTS_ROOT", documentsPath.UTF8String, 1);
-  setenv("HERMES_WEBUI_DEFAULT_WORKSPACE", documentsPath.UTF8String, 1);
+  NSString *workspacePath = [documentsPath stringByAppendingPathComponent:@"workspace"];
+  [[NSFileManager defaultManager] createDirectoryAtPath:workspacePath
+                            withIntermediateDirectories:YES
+                                             attributes:nil
+                                                  error:nil];
+  setenv("HERMES_WEBUI_DEFAULT_WORKSPACE", workspacePath.UTF8String, 1);
 
   // The runtime is linked into HermesRuntime.framework. Calling its exported
   // entry point keeps execution in this ios_system command thread and avoids
