@@ -134,6 +134,7 @@ fi
 
 cc -I"$TARGET_ROOT" -I"$TARGET_ROOT/Include" \
   "$ROOT/overlay/cpython/Programs/hermes_main.c" \
+  "$ROOT/overlay/cpython/Programs/hermes_linux_main.c" \
   "$TARGET_ROOT/libpython3.13.a" \
   "$TARGET_ROOT/Modules/_decimal/libmpdec/libmpdec.a" \
   "$TARGET_ROOT/Modules/_hacl/libHacl_Hash_SHA2.a" \

@@ -163,6 +163,21 @@ class NativeModuleRegistryTests(unittest.TestCase):
         self.assertIn("typedef int boolean_t;", shim)
         self.assertIn("#define TARGET_OS_IPHONE 0", target_conditionals)
 
+    def test_linux_build_links_standalone_process_entry_point(self):
+        build_script = (
+            Path(__file__).resolve().parents[1] / "build" / "build-native-linux.sh"
+        ).read_text(encoding="utf-8")
+        entry_point = (
+            Path(__file__).resolve().parents[1]
+            / "overlay"
+            / "cpython"
+            / "Programs"
+            / "hermes_linux_main.c"
+        ).read_text(encoding="utf-8")
+
+        self.assertIn("hermes_linux_main.c", build_script)
+        self.assertIn("return hermes_runtime_main(argc, argv);", entry_point)
+
 
 if __name__ == "__main__":
     unittest.main()
