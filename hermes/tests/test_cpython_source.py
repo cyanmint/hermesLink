@@ -33,6 +33,7 @@ class CPythonSourceTests(unittest.TestCase):
 
         self.assertIn("ios_system.xcframework/ios-arm64/ios_system.framework", native_build)
         self.assertIn("-I$ROOT/overlay/cpython", native_build)
+        self.assertIn('-I"$ROOT/overlay/cpython" \\\n    -c "$BUILD_ROOT/native_modules.c"', native_build)
         self.assertIn("ios_full_waitpid", ios_error_header)
         self.assertIn("ios_startInteractive", ios_error_header)
         self.assertIn('-framework ios_system', native_build)

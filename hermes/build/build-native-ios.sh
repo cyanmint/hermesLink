@@ -241,7 +241,7 @@ PY
 python3 "$ROOT/build/generate-native-module-registry.py" \
   "$TARGET_ROOT/native-module-objects.txt" "$TARGET_ROOT" "$BUILD_ROOT/native_modules.c"
 (cd "$TARGET_ROOT" && \
-  "$TOOLBIN/arm64-apple-ios-clang" -I"$TARGET_ROOT" -I"$TARGET_ROOT/Include" \
+  "$TOOLBIN/arm64-apple-ios-clang" -I"$TARGET_ROOT" -I"$TARGET_ROOT/Include" -I"$ROOT/overlay/cpython" \
     -c "$BUILD_ROOT/native_modules.c" -o native_modules.o && \
   printf '%s\n' native_modules.o >> native-module-objects.txt && \
   sort -u native-module-objects.txt -o native-module-objects.txt)
