@@ -9,7 +9,6 @@
 #include <pthread.h>
 
 static pthread_mutex_t runtime_entry_lock = PTHREAD_MUTEX_INITIALIZER;
-static int runtime_entry_started;
 
 static void report_runtime_message(const char *message) {
     typedef void (*append_log_fn)(const char *);
@@ -102,6 +101,87 @@ static int configure_python_stdio(void) {
     return 0;
 }
 
+static int run_existing_python_runtime(int argc, char **argv) {
+    wchar_t **wide_argv = PyMem_RawCalloc((size_t)argc + 1, sizeof(*wide_argv));
+    if (wide_argv == NULL) {
+        report_runtime_message("hermes: unable to allocate argument vector");
+        return 70;
+    }
+    for (int i = 0; i < argc; ++i) {
+        wide_argv[i] = Py_DecodeLocale(argv[i], NULL);
+        if (wide_argv[i] == NULL) {
+            for (int j = 0; j < i; ++j) PyMem_RawFree(wide_argv[j]);
+            PyMem_RawFree(wide_argv);
+            report_runtime_message("hermes: unable to decode argument");
+            return 70;
+        }
+    }
+    PySys_SetArgvEx(argc, wide_argv, 0);
+    for (int i = 0; i < argc; ++i) PyMem_RawFree(wide_argv[i]);
+    PyMem_RawFree(wide_argv);
+
+    if (getenv("HERMES_PYTHON_MODE") != NULL) {
+        int result = 0;
+        if (argc > 1 && strcmp(argv[1], "-c") == 0 && argc > 2) {
+            result = PyRun_SimpleString(argv[2]);
+        } else if (argc > 1 && argv[1][0] != '-') {
+            FILE *script = fopen(argv[1], "r");
+            if (script == NULL) {
+                report_runtime_message("python: unable to open script");
+                result = 2;
+            } else {
+                result = PyRun_SimpleFileExFlags(script, argv[1], 1, NULL);
+            }
+        } else {
+            result = PyRun_SimpleString(
+                "import code; code.interact(local=dict(globals(), **locals()))");
+        }
+        if (result != 0 && PyErr_Occurred()) report_python_error("run python");
+        flush_python_stdio();
+        return result;
+    }
+
+    if (argc > 1 && (strcmp(argv[1], "webui") == 0 || strcmp(argv[1], "upgrade") == 0)) {
+        if (PyRun_SimpleString(
+                "import sys\n"
+                "sys.argv = [sys.argv[0]] + sys.argv[2:]\n") != 0) {
+            int result = report_python_error("prepare command arguments");
+            flush_python_stdio();
+            return result;
+        }
+    }
+    const char *entry_module = (argc > 1 && strcmp(argv[1], "webui") == 0)
+        ? "server" : (argc > 1 && strcmp(argv[1], "upgrade") == 0)
+            ? "hermes_cli.upgrade" : "hermes_cli.main";
+    PyObject *module = PyImport_ImportModule(entry_module);
+    if (module == NULL) {
+        int result = handle_system_exit();
+        if (result < 0) result = report_python_error("import entry module");
+        flush_python_stdio();
+        return result;
+    }
+    PyObject *entrypoint = PyObject_GetAttrString(module, "main");
+    Py_DECREF(module);
+    if (entrypoint == NULL || !PyCallable_Check(entrypoint)) {
+        Py_XDECREF(entrypoint);
+        int result = report_python_error("find entrypoint main");
+        flush_python_stdio();
+        return result;
+    }
+    PyObject *return_value = PyObject_CallNoArgs(entrypoint);
+    Py_DECREF(entrypoint);
+    if (return_value == NULL) {
+        int result = handle_system_exit();
+        if (result < 0) result = report_python_error("run entrypoint main");
+        flush_python_stdio();
+        return result;
+    }
+    int result = PyLong_Check(return_value) ? (int)PyLong_AsLong(return_value) : 0;
+    Py_DECREF(return_value);
+    flush_python_stdio();
+    return result;
+}
+
 int hermes_register_native_modules(void);
 
 __attribute__((visibility("default")))
@@ -129,17 +209,17 @@ int hermes_runtime_main(int argc, char **argv) {
         return 0;
     }
     pthread_mutex_lock(&runtime_entry_lock);
-    if (runtime_entry_started || Py_IsInitialized()) {
+    if (Py_IsInitialized()) {
         pthread_mutex_unlock(&runtime_entry_lock);
-        report_runtime_message(
-            "hermes: refusing to reinitialize embedded CPython in the same process");
-        return 70;
+        PyGILState_STATE gil_state = PyGILState_Ensure();
+        int result = run_existing_python_runtime(argc, argv);
+        PyGILState_Release(gil_state);
+        return result;
     }
-    runtime_entry_started = 1;
-    pthread_mutex_unlock(&runtime_entry_lock);
 
     char **python_argv = build_argv(argc, argv);
     if (python_argv == NULL) {
+        pthread_mutex_unlock(&runtime_entry_lock);
         report_runtime_message("hermes: unable to allocate argument vector");
         return 70;
     }
@@ -166,6 +246,7 @@ int hermes_runtime_main(int argc, char **argv) {
         report_runtime_message("hermes: unable to decode runtime path");
         PyConfig_Clear(&config);
         free(python_argv);
+        pthread_mutex_unlock(&runtime_entry_lock);
         return 70;
     }
     status = PyWideStringList_Append(&config.module_search_paths, runtime_zip);
@@ -185,6 +266,7 @@ int hermes_runtime_main(int argc, char **argv) {
             report_runtime_message("hermes: runtime path is too long");
             PyConfig_Clear(&config);
             free(python_argv);
+            pthread_mutex_unlock(&runtime_entry_lock);
             return 70;
         }
         wchar_t *wide_path = Py_DecodeLocale(path, NULL);
@@ -192,6 +274,7 @@ int hermes_runtime_main(int argc, char **argv) {
             report_runtime_message("hermes: unable to decode runtime path");
             PyConfig_Clear(&config);
             free(python_argv);
+            pthread_mutex_unlock(&runtime_entry_lock);
             return 70;
         }
         status = PyWideStringList_Append(&config.module_search_paths, wide_path);
@@ -210,129 +293,26 @@ int hermes_runtime_main(int argc, char **argv) {
         free(python_argv);
         Py_ExitStatusException(status);
     }
-
-    wchar_t **wide_argv = PyMem_RawCalloc((size_t)argc + 1, sizeof(*wide_argv));
-    if (wide_argv == NULL) {
-        Py_FinalizeEx();
-        PyConfig_Clear(&config);
-        free(python_argv);
-        return 70;
-    }
-    for (int i = 0; i < argc; ++i) {
-        wide_argv[i] = Py_DecodeLocale(argv[i], NULL);
-    }
-    PySys_SetArgvEx(argc, wide_argv, 0);
-    for (int i = 0; i < argc; ++i) PyMem_RawFree(wide_argv[i]);
-    PyMem_RawFree(wide_argv);
-
-    fflush(stderr);
+    PyConfig_Clear(&config);
+    free(python_argv);
 
     PyObject *bootstrap = PyImport_ImportModule("sitecustomize");
     if (bootstrap == NULL) {
         int result = report_python_error("import sitecustomize");
-        Py_FinalizeEx();
-        PyConfig_Clear(&config);
-        free(python_argv);
+        pthread_mutex_unlock(&runtime_entry_lock);
+        PyEval_SaveThread();
         return result;
     }
     Py_DECREF(bootstrap);
 
     if (configure_python_stdio() != 0) {
         int result = report_python_error("configure Python stdio");
-        Py_FinalizeEx();
-        PyConfig_Clear(&config);
-        free(python_argv);
+        pthread_mutex_unlock(&runtime_entry_lock);
+        PyEval_SaveThread();
         return result;
     }
-
-    if (getenv("HERMES_PYTHON_MODE") != NULL) {
-        int result = 0;
-        if (argc > 1 && strcmp(argv[1], "-c") == 0 && argc > 2) {
-            result = PyRun_SimpleString(argv[2]);
-        } else if (argc > 1 && argv[1][0] != '-') {
-            FILE *script = fopen(argv[1], "r");
-            if (script == NULL) {
-                report_runtime_message("python: unable to open script");
-                result = 2;
-            } else {
-                result = PyRun_SimpleFileExFlags(script, argv[1], 1, NULL);
-            }
-        } else {
-            result = PyRun_SimpleString(
-                "import code; code.interact(local=dict(globals(), **locals()))");
-        }
-        if (result != 0 && PyErr_Occurred()) {
-            report_python_error("run python");
-        }
-        flush_python_stdio();
-        Py_FinalizeEx();
-        PyConfig_Clear(&config);
-        free(python_argv);
-        return result;
-    }
-
-    const char *entry_module = (argc > 1 && strcmp(argv[1], "webui") == 0)
-        ? "server" : (argc > 1 && strcmp(argv[1], "upgrade") == 0)
-            ? "hermes_cli.upgrade" : "hermes_cli.main";
-    if (argc > 1 && (strcmp(argv[1], "webui") == 0 || strcmp(argv[1], "upgrade") == 0)) {
-        /* The WebUI server owns its host/port overrides; remove the command
-         * token so its normal argv handling sees the same arguments as when
-         * launched directly. */
-        PyRun_SimpleString(
-            "import sys\n"
-            "sys.argv = [sys.argv[0]] + sys.argv[2:]\n");
-    }
-    PyObject *module = PyImport_ImportModule(entry_module);
-    if (module == NULL) {
-        int system_exit = handle_system_exit();
-        if (system_exit >= 0) {
-            flush_python_stdio();
-            Py_FinalizeEx();
-            PyConfig_Clear(&config);
-            free(python_argv);
-            return system_exit;
-        }
-        int result = report_python_error(entry_module == NULL ? "import entry module" : "import entry module");
-        Py_FinalizeEx();
-        PyConfig_Clear(&config);
-        free(python_argv);
-        return result;
-    }
-    PyObject *entrypoint = PyObject_GetAttrString(module, "main");
-    Py_DECREF(module);
-    if (entrypoint == NULL || !PyCallable_Check(entrypoint)) {
-        Py_XDECREF(entrypoint);
-        int result = report_python_error("find entrypoint main");
-        Py_FinalizeEx();
-        PyConfig_Clear(&config);
-        free(python_argv);
-        return result;
-    }
-    PyObject *return_value = PyObject_CallNoArgs(entrypoint);
-    Py_DECREF(entrypoint);
-    if (return_value == NULL) {
-        int system_exit = handle_system_exit();
-        if (system_exit >= 0) {
-            flush_python_stdio();
-            Py_FinalizeEx();
-            PyConfig_Clear(&config);
-            free(python_argv);
-            return system_exit;
-        }
-        int result = report_python_error("run entrypoint main");
-        Py_FinalizeEx();
-        PyConfig_Clear(&config);
-        free(python_argv);
-        return result;
-    }
-    int result = 0;
-    if (PyLong_Check(return_value)) {
-        result = (int)PyLong_AsLong(return_value);
-    }
-    Py_DECREF(return_value);
-    flush_python_stdio();
-    Py_FinalizeEx();
-    PyConfig_Clear(&config);
-    free(python_argv);
+    pthread_mutex_unlock(&runtime_entry_lock);
+    int result = run_existing_python_runtime(argc, argv);
+    PyEval_SaveThread();
     return result;
 }

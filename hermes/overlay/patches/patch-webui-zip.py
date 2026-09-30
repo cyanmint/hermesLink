@@ -119,6 +119,33 @@ if len(sys.argv) > 2:
     elif 'ios_default_workspace = os.environ.get("HERMES_WEBUI_DEFAULT_WORKSPACE")' not in workspace_text:
         raise SystemExit("workspace default selection patch anchor not found")
 
+    saved_workspace_anchor = '''        if Path(raw).is_dir():
+            return raw
+'''
+    saved_workspace_injection = '''        candidate = _resolve_path(raw)
+        if _is_blocked_workspace_path(candidate, raw):
+            return None
+        if candidate.is_dir():
+            return raw
+'''
+    if saved_workspace_anchor in workspace_text:
+        workspace_text = workspace_text.replace(
+            saved_workspace_anchor, saved_workspace_injection
+        )
+    elif "if _is_blocked_workspace_path(candidate, raw):" not in workspace_text:
+        raise SystemExit("saved workspace validation patch anchor not found")
+
+    workspace_list_anchor = "        # Skip paths inside a DIFFERENT profile's directory"
+    workspace_list_injection = '''        if _is_blocked_workspace_path(p, path):
+            continue
+        # Skip paths inside a DIFFERENT profile's directory'''
+    if workspace_list_anchor in workspace_text:
+        workspace_text = workspace_text.replace(
+            workspace_list_anchor, workspace_list_injection, 1
+        )
+    elif "if _is_blocked_workspace_path(p, path):" not in workspace_text:
+        raise SystemExit("saved workspace list validation patch anchor not found")
+
     workspace_anchor = '''    raw = None
     if raw_path not in (None, ""):
 '''

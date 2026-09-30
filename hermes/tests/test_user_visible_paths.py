@@ -61,6 +61,8 @@ class UserVisiblePathTests(unittest.TestCase):
         self.assertIn('setenv("HERMES_WEBUI_DEFAULT_WORKSPACE", documentsPath.UTF8String, 1);', command)
         self.assertIn('"$STAGE/hermes-webui/api/workspace.py"', build_script)
         self.assertIn('ios_default_workspace = os.environ.get("HERMES_WEBUI_DEFAULT_WORKSPACE")', patch_script)
+        self.assertIn("if _is_blocked_workspace_path(candidate, raw):", patch_script)
+        self.assertIn("if _is_blocked_workspace_path(p, path):", patch_script)
         self.assertIn('if resolved_candidate == documents_root or documents_root in resolved_candidate.parents:', patch_script)
 
     def test_zip_agent_and_webui_assets_extract_to_visible_named_directories(self):
@@ -89,12 +91,32 @@ class UserVisiblePathTests(unittest.TestCase):
                 "    return Path(candidate).resolve()\n"
                 "def _profile_default_workspace() -> str:\n"
                 "    return '/app-support/home/workspace'\n"
+                "def get_last_workspace():\n"
+                "    def valid_last_workspace(raw):\n"
+                "        if Path(raw).is_dir():\n"
+                "            return raw\n"
+                "        return None\n"
+                "    return valid_last_workspace('/app-support/home/workspace')\n"
+                "def get_profile_default_workspace():\n"
+                "    def _valid(raw):\n"
+                "        if Path(raw).is_dir():\n"
+                "            return raw\n"
+                "        return None\n"
+                "    return _valid('/app-support/home/workspace')\n"
+                "def _clean_workspace_list(workspaces):\n"
+                "    result = []\n"
+                "    for w in workspaces:\n"
+                "        path = w.get('path', '')\n"
+                "        p = Path(path).resolve()\n"
+                "        # Skip paths inside a DIFFERENT profile's directory\n"
+                "        result.append({'path': str(p), 'name': w.get('name', '')})\n"
+                "    return result\n"
                 "def _is_blocked_workspace_path(candidate, raw_path=None):\n"
                 '    """Reject blocked OS paths."""\n'
                 "    raw = None\n"
                 '    if raw_path not in (None, ""):\n'
                 "        raw = Path(raw_path)\n"
-                "    return candidate == Path('/etc')\n",
+                "    return candidate in (Path('/etc'), Path('/app-support/home/workspace'))\n",
                 encoding="utf-8",
                 newline="\n",
             )
@@ -111,6 +133,17 @@ class UserVisiblePathTests(unittest.TestCase):
             try:
                 self.assertEqual(
                     patched_workspace._profile_default_workspace(), str(documents.resolve())
+                )
+                self.assertIsNone(patched_workspace.get_last_workspace())
+                self.assertIsNone(patched_workspace.get_profile_default_workspace())
+                cleaned = patched_workspace._clean_workspace_list(
+                    [
+                        {"path": "/app-support/home/workspace", "name": "Home"},
+                        {"path": str(documents), "name": "Documents"},
+                    ]
+                )
+                self.assertEqual(
+                    cleaned, [{"path": str(documents.resolve()), "name": "Documents"}]
                 )
                 self.assertFalse(patched_workspace._is_blocked_workspace_path(documents / "workspace"))
                 self.assertTrue(patched_workspace._is_blocked_workspace_path(Path("/etc")))

@@ -109,15 +109,18 @@ class NativeModuleRegistryTests(unittest.TestCase):
                 [name for name in registry.REQUIRED_NATIVE_MODULES if name != "_socket"]
             )
 
-    def test_runtime_rejects_reinitialization_before_registering_builtin_modules(self):
+    def test_runtime_reuses_initialized_python_for_subsequent_commands(self):
         source = RUNTIME_SOURCE_PATH.read_text(encoding="utf-8")
-        guard = source.index("if (runtime_entry_started || Py_IsInitialized())")
+        guard = source.index("if (Py_IsInitialized())")
+        gil_acquire = source.index("PyGILState_Ensure()", guard)
         registration = source.index("hermes_register_native_modules();")
 
         self.assertIn("pthread_mutex_lock(&runtime_entry_lock);", source)
-        self.assertIn("runtime_entry_started = 1;", source)
+        self.assertIn("PyGILState_Release(gil_state);", source)
         self.assertLess(guard, registration)
-        self.assertIn("refusing to reinitialize embedded CPython", source)
+        self.assertLess(guard, gil_acquire)
+        self.assertIn("PyEval_SaveThread();", source)
+        self.assertNotIn("Py_FinalizeEx", source)
 
 
 if __name__ == "__main__":
