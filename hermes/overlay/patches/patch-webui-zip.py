@@ -158,46 +158,68 @@ if len(sys.argv) > 2:
                 raise SystemExit(f"{function_name} patch anchor not found")
             workspace_text = workspace_text.replace(signature, signature + ios_override, 1)
 
-    ios_legacy_workspace_helper = '''def _ios_remap_hidden_workspace(path: str | Path | None) -> Path | None:
-    documents_root = os.environ.get("HERMES_IOS_DOCUMENTS_ROOT")
-    home_root = os.environ.get("HERMES_IOS_HOME_ROOT")
-    if not documents_root or not home_root or path in (None, ""):
-        return None
-    candidate = _resolve_path(path)
-    legacy_workspace = _resolve_path(Path(home_root) / "workspace")
-    try:
-        relative = candidate.relative_to(legacy_workspace)
-    except ValueError:
-        return None
-    workspace = _resolve_path(Path(documents_root) / "workspace")
-    workspace.mkdir(parents=True, exist_ok=True)
-    return workspace / relative
-
-
-'''
-    if "def _ios_remap_hidden_workspace(" not in workspace_text:
-        resolve_anchor = "def resolve_trusted_workspace(path: str | Path | None = None) -> Path:\n"
-        if resolve_anchor not in workspace_text:
-            raise SystemExit("trusted workspace resolver patch anchor not found")
-        workspace_text = workspace_text.replace(
-            resolve_anchor,
-            ios_legacy_workspace_helper + resolve_anchor,
-            1,
-        )
-
     resolver_anchor = '''    candidate = _resolve_path(path)
 
     access_error = _workspace_access_error(candidate)
 '''
-    resolver_replacement = '''    ios_legacy_workspace = _ios_remap_hidden_workspace(path)
-    candidate = ios_legacy_workspace if ios_legacy_workspace is not None else _resolve_path(path)
+    resolver_replacement = '''    ios_workspace = _ios_documents_workspace()
+    candidate = Path(ios_workspace) if ios_workspace else _resolve_path(path)
 
     access_error = _workspace_access_error(candidate)
 '''
-    if "ios_legacy_workspace = _ios_remap_hidden_workspace(path)" not in workspace_text:
+    if "candidate = Path(ios_workspace) if ios_workspace else _resolve_path(path)" not in workspace_text:
         if resolver_anchor not in workspace_text:
             raise SystemExit("trusted workspace candidate patch anchor not found")
         workspace_text = workspace_text.replace(resolver_anchor, resolver_replacement, 1)
+
+    workspace_api_overrides = (
+        (
+            "load_workspaces",
+            "def load_workspaces() -> list:\n",
+            '''    ios_loaded_workspaces = _ios_documents_workspace()
+    if ios_loaded_workspaces:
+        return [{"path": ios_loaded_workspaces, "name": "Home"}]
+''',
+        ),
+        (
+            "save_workspaces",
+            "def save_workspaces(workspaces: list) -> None:\n",
+            '''    ios_save_workspace = _ios_documents_workspace()
+    if ios_save_workspace:
+        workspaces = [{"path": ios_save_workspace, "name": "Home"}]
+''',
+        ),
+        (
+            "set_last_workspace",
+            "def set_last_workspace(path: str) -> None:\n",
+            '''    ios_last_workspace_to_save = _ios_documents_workspace()
+    if ios_last_workspace_to_save:
+        path = ios_last_workspace_to_save
+''',
+        ),
+        (
+            "list_workspace_suggestions",
+            "def list_workspace_suggestions(prefix: str = \"\", limit: int = 12) -> list[str]:\n",
+            '''    ios_suggested_workspace = _ios_documents_workspace()
+    if ios_suggested_workspace:
+        return [ios_suggested_workspace]
+''',
+        ),
+        (
+            "validate_workspace_to_add",
+            "def validate_workspace_to_add(path: str) -> Path:\n",
+            '''    ios_added_workspace = _ios_documents_workspace()
+    if ios_added_workspace:
+        return Path(ios_added_workspace)
+''',
+        ),
+    )
+    for function_name, signature, injection in workspace_api_overrides:
+        marker = injection.splitlines()[0]
+        if marker not in workspace_text:
+            if signature not in workspace_text:
+                raise SystemExit(f"{function_name} patch anchor not found")
+            workspace_text = workspace_text.replace(signature, signature + injection, 1)
 
     saved_workspace_anchor = '''        if Path(raw).is_dir():
             return raw

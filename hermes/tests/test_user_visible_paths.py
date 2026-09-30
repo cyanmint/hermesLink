@@ -108,6 +108,18 @@ class UserVisiblePathTests(unittest.TestCase):
                 "            return raw\n"
                 "        return None\n"
                 "    return _valid(os.path.join(os.environ['HOME'], 'workspace')) or _profile_default_workspace()\n"
+                "def load_workspaces() -> list:\n"
+                "    return [{'path': os.environ['HOME'] + '/workspace', 'name': 'Old'}]\n"
+                "def save_workspaces(workspaces: list) -> None:\n"
+                "    global SAVED_WORKSPACES\n"
+                "    SAVED_WORKSPACES = workspaces\n"
+                "def set_last_workspace(path: str) -> None:\n"
+                "    global SAVED_LAST_WORKSPACE\n"
+                "    SAVED_LAST_WORKSPACE = path\n"
+                'def list_workspace_suggestions(prefix: str = "", limit: int = 12) -> list[str]:\n'
+                "    return [prefix]\n"
+                "def validate_workspace_to_add(path: str) -> Path:\n"
+                "    return _resolve_path(path)\n"
                 "def _workspace_access_error(candidate):\n"
                 "    return None if candidate.is_dir() else f'Path does not exist: {candidate}'\n"
                 "def resolve_trusted_workspace(path: str | Path | None = None) -> Path:\n"
@@ -168,12 +180,33 @@ class UserVisiblePathTests(unittest.TestCase):
                     patched_workspace.get_profile_default_workspace(), str(documents_workspace.resolve())
                 )
                 self.assertEqual(
-                    patched_workspace.resolve_trusted_workspace(hidden_workspace),
+                    patched_workspace.load_workspaces(),
+                    [{"path": str(documents_workspace.resolve()), "name": "Home"}],
+                )
+                patched_workspace.save_workspaces([{"path": "/etc", "name": "System"}])
+                self.assertEqual(
+                    patched_workspace.SAVED_WORKSPACES,
+                    [{"path": str(documents_workspace.resolve()), "name": "Home"}],
+                )
+                patched_workspace.set_last_workspace("/usr")
+                self.assertEqual(
+                    patched_workspace.SAVED_LAST_WORKSPACE, str(documents_workspace.resolve())
+                )
+                self.assertEqual(
+                    patched_workspace.list_workspace_suggestions("/etc"),
+                    [str(documents_workspace.resolve())],
+                )
+                self.assertEqual(
+                    patched_workspace.validate_workspace_to_add("/etc"),
+                    documents_workspace.resolve(),
+                )
+                self.assertEqual(
+                    patched_workspace.resolve_trusted_workspace("/etc"),
                     documents_workspace.resolve(),
                 )
                 self.assertEqual(
                     patched_workspace.resolve_trusted_workspace(hidden_workspace / "nested"),
-                    (documents_workspace / "nested").resolve(),
+                    documents_workspace.resolve(),
                 )
                 self.assertTrue(
                     patched_workspace._is_blocked_workspace_path(hidden_workspace.resolve())
