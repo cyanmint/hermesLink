@@ -4,7 +4,8 @@ set -euo pipefail
 
 ROOT=$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)
 BUILD_ROOT=${BUILD_ROOT:-$ROOT/build/python-runtime}
-CPYTHON_REF=${CPYTHON_REF:-v3.13.9}
+CPYTHON_REPOSITORY=${CPYTHON_REPOSITORY:-https://github.com/holzschu/cpython.git}
+CPYTHON_REF=${CPYTHON_REF:-0c3aa6418f2f8d874e1be62e45226af002bbcc8d}
 CPYTHON_ROOT=${1:-${CPYTHON_ROOT:-$BUILD_ROOT/cpython}}
 ARCHIVE=${2:-$ROOT/hermesrt.zip}
 HOST_PYTHON=${HOST_PYTHON:-$(command -v python3.13 || command -v python3)}
@@ -13,11 +14,14 @@ WEBUI_SOURCE=${WEBUI_SOURCE:-$ROOT/build/external/hermes-webui}
 VENDOR_ROOT=${HERMES_VENDOR:-$BUILD_ROOT/vendor}
 
 mkdir -p "$BUILD_ROOT" "$(dirname "$ARCHIVE")"
-if [ ! -d "$CPYTHON_ROOT/Lib/encodings" ]; then
+if [ ! -d "$CPYTHON_ROOT/.git" ]; then
   rm -rf "$CPYTHON_ROOT"
-  git clone --filter=blob:none --depth=1 --branch "$CPYTHON_REF" \
-    https://github.com/python/cpython.git "$CPYTHON_ROOT"
+  git clone --filter=blob:none --no-checkout --depth=1 "$CPYTHON_REPOSITORY" "$CPYTHON_ROOT"
+else
+  git -C "$CPYTHON_ROOT" remote set-url origin "$CPYTHON_REPOSITORY"
 fi
+git -C "$CPYTHON_ROOT" fetch --depth=1 origin "$CPYTHON_REF"
+git -C "$CPYTHON_ROOT" checkout --detach FETCH_HEAD
 [ -f "$CPYTHON_ROOT/Lib/encodings/__init__.py" ] || {
   echo "missing CPython standard library: $CPYTHON_ROOT/Lib" >&2
   exit 2

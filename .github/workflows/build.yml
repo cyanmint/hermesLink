@@ -132,7 +132,8 @@ jobs:
         env:
           BUILD_ROOT: ${{ runner.temp }}/hermes-build/python-runtime
           CPYTHON_ROOT: ${{ runner.temp }}/hermes-build/cpython
-          CPYTHON_REF: v3.13.9
+          CPYTHON_REPOSITORY: https://github.com/holzschu/cpython.git
+          CPYTHON_REF: 0c3aa6418f2f8d874e1be62e45226af002bbcc8d
         run: |
           set -euo pipefail
           chmod +x hermes/build/*.sh
@@ -172,6 +173,8 @@ jobs:
         env:
           BUILD_ROOT: ${{ runner.temp }}/hermes-build/native-ios
           IPHONEOS_DEPLOYMENT_TARGET: '16.1'
+          CPYTHON_REPOSITORY: https://github.com/holzschu/cpython.git
+          CPYTHON_REF: 0c3aa6418f2f8d874e1be62e45226af002bbcc8d
           HERMES_BUILD_RUNTIME_ZIP: '0'
           JOBS: 4
         run: |

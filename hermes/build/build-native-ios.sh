@@ -21,7 +21,8 @@ if [ -z "${HOST_PYTHON:-}" ] && [ "$HOST_OS" = Darwin ]; then
 fi
 HOST_PYTHON=${HOST_PYTHON:-$BUILD_ROOT/host-python/bin/python3.13}
 export HOST_PYTHON
-CPYTHON_REF=${CPYTHON_REF:-v3.13.9}
+CPYTHON_REPOSITORY=${CPYTHON_REPOSITORY:-https://github.com/holzschu/cpython.git}
+CPYTHON_REF=${CPYTHON_REF:-0c3aa6418f2f8d874e1be62e45226af002bbcc8d}
 CPYTHON_ROOT=${CPYTHON_ROOT:-$BUILD_ROOT/cpython}
 OPENSSL_REF=${OPENSSL_REF:-openssl-3.3.2}
 OPENSSL_ROOT=${OPENSSL_ROOT:-$BUILD_ROOT/openssl}
@@ -30,6 +31,18 @@ TARGET_ROOT=${TARGET_ROOT:-$BUILD_ROOT/target}
 TOOLBIN=$BUILD_ROOT/bin
 
 mkdir -p "$BUILD_ROOT" "$TOOLBIN"
+
+checkout_cpython() {
+  local directory=$1
+  if [ ! -d "$directory/.git" ]; then
+    rm -rf "$directory"
+    git clone --filter=blob:none --no-checkout --depth=1 "$CPYTHON_REPOSITORY" "$directory"
+  else
+    git -C "$directory" remote set-url origin "$CPYTHON_REPOSITORY"
+  fi
+  git -C "$directory" fetch --depth=1 origin "$CPYTHON_REF"
+  git -C "$directory" checkout --detach FETCH_HEAD
+}
 
 if [ "$HOST_OS" != Darwin ] && [ ! -d "$SDK_ROOT" ]; then
   SDK_REPO_DIR=$BUILD_ROOT/sdks
@@ -40,14 +53,12 @@ if [ "$HOST_OS" != Darwin ] && [ ! -d "$SDK_ROOT" ]; then
 fi
 [ -d "$SDK_ROOT/usr/include" ] || { echo "missing iOS SDK: $SDK_ROOT" >&2; exit 3; }
 
-if [ ! -d "$CPYTHON_ROOT/.git" ]; then
-  git clone --filter=blob:none --depth=1 --branch "$CPYTHON_REF" https://github.com/python/cpython.git "$CPYTHON_ROOT"
-fi
+checkout_cpython "$CPYTHON_ROOT"
 
 if [ ! -x "$HOST_PYTHON" ]; then
   HOST_ROOT=$BUILD_ROOT/host-cpython
-  if [ ! -d "$HOST_ROOT/.git" ]; then
-    git clone --filter=blob:none --depth=1 --branch "$CPYTHON_REF" https://github.com/python/cpython.git "$HOST_ROOT"
+  if [ ! -x "$HOST_PYTHON" ]; then
+    checkout_cpython "$HOST_ROOT"
     (cd "$HOST_ROOT" && env -u SDKROOT -u CC -u CFLAGS -u CPPFLAGS -u LDFLAGS \
       ./configure --prefix="$BUILD_ROOT/host-python" --without-ensurepip --disable-test-modules)
     (cd "$HOST_ROOT" && env -u SDKROOT -u CC -u CFLAGS -u CPPFLAGS -u LDFLAGS make -j"${JOBS:-16}")
@@ -114,13 +125,14 @@ fi
 
 TARGET_ROOT=$BUILD_ROOT/target-cpython
 TARGET_STAMP="$TARGET_ROOT/.hermes-cpython-ref"
-if [ ! -f "$TARGET_STAMP" ] || [ "$(cat "$TARGET_STAMP")" != "$CPYTHON_REF" ]; then
+CPYTHON_STAMP="$CPYTHON_REPOSITORY@$(git -C "$CPYTHON_ROOT" rev-parse HEAD)"
+if [ ! -f "$TARGET_STAMP" ] || [ "$(cat "$TARGET_STAMP")" != "$CPYTHON_STAMP" ]; then
   rm -rf "$TARGET_ROOT"
   mkdir -p "$TARGET_ROOT"
   git -C "$CPYTHON_ROOT" archive HEAD | tar -x -C "$TARGET_ROOT"
-  printf '%s\n' "$CPYTHON_REF" > "$TARGET_STAMP"
+  printf '%s\n' "$CPYTHON_STAMP" > "$TARGET_STAMP"
 else
-  echo "Reusing cached CPython target objects for $CPYTHON_REF"
+  echo "Reusing cached CPython target objects for $CPYTHON_STAMP"
 fi
 BUILD_TRIPLE=$(cd "$TARGET_ROOT" && ./config.guess)
 cat > "$TARGET_ROOT/ios_compat.c" <<'EOF'
