@@ -122,6 +122,23 @@ class NativeModuleRegistryTests(unittest.TestCase):
         self.assertIn("PyEval_SaveThread();", source)
         self.assertNotIn("Py_FinalizeEx", source)
 
+    def test_linux_runtime_build_is_static_and_pins_ashell_cpython(self):
+        build_script = (
+            Path(__file__).resolve().parents[1] / "build" / "build-native-linux.sh"
+        ).read_text(encoding="utf-8")
+
+        self.assertIn("CPYTHON_REF=${CPYTHON_REF:-0c3aa6418f2f8d874e1be62e45226af002bbcc8d}", build_script)
+        self.assertIn("--disable-shared", build_script)
+        self.assertIn("  -static -lssl -lcrypto", build_script)
+
+    def test_ios_terminal_environment_is_not_enabled_for_linux_runtime(self):
+        source = RUNTIME_SOURCE_PATH.read_text(encoding="utf-8")
+
+        self.assertIn(
+            "#ifdef __APPLE__\n    setenv(\"HERMES_IOS_TERMINAL\", \"1\", 1);\n#endif",
+            source,
+        )
+
 
 if __name__ == "__main__":
     unittest.main()

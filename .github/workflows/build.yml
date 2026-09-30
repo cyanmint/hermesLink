@@ -147,6 +147,71 @@ jobs:
           if-no-files-found: error
           retention-days: 1
 
+  build-linux-native-runtime:
+    name: Build static Linux Hermes runtime
+    needs: [decide, build-runtime-zip]
+    if: needs.decide.outputs.run_runtime == 'true'
+    runs-on: ubuntu-latest
+    steps:
+      - name: Check out HermesLink
+        uses: actions/checkout@v4
+
+      - name: Set up host Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.13'
+
+      - name: Install static build dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y \
+            build-essential libbz2-dev libffi-dev libgdbm-compat-dev libgdbm-dev \
+            libcrypt-dev liblzma-dev libncurses-dev libreadline-dev libsqlite3-dev \
+            libssl-dev uuid-dev zlib1g-dev
+
+      - name: Download pure-Python runtime archive
+        uses: actions/download-artifact@v4
+        with:
+          name: hermesrt-zip
+          path: linux-runtime
+
+      - name: Build static Linux executable
+        env:
+          BUILD_ROOT: ${{ runner.temp }}/hermes-build/native-linux
+          CPYTHON_ROOT: ${{ runner.temp }}/hermes-build/cpython
+          CPYTHON_REPOSITORY: https://github.com/holzschu/cpython.git
+          CPYTHON_REF: 0c3aa6418f2f8d874e1be62e45226af002bbcc8d
+          ARTIFACT_ROOT: ${{ github.workspace }}/linux-runtime
+          HERMES_BUILD_RUNTIME_ZIP: '0'
+          JOBS: 4
+        run: |
+          set -euo pipefail
+          bash hermes/build/build-native-linux.sh
+          test -x linux-runtime/hermes
+          if readelf -l linux-runtime/hermes | grep -q ' INTERP '; then
+            echo "Hermes executable unexpectedly requires a dynamic loader" >&2
+            exit 1
+          fi
+
+      - name: Smoke test embedded CPython and native modules
+        env:
+          HERMES_RUNTIME_ROOT: ${{ github.workspace }}/linux-runtime
+          HERMES_PYTHON_MODE: '1'
+        run: |
+          set -euo pipefail
+          ./linux-runtime/hermes -c \
+            'import _ssl, _hashlib, _blake2, _posixsubprocess, _asyncio, _socket, _sqlite3, fcntl, select, termios, zlib; print("static Hermes runtime smoke test passed")'
+
+      - name: Upload static Linux runtime
+        uses: actions/upload-artifact@v4
+        with:
+          name: hermes-linux-native-runtime
+          path: |
+            linux-runtime/hermes
+            linux-runtime/hermesrt.zip
+          if-no-files-found: error
+          retention-days: 14
+
   build-native-runtime:
     name: Build native iOS runtime (macOS)
     needs: decide
