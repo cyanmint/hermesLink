@@ -102,3 +102,29 @@ if 'The bundled Agent lives at hermesrt.zip/hermes.' not in text:
     text = text.replace(anchor, injection, 1)
 
 path.write_text(text, encoding="utf-8", newline="\n")
+
+if len(sys.argv) > 2:
+    workspace_path = Path(sys.argv[2])
+    workspace_text = workspace_path.read_text(encoding="utf-8")
+    workspace_anchor = '''    raw = None
+    if raw_path not in (None, ""):
+'''
+    workspace_injection = '''    ios_documents_root = os.environ.get("HERMES_IOS_DOCUMENTS_ROOT")
+    if ios_documents_root:
+        try:
+            documents_root = Path(ios_documents_root).resolve()
+            resolved_candidate = candidate.resolve()
+        except (OSError, RuntimeError):
+            pass
+        else:
+            if resolved_candidate == documents_root or documents_root in resolved_candidate.parents:
+                return False
+
+    raw = None
+    if raw_path not in (None, ""):
+'''
+    if workspace_anchor in workspace_text:
+        workspace_text = workspace_text.replace(workspace_anchor, workspace_injection, 1)
+    elif "HERMES_IOS_DOCUMENTS_ROOT" not in workspace_text:
+        raise SystemExit("workspace path validation patch anchor not found")
+    workspace_path.write_text(workspace_text, encoding="utf-8", newline="\n")

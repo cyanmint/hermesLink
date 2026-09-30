@@ -52,6 +52,16 @@ class UserVisiblePathTests(unittest.TestCase):
         self.assertIn('setenv("HERMES_RUNTIME_ROOT", [BlinkPaths hermesHomePath].UTF8String, 1);', command)
         self.assertNotIn('bundle pathForResource:@"hermesrt"', command)
 
+    def test_hermes_webui_uses_the_files_visible_documents_workspace(self):
+        command = (ROOT / "Blink" / "Commands" / "hermes.m").read_text(encoding="utf-8")
+        build_script = (ROOT / "hermes" / "build" / "build-hermesrt-zip.sh").read_text(encoding="utf-8")
+        patch_script = (ROOT / "hermes" / "overlay" / "patches" / "patch-webui-zip.py").read_text(encoding="utf-8")
+
+        self.assertIn('setenv("HERMES_IOS_DOCUMENTS_ROOT", documentsPath.UTF8String, 1);', command)
+        self.assertIn('setenv("HERMES_WEBUI_DEFAULT_WORKSPACE", documentsPath.UTF8String, 1);', command)
+        self.assertIn('"$STAGE/hermes-webui/api/workspace.py"', build_script)
+        self.assertIn('if resolved_candidate == documents_root or documents_root in resolved_candidate.parents:', patch_script)
+
     def test_zip_agent_and_webui_assets_extract_to_visible_named_directories(self):
         with tempfile.TemporaryDirectory() as temporary:
             root = Path(temporary)
@@ -70,7 +80,35 @@ class UserVisiblePathTests(unittest.TestCase):
                 encoding="utf-8",
                 newline="\n",
             )
-            subprocess.run([sys.executable, str(PATCH_PATH), str(config)], check=True)
+            workspace = root / "workspace.py"
+            workspace.write_text(
+                "import os\n"
+                "from pathlib import Path\n"
+                "def _is_blocked_workspace_path(candidate, raw_path=None):\n"
+                '    """Reject blocked OS paths."""\n'
+                "    raw = None\n"
+                '    if raw_path not in (None, ""):\n'
+                "        raw = Path(raw_path)\n"
+                "    return candidate == Path('/etc')\n",
+                encoding="utf-8",
+                newline="\n",
+            )
+            subprocess.run([sys.executable, str(PATCH_PATH), str(config), str(workspace)], check=True)
+            spec = importlib.util.spec_from_file_location("patched_workspace", workspace)
+            patched_workspace = importlib.util.module_from_spec(spec)
+            spec.loader.exec_module(patched_workspace)
+            old_documents_root = os.environ.get("HERMES_IOS_DOCUMENTS_ROOT")
+            documents = root / "Documents"
+            documents.mkdir()
+            os.environ["HERMES_IOS_DOCUMENTS_ROOT"] = str(documents)
+            try:
+                self.assertFalse(patched_workspace._is_blocked_workspace_path(documents / "workspace"))
+                self.assertTrue(patched_workspace._is_blocked_workspace_path(Path("/etc")))
+            finally:
+                if old_documents_root is None:
+                    os.environ.pop("HERMES_IOS_DOCUMENTS_ROOT", None)
+                else:
+                    os.environ["HERMES_IOS_DOCUMENTS_ROOT"] = old_documents_root
 
             archive = root / "hermesrt.zip"
             with zipfile.ZipFile(archive, "w") as bundle:

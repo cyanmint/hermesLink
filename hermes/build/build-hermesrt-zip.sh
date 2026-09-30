@@ -84,7 +84,8 @@ cp -a "$WEBUI_SOURCE/static" "$STAGE/hermes-webui/" 2>/dev/null || true
 for module in bootstrap.py server.py mcp_server.py; do
   [ -f "$WEBUI_SOURCE/$module" ] && cp "$WEBUI_SOURCE/$module" "$STAGE/hermes-webui/"
 done
-"$HOST_PYTHON" "$ROOT/overlay/patches/patch-webui-zip.py" "$STAGE/hermes-webui/api/config.py"
+"$HOST_PYTHON" "$ROOT/overlay/patches/patch-webui-zip.py" \
+  "$STAGE/hermes-webui/api/config.py" "$STAGE/hermes-webui/api/workspace.py"
 [ -d "$STAGE/hermes/plugins/browser" ] && : > "$STAGE/hermes/plugins/browser/__init__.py"
 cp "$ROOT/overlay/python/sitecustomize.py" "$STAGE/python/sitecustomize.py"
 cp -a "$ROOT/overlay" "$STAGE/overlay"
