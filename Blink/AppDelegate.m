@@ -311,6 +311,11 @@ void __setupProcessEnv(void) {
                              withIntermediateDirectories:YES
                                               attributes:nil
                                                    error:nil];
+  NSString *workspacePath = [documentsPath stringByAppendingPathComponent:@"workspace"];
+  [[NSFileManager defaultManager] createDirectoryAtPath:workspacePath
+                             withIntermediateDirectories:YES
+                                              attributes:nil
+                                                   error:nil];
   NSString *hermesHomePath = [BlinkPaths hermesHomePath];
   InstallBundledHermesRuntime();
   NSString *homePath = BlinkPaths.homePath;
@@ -319,8 +324,8 @@ void __setupProcessEnv(void) {
   setenv("CURL_HOME", homePath.UTF8String, 1);
   setenv("HERMES_HOME", hermesHomePath.UTF8String, 1);
   setenv("HERMES_RUNTIME_ROOT", hermesHomePath.UTF8String, 1);
-  setenv("TERMINAL_CWD", documentsPath.UTF8String, 1);
-  setenv("PWD", documentsPath.UTF8String, 1);
+  setenv("TERMINAL_CWD", workspacePath.UTF8String, 1);
+  setenv("PWD", workspacePath.UTF8String, 1);
   
   NSNotificationCenter *nc = NSNotificationCenter.defaultCenter;
   [nc addObserver:self

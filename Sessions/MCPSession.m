@@ -91,7 +91,7 @@
     // Use the real shared Documents directory, not homePath/Documents: the
     // latter is a symlink created asynchronously and can become a private
     // shadow folder if a session starts before that link is installed.
-    NSString *workspacePath = [BlinkPaths documentsPath];
+    NSString *workspacePath = [[BlinkPaths documentsPath] stringByAppendingPathComponent:@"workspace"];
     NSString *hermesHomePath = [BlinkPaths hermesHomePath];
     [[NSFileManager defaultManager] createDirectoryAtPath:workspacePath
                                withIntermediateDirectories:YES

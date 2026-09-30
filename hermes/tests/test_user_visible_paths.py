@@ -22,7 +22,10 @@ class UserVisiblePathTests(unittest.TestCase):
         self.assertIn('NSString *hermesHomePath = [BlinkPaths hermesHomePath];', app_delegate)
         self.assertIn('setenv("HERMES_HOME", hermesHomePath.UTF8String, 1);', app_delegate)
         self.assertIn('setenv("HERMES_RUNTIME_ROOT", hermesHomePath.UTF8String, 1);', app_delegate)
-        self.assertIn('NSString *workspacePath = [BlinkPaths documentsPath];', mcp_session)
+        self.assertIn('NSString *workspacePath = [documentsPath stringByAppendingPathComponent:@"workspace"];', app_delegate)
+        self.assertIn('setenv("TERMINAL_CWD", workspacePath.UTF8String, 1);', app_delegate)
+        self.assertIn('setenv("PWD", workspacePath.UTF8String, 1);', app_delegate)
+        self.assertIn('NSString *workspacePath = [[BlinkPaths documentsPath] stringByAppendingPathComponent:@"workspace"];', mcp_session)
         self.assertIn('NSString *hermesHomePath = [BlinkPaths hermesHomePath];', mcp_session)
         self.assertIn('setenv("HERMES_HOME", hermesHomePath.UTF8String, 1);', mcp_session)
         self.assertIn('setenv("TERMINAL_CWD", workspacePath.UTF8String, 1);', mcp_session)
@@ -77,7 +80,7 @@ class UserVisiblePathTests(unittest.TestCase):
         self.assertIn('if resolved_candidate == documents_root or documents_root in resolved_candidate.parents:', patch_script)
         self.assertIn("setupProvider&&setupProvider.default_model", patch_script)
 
-    def test_zip_agent_and_webui_assets_extract_to_visible_named_directories(self):
+    def test_zip_agent_is_importable_without_extraction_and_webui_assets_are_visible(self):
         with tempfile.TemporaryDirectory() as temporary:
             root = Path(temporary)
             config = root / "config.py"
@@ -319,6 +322,7 @@ class UserVisiblePathTests(unittest.TestCase):
                 bundle.writestr("hermes_webui/__init__.py", "")
                 bundle.writestr("hermes_webui/static/index.html", "visible webui assets")
                 bundle.writestr("hermes/hermes_cli/main.py", "# visible agent source\n")
+                bundle.writestr("hermes/hermes_cli/__init__.py", "")
 
             visible_home = root / "Files" / "HermesHome"
             visible_home.mkdir(parents=True)
@@ -333,10 +337,16 @@ class UserVisiblePathTests(unittest.TestCase):
                 self.assertEqual((static_root / "index.html").read_text(encoding="utf-8"), "visible webui assets")
                 self.assertEqual(agent_root, Path(str(archive) + "/hermes"))
                 self.assertFalse((visible_home / "HermesAgent").exists())
-                self.assertIn(str(archive), sys.path)
+                sys.path.insert(0, str(agent_root))
+                agent_module = importlib.import_module("hermes_cli.main")
+                self.assertIn(".zip/hermes/hermes_cli/main.py", agent_module.__file__)
                 self.assertFalse(static_root.name.startswith("."))
                 self.assertFalse(agent_root.name.startswith("."))
             finally:
+                if "agent_root" in locals() and str(agent_root) in sys.path:
+                    sys.path.remove(str(agent_root))
+                sys.modules.pop("hermes_cli.main", None)
+                sys.modules.pop("hermes_cli", None)
                 sys.path.remove(str(archive))
                 sys.modules.pop("hermes_webui.api.config", None)
                 sys.modules.pop("hermes_webui.api", None)
@@ -345,6 +355,14 @@ class UserVisiblePathTests(unittest.TestCase):
                     os.environ.pop("HERMES_HOME", None)
                 else:
                     os.environ["HERMES_HOME"] = old_home
+
+    def test_simulator_e2e_uses_documents_workspace(self):
+        simulator_test = (ROOT / "hermes" / "tests" / "ci_simulator_copilot_e2e.py").read_text(
+            encoding="utf-8"
+        )
+        self.assertIn('workspace = documents / "workspace"', simulator_test)
+        self.assertIn('_write_simulator_config(home, workspace)', simulator_test)
+        self.assertIn('(workspace / sentinel).write_text', simulator_test)
 
 
 if __name__ == "__main__":

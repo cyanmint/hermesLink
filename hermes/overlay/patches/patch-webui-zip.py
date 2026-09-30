@@ -81,6 +81,11 @@ injection = '''def _discover_agent_dir() -> Path:
         _archive = Path(_origin.split(".zip/", 1)[0] + ".zip")
         _bundled_agent = Path(str(_archive) + "/hermes")
         if _archive.is_file():
+            _explicit_agent = os.environ.get("HERMES_WEBUI_AGENT_DIR")
+            if _explicit_agent:
+                _explicit_path = Path(_explicit_agent).expanduser().resolve()
+                if _explicit_path.exists() and _looks_like_agent_source_root(_explicit_path):
+                    return _explicit_path
             return _bundled_agent
 '''
 if "The bundled Agent is already importable through zipimport." not in text:
@@ -325,9 +330,10 @@ if len(sys.argv) > 4:
     verbose_helpers = '''_WEBUI_VERBOSE = any(arg in ("--verbose", "-v") for arg in sys.argv[1:])
 
 
-def _verbose_request_stalled(method: str, path: str, thread_id: int, started: float) -> None:
-    frame = sys._current_frames().get(thread_id)
-    if frame is None:
+def _verbose_request_stalled(method: str, path: str, request_thread, started: float) -> None:
+    thread_id = request_thread.ident
+    frame = sys._current_frames().get(thread_id) if thread_id is not None else None
+    if frame is None or not request_thread.is_alive():
         return
     elapsed = time.monotonic() - started
     print(
@@ -364,7 +370,7 @@ def _verbose_request_stalled(method: str, path: str, thread_id: int, started: fl
                     verbose_timer = threading.Timer(
                         5.0,
                         _verbose_request_stalled,
-                        args=(self.command, parsed.path, threading.get_ident(), verbose_started),
+                        args=(self.command, parsed.path, threading.current_thread(), verbose_started),
                     )
                     verbose_timer.daemon = True
                     verbose_timer.start()

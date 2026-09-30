@@ -252,16 +252,18 @@ def _prepare_and_launch(app_path: Path, token: str) -> tuple[str, str, Path, str
     data_container = Path(_simctl(["get_app_container", simulator_id, str(bundle_id), "data"]))
     documents = data_container / "Documents"
     home = documents / "HermesHome"
+    workspace = documents / "workspace"
     documents.mkdir(parents=True, exist_ok=True)
+    workspace.mkdir(parents=True, exist_ok=True)
     sentinel = f"{PROOF_PREFIX}{uuid.uuid4().hex}.txt"
-    (documents / sentinel).write_text("simulator ls proof\n", encoding="utf-8", newline="\n")
-    _write_simulator_config(home, documents)
+    (workspace / sentinel).write_text("simulator ls proof\n", encoding="utf-8", newline="\n")
+    _write_simulator_config(home, workspace)
     _simctl(
         ["launch", "--terminate-running-process", simulator_id, str(bundle_id)],
         token=token,
         timeout=60,
     )
-    return simulator_id, str(bundle_id), documents, sentinel
+    return simulator_id, str(bundle_id), workspace, sentinel
 
 
 def run_e2e(app_path: Path, token: str) -> None:
