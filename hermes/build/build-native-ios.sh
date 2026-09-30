@@ -21,6 +21,7 @@ if [ -z "${HOST_PYTHON:-}" ] && [ "$HOST_OS" = Darwin ]; then
 fi
 HOST_PYTHON=${HOST_PYTHON:-$BUILD_ROOT/host-python/bin/python3.13}
 export HOST_PYTHON
+IOS_SYSTEM_FRAMEWORK=${IOS_SYSTEM_FRAMEWORK:-$ROOT/../xcfs/.build/artifacts/xcfs/ios_system/ios_system.xcframework/ios-arm64/ios_system.framework}
 CPYTHON_REPOSITORY=${CPYTHON_REPOSITORY:-https://github.com/holzschu/cpython.git}
 CPYTHON_REF=${CPYTHON_REF:-0c3aa6418f2f8d874e1be62e45226af002bbcc8d}
 CPYTHON_ROOT=${CPYTHON_ROOT:-$BUILD_ROOT/cpython}
@@ -52,6 +53,10 @@ if [ "$HOST_OS" != Darwin ] && [ ! -d "$SDK_ROOT" ]; then
   fi
 fi
 [ -d "$SDK_ROOT/usr/include" ] || { echo "missing iOS SDK: $SDK_ROOT" >&2; exit 3; }
+[ -f "$IOS_SYSTEM_FRAMEWORK/Headers/ios_error.h" ] || {
+  echo "missing ios_system iOS framework headers: $IOS_SYSTEM_FRAMEWORK" >&2
+  exit 3
+}
 
 checkout_cpython "$CPYTHON_ROOT"
 
@@ -144,7 +149,7 @@ clang --target=arm64-apple-ios${DEPLOYMENT_TARGET} -isysroot "$SDK_ROOT" \
   -c "$TARGET_ROOT/ios_compat.c" -o "$TARGET_ROOT/ios_compat.o"
 (cd "$TARGET_ROOT" && \
   PATH="$TOOLBIN:/usr/bin:/bin" CC=arm64-apple-ios-clang AR=arm64-apple-ios-ar RANLIB=arm64-apple-ios-ranlib \
-    CPPFLAGS="-DOPENSSL_THREADS -I$OPENSSL_INSTALL/include" \
+    CPPFLAGS="-DOPENSSL_THREADS -I$OPENSSL_INSTALL/include -I$IOS_SYSTEM_FRAMEWORK/Headers" \
     LDFLAGS="-L$OPENSSL_INSTALL/lib" \
     LIBS="$TARGET_ROOT/ios_compat.o -lssl -lcrypto" \
     py_cv_module__lzma=n/a py_cv_module__bz2=n/a py_cv_module__dbm=n/a \
@@ -248,7 +253,7 @@ python3 "$ROOT/build/generate-native-module-registry.py" \
   "$LLVM_RANLIB" libpython3.13.a)
 
 mkdir -p "$BUILD_ROOT/artifact"
-CC=arm64-apple-ios-clang PATH="$TOOLBIN:$PATH" \
+CC=arm64-apple-ios-clang IOS_SYSTEM_FRAMEWORK="$IOS_SYSTEM_FRAMEWORK" PATH="$TOOLBIN:$PATH" \
   bash "$ROOT/build/package-native-ios.sh" \
   "$TARGET_ROOT" "$BUILD_ROOT/artifact"
 rm -f "$ROOT/hermes"

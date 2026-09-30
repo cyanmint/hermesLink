@@ -10,6 +10,7 @@ BUILD_ROOT=$(dirname "$OUTPUT_FRAMEWORK")
 HOST_PYTHON=${HOST_PYTHON:-$(dirname "$TARGET_ROOT")/host-python/bin/python3.13}
 ARCHIVE="$BUILD_ROOT/hermesrt.zip"
 OPENSSL_INSTALL=${OPENSSL_INSTALL:-$BUILD_ROOT/openssl-install}
+IOS_SYSTEM_FRAMEWORK=${IOS_SYSTEM_FRAMEWORK:?iOS ios_system framework path is required}
 
 [ -f "$TARGET_ROOT/libpython3.13.a" ] || { echo "missing target libpython3.13.a" >&2; exit 2; }
 [ -d "$TARGET_ROOT/Lib/encodings" ] || { echo "missing CPython standard library" >&2; exit 2; }
@@ -31,6 +32,7 @@ CC=${CC:-arm64-apple-ios-clang}
 -Wl,-headerpad_max_install_names -Wl,-x -Wl,-no_function_starts -Wl,-no_data_in_code_info -Wl,-all_load "$TARGET_ROOT/libpython3.13.a" -Wl,-force_load,"$TARGET_ROOT/Modules/_hacl/libHacl_Hash_SHA2.a" -Wl,-force_load,"$TARGET_ROOT/Modules/expat/libexpat.a" "$BUILD_ROOT/hermes_main.o" \
   -Wl,-rpath,@loader_path -framework CoreFoundation -ldl -lpthread -lm -lz -lsqlite3 \
   -L"$OPENSSL_INSTALL/lib" -lssl -lcrypto "$TARGET_ROOT/ios_compat.o" \
+  -F"$(dirname "$IOS_SYSTEM_FRAMEWORK")" -framework ios_system \
   -dynamiclib -install_name "@rpath/HermesRuntime.framework/HermesRuntime" \
   -Wl,-exported_symbol,_hermes_runtime_main \
   -o "$FRAMEWORK/HermesRuntime"

@@ -164,10 +164,15 @@ jobs:
       - name: Cache Hermes compilation
         uses: actions/cache@v4
         with:
-          path: ${{ runner.temp }}/hermes-build/native-ios
-          key: ${{ runner.os }}-hermes-ios-${{ hashFiles('.github/workflows/build.yml', 'hermes/build/*.sh', 'hermes/overlay/**', 'hermes/patches/**') }}
+          path: |
+            ${{ runner.temp }}/hermes-build/native-ios
+            xcfs/.build
+          key: ${{ runner.os }}-hermes-ios-${{ hashFiles('.github/workflows/build.yml', 'hermes/build/*.sh', 'hermes/overlay/**', 'hermes/patches/**', 'xcfs/Package.resolved') }}
           restore-keys: |
             ${{ runner.os }}-hermes-ios-
+
+      - name: Resolve iOS frameworks for CPython integration
+        run: swift package resolve --package-path xcfs
 
       - name: Build native iOS runtime only
         env:

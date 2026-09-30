@@ -19,6 +19,18 @@ class CPythonSourceTests(unittest.TestCase):
                 self.assertIn(f"CPYTHON_REF=${{CPYTHON_REF:-{CPYTHON_REF}}}", source)
                 self.assertIn("checkout --detach FETCH_HEAD", source)
 
+    def test_native_runtime_build_uses_the_ios_system_shim(self):
+        native_build = (ROOT / "hermes" / "build" / "build-native-ios.sh").read_text(
+            encoding="utf-8"
+        )
+        package_build = (ROOT / "hermes" / "build" / "package-native-ios.sh").read_text(
+            encoding="utf-8"
+        )
+
+        self.assertIn("ios_system.xcframework/ios-arm64/ios_system.framework", native_build)
+        self.assertIn("-I$IOS_SYSTEM_FRAMEWORK/Headers", native_build)
+        self.assertIn('-framework ios_system', package_build)
+
 
 if __name__ == "__main__":
     unittest.main()
