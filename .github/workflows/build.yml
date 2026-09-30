@@ -21,7 +21,7 @@ on:
           - false
         default: false
       run_tests:
-        description: Run HermesLink simulator tests before archiving
+        description: Run simulator tests; Copilot E2E runs after IPA upload
         required: false
         type: boolean
         default: false
@@ -261,6 +261,9 @@ jobs:
         )
       )
     runs-on: macos-latest
+    permissions:
+      actions: read
+      contents: read
     steps:
       - name: Check out HermesLink
         uses: actions/checkout@v4
@@ -418,6 +421,49 @@ jobs:
           name: hermeslink-ipa
           path: ${{ runner.temp }}/HermesLink.ipa
           if-no-files-found: error
+          retention-days: 14
+
+      - name: Set up Python for simulator Copilot E2E
+        if: ${{ inputs.run_tests == true }}
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.13'
+
+      - name: Build HermesLink simulator app for Copilot E2E
+        if: ${{ inputs.run_tests == true }}
+        run: |
+          set -euo pipefail
+          set -o pipefail
+          xcodebuild build \
+            -project Blink.xcodeproj \
+            -scheme Blink \
+            -sdk iphonesimulator \
+            -configuration Debug \
+            -destination 'generic/platform=iOS Simulator' \
+            -derivedDataPath "$RUNNER_TEMP/HermesLinkSimulatorE2E" \
+            IPHONEOS_DEPLOYMENT_TARGET='16.1' \
+            CODE_SIGNING_ALLOWED=NO | tee "$RUNNER_TEMP/hermeslink-simulator-e2e-build.log" | xcpretty
+          test -d "$RUNNER_TEMP/HermesLinkSimulatorE2E/Build/Products/Debug-iphonesimulator/Blink.app"
+
+      - name: Run Copilot WebUI conversation in simulator
+        if: ${{ inputs.run_tests == true }}
+        env:
+          COPILOT_GITHUB_TOKEN: ${{ secrets.COPILOT_GITHUB_TOKEN }}
+          SIMULATOR_APP_PATH: ${{ runner.temp }}/HermesLinkSimulatorE2E/Build/Products/Debug-iphonesimulator/Blink.app
+        run: |
+          set -euo pipefail
+          set -o pipefail
+          python hermes/tests/ci_simulator_copilot_e2e.py 2>&1 | tee "$RUNNER_TEMP/hermeslink-simulator-copilot-e2e.log"
+
+      - name: Upload simulator Copilot E2E logs
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: hermeslink-simulator-copilot-e2e-logs
+          path: |
+            ${{ runner.temp }}/hermeslink-simulator-e2e-build.log
+            ${{ runner.temp }}/hermeslink-simulator-copilot-e2e.log
+          if-no-files-found: ignore
           retention-days: 14
 
       - name: Upload archive log
