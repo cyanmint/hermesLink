@@ -22,6 +22,17 @@ open a Blink terminal and run `hermes --help` or `hermes webui`. The `hermes`
 command uses Blink's `ios_system` execution path, so it does not require a
 jailbreak or access to `/usr/bin`.
 
+## User-visible Hermes files
+
+HermesLink stores Hermes state and the default workspace in the app's actual
+`Documents` directory. iOS exposes this directory in Files and computer file
+sharing (`UIFileSharingEnabled` and `LSSupportsOpeningDocumentsInPlace`). The
+bundled Agent and WebUI static assets are extracted into the visible
+`Documents/HermesAgent` and `Documents/WebUIStatic` directories. Runtime paths
+use the real Documents URL rather than Blink's asynchronously linked
+`home/Documents` alias, which could otherwise create a private, non-shared
+directory.
+
 Do Blink! [Blink](https://blink.sh) is the first professional, desktop-grade terminal for iOS that leverages the support of Mosh and SSH. Thus, we can unequivocally guarantee stable connections, lightning-fast speeds, and full configurations. It can and should be your all-day-long tool.
 
 We did not create another terminal to fix your website on the go. Blink was built as a professional grade product from the onset. We started by analyzing what the must-haves were and we ended up grounding Blink on these three concepts:

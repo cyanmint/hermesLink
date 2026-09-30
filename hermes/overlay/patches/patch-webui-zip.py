@@ -36,7 +36,7 @@ def get_static_root() -> Path:
         return direct
     if _BUNDLED_STATIC_ROOT is not None:
         return _BUNDLED_STATIC_ROOT
-    origin = str(Path(__file__).resolve())
+    origin = str(Path(__file__).resolve()).replace(os.sep, "/")
     marker = ".zip/"
     if marker not in origin:
         return direct
@@ -45,7 +45,7 @@ def get_static_root() -> Path:
     if not archive.is_file():
         return direct
     prefix = inside.split("api/", 1)[0] + "static/"
-    target = Path(os.getenv("HERMES_HOME", str(archive.parent))) / ".hermes-webui-static"
+    target = Path(os.getenv("HERMES_HOME", str(archive.parent))) / "WebUIStatic"
     import zipfile
     try:
         with zipfile.ZipFile(archive) as bundle:
@@ -77,10 +77,10 @@ anchor = 'def _discover_agent_dir() -> Path:\n'
 injection = '''def _discover_agent_dir() -> Path:
     # The bundled Agent lives inside hermesrt.zip.  Extract it to the writable
     # HERMES_HOME so filesystem-based config/discovery code can use it on iOS.
-    _origin = str(Path(__file__).resolve())
+    _origin = str(Path(__file__).resolve()).replace(os.sep, "/")
     if ".zip/" in _origin:
         _archive = Path(_origin.split(".zip/", 1)[0] + ".zip")
-        _target = Path(os.getenv("HERMES_HOME", str(Path.home()))) / ".hermes-agent"
+        _target = Path(os.getenv("HERMES_HOME", str(Path.home()))) / "HermesAgent"
         try:
             with zipfile.ZipFile(_archive) as _bundle:
                 _prefix = "hermes/"

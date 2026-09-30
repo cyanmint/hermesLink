@@ -105,16 +105,21 @@ void __setupProcessEnv(void) {
     [AppDelegate _loadProfileVars];
   });
   
-  NSString *homePath = BlinkPaths.homePath;
-  NSString *documentsPath = [homePath stringByAppendingPathComponent:@"Documents"];
+  // Use the real app Documents directory, which is exposed through Files and
+  // file sharing. Do not route Hermes through homePath/Documents: that path is
+  // a symlink created asynchronously and can become a private shadow folder.
+  NSString *documentsPath = [BlinkPaths documentsPath];
   [[NSFileManager defaultManager] createDirectoryAtPath:documentsPath
                              withIntermediateDirectories:YES
                                               attributes:nil
                                                    error:nil];
+  NSString *homePath = BlinkPaths.homePath;
   setenv("HOME", homePath.UTF8String, 1);
   setenv("SSH_HOME", homePath.UTF8String, 1);
   setenv("CURL_HOME", homePath.UTF8String, 1);
   setenv("HERMES_HOME", documentsPath.UTF8String, 1);
+  setenv("TERMINAL_CWD", documentsPath.UTF8String, 1);
+  setenv("PWD", documentsPath.UTF8String, 1);
   
   NSNotificationCenter *nc = NSNotificationCenter.defaultCenter;
   [nc addObserver:self
