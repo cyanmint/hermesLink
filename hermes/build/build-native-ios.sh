@@ -172,7 +172,7 @@ PY
 python3 - "$ROOT/build" "$TARGET_ROOT/Modules/Setup.stdlib" "$TARGET_ROOT/Modules/Setup.local" "$TARGET_ROOT/Makefile" <<'PY'
 import pathlib, sys
 sys.path.insert(0, sys.argv[1])
-from configure_native_modules import ensure_required_static_modules
+from configure_native_modules import ensure_required_static_modules, module_object_paths
 
 source, target, makefile = sys.argv[2:]
 lines = pathlib.Path(source).read_text().splitlines()
