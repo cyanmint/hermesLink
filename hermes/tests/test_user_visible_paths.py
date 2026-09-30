@@ -96,13 +96,13 @@ class UserVisiblePathTests(unittest.TestCase):
                 "        if Path(raw).is_dir():\n"
                 "            return raw\n"
                 "        return None\n"
-                "    return valid_last_workspace('/app-support/home/workspace')\n"
+                "    return valid_last_workspace(os.path.join(os.environ['HOME'], 'workspace'))\n"
                 "def get_profile_default_workspace():\n"
                 "    def _valid(raw):\n"
                 "        if Path(raw).is_dir():\n"
                 "            return raw\n"
                 "        return None\n"
-                "    return _valid('/app-support/home/workspace')\n"
+                "    return _valid(os.path.join(os.environ['HOME'], 'workspace')) or _profile_default_workspace()\n"
                 "def _clean_workspace_list(workspaces):\n"
                 "    result = []\n"
                 "    for w in workspaces:\n"
@@ -116,7 +116,7 @@ class UserVisiblePathTests(unittest.TestCase):
                 "    raw = None\n"
                 '    if raw_path not in (None, ""):\n'
                 "        raw = Path(raw_path)\n"
-                "    return candidate in (Path('/etc'), Path('/app-support/home/workspace'))\n",
+                "    return candidate == Path('/etc')\n",
                 encoding="utf-8",
                 newline="\n",
             )
@@ -126,8 +126,13 @@ class UserVisiblePathTests(unittest.TestCase):
             spec.loader.exec_module(patched_workspace)
             old_documents_root = os.environ.get("HERMES_IOS_DOCUMENTS_ROOT")
             old_default_workspace = os.environ.get("HERMES_WEBUI_DEFAULT_WORKSPACE")
+            old_home = os.environ.get("HOME")
             documents = root / "Documents"
+            hidden_home = root / "AppGroup" / "home"
             documents.mkdir()
+            hidden_workspace = hidden_home / "workspace"
+            hidden_workspace.mkdir(parents=True)
+            os.environ["HOME"] = str(hidden_home)
             os.environ["HERMES_IOS_DOCUMENTS_ROOT"] = str(documents)
             os.environ["HERMES_WEBUI_DEFAULT_WORKSPACE"] = str(documents)
             try:
@@ -135,10 +140,15 @@ class UserVisiblePathTests(unittest.TestCase):
                     patched_workspace._profile_default_workspace(), str(documents.resolve())
                 )
                 self.assertIsNone(patched_workspace.get_last_workspace())
-                self.assertIsNone(patched_workspace.get_profile_default_workspace())
+                self.assertEqual(
+                    patched_workspace.get_profile_default_workspace(), str(documents.resolve())
+                )
+                self.assertTrue(
+                    patched_workspace._is_blocked_workspace_path(hidden_workspace.resolve())
+                )
                 cleaned = patched_workspace._clean_workspace_list(
                     [
-                        {"path": "/app-support/home/workspace", "name": "Home"},
+                        {"path": str(hidden_workspace), "name": "Home"},
                         {"path": str(documents), "name": "Documents"},
                     ]
                 )
@@ -156,6 +166,10 @@ class UserVisiblePathTests(unittest.TestCase):
                     os.environ.pop("HERMES_WEBUI_DEFAULT_WORKSPACE", None)
                 else:
                     os.environ["HERMES_WEBUI_DEFAULT_WORKSPACE"] = old_default_workspace
+                if old_home is None:
+                    os.environ.pop("HOME", None)
+                else:
+                    os.environ["HOME"] = old_home
 
             archive = root / "hermesrt.zip"
             with zipfile.ZipFile(archive, "w") as bundle:

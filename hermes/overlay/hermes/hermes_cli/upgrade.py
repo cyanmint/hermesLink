@@ -156,17 +156,21 @@ def _apply_overlay(root: Path) -> None:
     _copytree_contents(overlay / "hermes", runtime)
 
     patches = overlay / "patches"
-    for name, argument in (
+    for name, *arguments in (
         ("patch-ios-stability.py", str(runtime)),
         ("patch-agent-sdk-compat.py", str(runtime / "agent" / "agent_init.py")),
-        ("patch-webui-zip.py", str(root / "hermes-webui" / "api" / "config.py")),
+        (
+            "patch-webui-zip.py",
+            str(root / "hermes-webui" / "api" / "config.py"),
+            str(root / "hermes-webui" / "api" / "workspace.py"),
+        ),
     ):
         patch = patches / name
         if not patch.is_file():
             raise RuntimeError(f"runtime ZIP is missing overlay patch: {name}")
         saved = sys.argv
         try:
-            sys.argv = [str(patch), argument]
+            sys.argv = [str(patch), *arguments]
             runpy.run_path(str(patch), run_name="__hermes_upgrade_patch__")
         finally:
             sys.argv = saved

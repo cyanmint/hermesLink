@@ -150,15 +150,29 @@ if len(sys.argv) > 2:
     if raw_path not in (None, ""):
 '''
     workspace_injection = '''    ios_documents_root = os.environ.get("HERMES_IOS_DOCUMENTS_ROOT")
+    try:
+        resolved_candidate = candidate.resolve()
+    except (OSError, RuntimeError):
+        resolved_candidate = candidate
+
     if ios_documents_root:
         try:
             documents_root = Path(ios_documents_root).resolve()
-            resolved_candidate = candidate.resolve()
         except (OSError, RuntimeError):
             pass
         else:
             if resolved_candidate == documents_root or documents_root in resolved_candidate.parents:
                 return False
+
+    ios_home_root = os.environ.get("HOME")
+    if ios_home_root:
+        try:
+            home_root = Path(ios_home_root).resolve()
+        except (OSError, RuntimeError):
+            pass
+        else:
+            if resolved_candidate == home_root or home_root in resolved_candidate.parents:
+                return True
 
     raw = None
     if raw_path not in (None, ""):

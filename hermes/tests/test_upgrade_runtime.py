@@ -1,4 +1,5 @@
 import importlib.util
+import sys
 import tempfile
 import unittest
 import zipfile
@@ -14,6 +15,35 @@ SPEC.loader.exec_module(upgrade)
 
 
 class RuntimeUpgradeTests(unittest.TestCase):
+    def test_upgrade_reapplies_workspace_patch_to_webui_source(self):
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary)
+            (root / "overlay" / "hermes").mkdir(parents=True)
+            (root / "overlay" / "patches").mkdir(parents=True)
+            (root / "hermes-webui" / "api").mkdir(parents=True)
+            for name in (
+                "patch-ios-stability.py",
+                "patch-agent-sdk-compat.py",
+                "patch-webui-zip.py",
+            ):
+                (root / "overlay" / "patches" / name).touch()
+
+            calls = []
+            with patch.object(
+                upgrade.runpy,
+                "run_path",
+                side_effect=lambda path, **_kwargs: calls.append(
+                    (str(path), sys.argv.copy())
+                ),
+            ):
+                upgrade._apply_overlay(root)
+
+            webui_call = next(call for call in calls if call[0].endswith("patch-webui-zip.py"))
+            self.assertEqual(
+                webui_call[1][2],
+                str(root / "hermes-webui" / "api" / "workspace.py"),
+            )
+
     def test_upgrade_rewrites_archive_timestamp_and_preserves_python_runtime(self):
         with tempfile.TemporaryDirectory() as temporary:
             root = Path(temporary)
