@@ -143,7 +143,7 @@ class Popen:
             newline="\n",
         )
 
-    def test_patch_bridges_ios_system_and_popen_without_enabling_fork(self):
+    def test_patch_keeps_ios_popen_disabled_while_bridging_os_system(self):
         with tempfile.TemporaryDirectory() as directory:
             root = Path(directory)
             self._cpython_tree(root)
@@ -156,16 +156,13 @@ class Popen:
 
             self.assertIn("hermes_ios_system(bytes)", posixmodule)
             self.assertIn("hermes_ios_waitpid", posixmodule)
-            self.assertIn("hermes_ios_fork", posixsubprocess)
-            self.assertIn("hermes_ios_subprocess_enabled(envp)", posixsubprocess)
-            self.assertIn("hermes_ios_execve", posixsubprocess)
-            self.assertIn("hermes_ios_dup2", posixsubprocess)
+            self.assertNotIn("HERMESLINK_IOS_SYSTEM_BRIDGE_V1", posixsubprocess)
+            self.assertNotIn("hermes_ios_fork", posixsubprocess)
             self.assertIn("return dlsym(RTLD_DEFAULT, name);", bridge)
             self.assertIn('hermes_ios_lookup("ios_system")', bridge)
-            self.assertIn('_can_fork_exec = sys.platform not in {"emscripten", "wasi", "tvos", "watchos"}', subprocess_py)
-            self.assertIn('if sys.platform == "ios":', subprocess_py)
-            self.assertIn("_USE_POSIX_SPAWN = False", subprocess_py)
-            self.assertIn("iOS ios_system subprocess bridge does not support", subprocess_py)
+            self.assertIn('_can_fork_exec = sys.platform not in {"emscripten", "wasi", "ios", "tvos", "watchos"}', subprocess_py)
+            self.assertIn("iOS subprocess.Popen remains disabled", subprocess_py)
+            self.assertIn("if not _can_fork_exec:", subprocess_py)
 
     def test_stdlib_only_patch_handles_the_runtime_zip_staging_layout(self):
         with tempfile.TemporaryDirectory() as directory:
@@ -173,14 +170,57 @@ class Popen:
             root.mkdir()
             (root / "subprocess.py").write_text(
                 '_can_fork_exec = sys.platform not in {"emscripten", "wasi", "ios", "tvos", "watchos"}\n'
-                "_USE_POSIX_SPAWN = _use_posix_spawn()\n",
+                "_USE_POSIX_SPAWN = _use_posix_spawn()\n"
+                "if not _can_fork_exec:\n"
+                "    raise NotImplementedError()\n",
                 encoding="utf-8",
                 newline="\n",
             )
             subprocess.run([sys.executable, str(PATCH_PATH), "--stdlib-only", str(root)], check=True)
             patched = (root / "subprocess.py").read_text(encoding="utf-8")
             self.assertIn("ios_system virtual processes", patched)
-            self.assertIn("_USE_POSIX_SPAWN = False", patched)
+            self.assertIn('"ios"', patched)
+            self.assertIn("iOS subprocess.Popen remains disabled", patched)
+
+    def test_stdlib_patch_restores_guard_from_legacy_virtual_popen_patch(self):
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory) / "python"
+            root.mkdir()
+            (root / "subprocess.py").write_text(
+                '_can_fork_exec = sys.platform not in {"emscripten", "wasi", "tvos", "watchos"}\n'
+                "# HERMESLINK_IOS_SYSTEM_BRIDGE_V1: iOS uses ios_system virtual processes.\n"
+                "_USE_POSIX_SPAWN = _use_posix_spawn()\n"
+                'if sys.platform == "ios":\n'
+                "    # Route iOS Popen through the patched _posixsubprocess bridge.\n"
+                "    _USE_POSIX_SPAWN = False\n"
+                "if not _can_fork_exec:\n"
+                "    raise NotImplementedError()\n"
+                "def _cleanup():\n    pass\n"
+                "class Popen:\n"
+                "    def __init__(self):\n"
+                '        if sys.platform == "ios" and (\n'
+                "            preexec_fn is not None or start_new_session\n"
+                "            or process_group not in (None, -1) or pass_fds\n"
+                "            or user is not None or group is not None or extra_groups is not None\n"
+                "            or umask >= 0\n"
+                "        ):\n"
+                "            raise OSError(\n"
+                "                errno.ENOTSUP,\n"
+                '                "iOS ios_system subprocess bridge does not support process groups, "\n'
+                '                "preexec_fn, pass_fds, credential changes, or umask overrides",\n'
+                "            )\n"
+                "        _cleanup()\n",
+                encoding="utf-8",
+                newline="\n",
+            )
+
+            subprocess.run([sys.executable, str(PATCH_PATH), "--stdlib-only", str(root)], check=True)
+            patched = (root / "subprocess.py").read_text(encoding="utf-8")
+
+            self.assertIn('_can_fork_exec = sys.platform not in {"emscripten", "wasi", "ios", "tvos", "watchos"}', patched)
+            self.assertIn("if not _can_fork_exec:", patched)
+            self.assertNotIn("if sys.platform == \"ios\":", patched)
+            self.assertNotIn("ios_system subprocess bridge", patched)
 
     def test_patch_is_idempotent(self):
         with tempfile.TemporaryDirectory() as directory:

@@ -4,6 +4,7 @@
 """Apply iOS-only runtime safety patches to the packaged agent."""
 from __future__ import annotations
 
+import re
 import sys
 from pathlib import Path
 
@@ -73,13 +74,71 @@ def patch_ios_local_terminal(path: Path) -> None:
 
 
 def patch_ios_local_environment(path: Path) -> None:
-    """Use ios_system's registered ``sh`` for synchronous local foreground commands."""
+    """Run local iOS shell commands through ios_system, never subprocess.Popen."""
     text = path.read_text(encoding="utf-8")
-    marker = "ios_system_runtime = self._ios_system_runtime()"
+    marker = "def _ios_system_run_command("
     if marker in text:
         return
 
+    if not re.search(r"(?m)^import shlex$", text):
+        import_anchor = "import re\n"
+        if text.count(import_anchor) != 1:
+            raise SystemExit(f"LocalEnvironment import anchor expected once: {path}")
+        text = text.replace(import_anchor, import_anchor + "import shlex\n", 1)
+
     class_anchor = "class LocalEnvironment(BaseEnvironment):\n"
+    helper = '''class _IosSystemCompletedProcess:
+    def __init__(self, output_path: str, returncode: int):
+        self.pid = None
+        self.returncode = returncode
+        try:
+            self.stdout = open(output_path, "r", encoding="utf-8", errors="replace")
+        finally:
+            with contextlib.suppress(OSError):
+                os.unlink(output_path)
+
+    def poll(self):
+        return self.returncode
+
+    def wait(self, timeout=None):
+        return self.returncode
+
+    def kill(self):
+        # ios_system executes this synchronous call to completion; it exposes no
+        # POSIX child PID that BaseEnvironment can signal after dispatch.
+        return None
+
+
+def _ios_system_run_command(command: str, env: dict):
+    output_fd, output_path = tempfile.mkstemp(prefix="hermes-ios-output-")
+    os.close(output_fd)
+    returncode = 1
+    try:
+        argv = ["env", "-i"]
+        argv.extend(
+            f"{key}={value}"
+            for key, value in env.items()
+            if isinstance(key, str) and re.fullmatch(r"[A-Za-z_][A-Za-z0-9_]*", key)
+        )
+        argv.extend(("sh", "-c", command))
+        ios_command = " ".join(shlex.quote(argument) for argument in argv)
+        ios_command += f" > {shlex.quote(output_path)} 2>&1"
+        status = os.system(ios_command)
+        if status < 0:
+            returncode = 1
+        elif status > 255:
+            with contextlib.suppress(AttributeError, ValueError):
+                returncode = os.waitstatus_to_exitcode(status)
+        else:
+            returncode = status
+    except OSError as exc:
+        with open(output_path, "w", encoding="utf-8", errors="replace") as output_file:
+            output_file.write(f"ios_system command failed: {exc}\\\\n")
+        returncode = 1
+    return _IosSystemCompletedProcess(output_path, returncode)
+
+
+'''
     class_replacement = '''class LocalEnvironment(BaseEnvironment):
     def _ios_system_runtime(self) -> bool:
         return sys.platform == "ios" or os.environ.get("HERMES_IOS_TERMINAL") == "1"
@@ -102,69 +161,75 @@ def patch_ios_local_environment(path: Path) -> None:
 '''
     if text.count(class_anchor) != 1:
         raise SystemExit(f"LocalEnvironment class anchor expected once: {path}")
-    text = text.replace(class_anchor, class_replacement, 1)
+    initial_class_start = text.find(class_anchor)
+    initial_body_start = initial_class_start + len(class_anchor)
+    initial_sibling = re.search(r"(?m)^class ", text[initial_body_start:])
+    initial_class_end = initial_body_start + initial_sibling.start() if initial_sibling else len(text)
+    runtime_method_present = "def _ios_system_runtime(self)" in text[initial_class_start:initial_class_end]
+    helper_present = "class _IosSystemCompletedProcess:" in text
+    if not runtime_method_present:
+        insertion = ("" if helper_present else helper) + class_replacement
+        text = text.replace(class_anchor, insertion, 1)
+    elif not helper_present:
+        text = text.replace(class_anchor, helper + class_anchor, 1)
+
+    local_class_start = text.find(class_anchor)
+    local_body_start = local_class_start + len(class_anchor)
+    sibling_class = re.search(r"(?m)^class ", text[local_body_start:])
+    local_class_end = local_body_start + sibling_class.start() if sibling_class else len(text)
+    local_class = text[local_class_start:local_class_end]
+    init_matches = list(re.finditer(r"(?m)^(    def init_session\([^\n]*\)):(.*)\n", local_class))
+    init_guard = (
+        "        if self._ios_system_runtime():\n"
+        "            self._snapshot_ready = False\n"
+        "            self._prefer_nonlogin = True\n"
+        "            return\n"
+    )
+    for init_match in reversed(init_matches):
+        init_start = init_match.start()
+        init_body = init_match.end()
+        method_end = local_class.find("\n    def ", init_body)
+        if method_end < 0:
+            method_end = len(local_class)
+        if init_guard not in local_class[init_body:method_end]:
+            inline_body = init_match.group(2).strip()
+            if inline_body:
+                replacement = init_match.group(1) + ":\n" + init_guard + "        " + inline_body + "\n"
+                local_class = local_class[:init_start] + replacement + local_class[init_body:]
+            else:
+                local_class = local_class[:init_body] + init_guard + local_class[init_body:]
+    text = text[:local_class_start] + local_class + text[local_class_end:]
 
     method_start = text.find("    def _run_bash(")
     method_end = text.find("\n    def _kill_process(", method_start)
     if method_start < 0 or method_end < 0:
         raise SystemExit(f"LocalEnvironment _run_bash method boundary not found: {path}")
     method = text[method_start:method_end]
-    replacements = (
-        (
-            "        bash = _find_bash()\n",
-            '        ios_system_runtime = self._ios_system_runtime()\n'
-            '        bash = "sh" if ios_system_runtime else _find_bash()\n',
-            "LocalEnvironment shell discovery",
-        ),
-        (
-            "        ios_system_runtime = self._ios_system_runtime()\n",
-            "        ios_system_runtime = self._ios_system_runtime()\n"
-            "        if ios_system_runtime and stdin_data is not None:\n"
-            '            raise OSError("ios_system terminal does not support piped stdin")\n',
-            "LocalEnvironment piped stdin capability guard",
-        ),
-        (
-            "        if login:\n",
-            "        if login and not ios_system_runtime:\n",
-            "LocalEnvironment login shell",
-        ),
-        (
-            '        args = [bash, *(["-l"] if login else []), "-c", cmd_string]\n',
-            '        args = ["sh", "-c", cmd_string] if ios_system_runtime else [\n'
-            '            bash, *(["-l"] if login else []), "-c", cmd_string,\n'
-            "        ]\n",
-            "LocalEnvironment shell argv",
-        ),
-        (
-            "        self._recover_cwd()\n",
-            "        self._recover_cwd()\n"
-            "        ios_run_env = _make_run_env(self.env)\n"
-            "        if ios_system_runtime:\n"
-            '            ios_run_env["HERMES_IOS_SYSTEM_SUBPROCESS"] = "1"\n',
-            "LocalEnvironment ios_system environment opt-in",
-        ),
-        (
-            "env=_make_run_env(self.env)",
-            "env=ios_run_env",
-            "LocalEnvironment subprocess environment",
-        ),
-        (
-            "            start_new_session=True, cwd=self.cwd,\n",
-            "            start_new_session=not ios_system_runtime, cwd=self.cwd,\n",
-            "LocalEnvironment process session",
-        ),
-        (
-            "        if not _IS_WINDOWS:\n            with contextlib.suppress(ProcessLookupError):\n                proc._hermes_pgid = os.getpgid(proc.pid)\n",
-            "        if not _IS_WINDOWS and not ios_system_runtime:\n"
-            "            with contextlib.suppress(ProcessLookupError):\n"
-            "                proc._hermes_pgid = os.getpgid(proc.pid)\n",
-            "LocalEnvironment process-group probe",
-        ),
+    ios_line = "        ios_system_runtime = self._ios_system_runtime()\n"
+    ios_branch = (
+        "        if ios_system_runtime:\n"
+        "            if stdin_data is not None:\n"
+        '                raise OSError("ios_system terminal does not support piped stdin")\n'
+        "            self._recover_cwd()\n"
+        "            # BaseEnvironment.execute applies the wall-clock deadline around this call.\n"
+        "            # ios_system has no cancellable child PID, so a timed-out worker is abandoned.\n"
+        "            return _ios_system_run_command(cmd_string, _make_run_env(self.env))\n"
     )
-    for old, new, label in replacements:
-        if method.count(old) != 1:
-            raise SystemExit(f"{label} anchor expected once in {path}")
-        method = method.replace(old, new, 1)
+    if ios_line in method:
+        method = method.replace(ios_line, ios_line + ios_branch, 1)
+    else:
+        shell_anchor = "        bash = _find_bash()\n"
+        if method.count(shell_anchor) != 1:
+            raise SystemExit(f"LocalEnvironment shell discovery anchor expected once: {path}")
+        method = method.replace(
+            shell_anchor,
+            "        ios_system_runtime = self._ios_system_runtime()\n" + ios_branch + shell_anchor,
+            1,
+        )
+    method = method.replace(
+        '        if ios_system_runtime:\n            ios_run_env["HERMES_IOS_SYSTEM_SUBPROCESS"] = "1"\n',
+        "",
+    )
     text = text[:method_start] + method + text[method_end:]
     path.write_text(text, encoding="utf-8", newline="\n")
 

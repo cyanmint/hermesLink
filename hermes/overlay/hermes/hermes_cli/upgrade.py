@@ -40,6 +40,32 @@ def _copytree_contents(source: Path, target: Path) -> None:
             shutil.copy2(item, destination)
 
 
+def _run_overlay_patch(patch: Path, *arguments: str) -> None:
+    saved = sys.argv
+    try:
+        sys.argv = [str(patch), *arguments]
+        try:
+            namespace = runpy.run_path(str(patch), run_name="__hermes_upgrade_patch__")
+        except SystemExit as exc:
+            if exc.code not in (None, 0):
+                raise
+            return
+        entrypoint = namespace.get("main")
+        if callable(entrypoint):
+            result = entrypoint()
+            if result not in (None, 0):
+                raise RuntimeError(f"runtime overlay patch failed: {patch.name} ({result})")
+    finally:
+        sys.argv = saved
+
+
+def _apply_cpython_subprocess_patch(root: Path) -> None:
+    patch = root / "overlay" / "patches" / "patch-cpython-ios-system.py"
+    if not patch.is_file():
+        raise RuntimeError("runtime ZIP is missing overlay patch: patch-cpython-ios-system.py")
+    _run_overlay_patch(patch, "--stdlib-only", str(root / "python"))
+
+
 def _runtime_archive() -> Path:
     runtime_root = os.environ.get("HERMES_RUNTIME_ROOT")
     if runtime_root:
@@ -156,6 +182,7 @@ def _apply_overlay(root: Path) -> None:
     _copytree_contents(overlay / "hermes", runtime)
 
     patches = overlay / "patches"
+    _apply_cpython_subprocess_patch(root)
     for name, argument in (
         ("patch-ios-stability.py", str(runtime)),
         ("patch-agent-sdk-compat.py", str(runtime / "agent" / "agent_init.py")),
@@ -164,12 +191,7 @@ def _apply_overlay(root: Path) -> None:
         patch = patches / name
         if not patch.is_file():
             raise RuntimeError(f"runtime ZIP is missing overlay patch: {name}")
-        saved = sys.argv
-        try:
-            sys.argv = [str(patch), argument]
-            runpy.run_path(str(patch), run_name="__hermes_upgrade_patch__")
-        finally:
-            sys.argv = saved
+        _run_overlay_patch(patch, argument)
 
 
 def _build_runtime(root: Path) -> None:
@@ -190,6 +212,11 @@ def _write_archive(archive: Path, root: Path, destination: Path) -> None:
             for info in old.infolist()
             if info.filename.startswith("python/")
         }
+    python_root = root / "python"
+    if python_root.is_dir():
+        for path in sorted(python_root.rglob("*")):
+            if path.is_file():
+                python_entries[path.relative_to(root).as_posix()] = path.read_bytes()
     temporary = destination.with_suffix(".upgrade.tmp")
     try:
         with zipfile.ZipFile(temporary, "w", compression=zipfile.ZIP_STORED) as output:

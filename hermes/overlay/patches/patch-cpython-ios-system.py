@@ -37,26 +37,26 @@ def _replace_once(text: str, old: str, new: str, label: str) -> str:
 
 def patch_subprocess(path: Path) -> None:
     text = _read(path)
+    platform_guard = '_can_fork_exec = sys.platform not in {"emscripten", "wasi", "ios", "tvos", "watchos"}\n'
+    disabled_comment = (
+        f"# {MARKER}: iOS subprocess.Popen remains disabled; "
+        "ios_system virtual processes do not provide POSIX fork/exec semantics.\n"
+    )
     if MARKER in text:
-        return
-
-    text = _replace_once(
-        text,
-        '_can_fork_exec = sys.platform not in {"emscripten", "wasi", "ios", "tvos", "watchos"}\n',
-        '_can_fork_exec = sys.platform not in {"emscripten", "wasi", "tvos", "watchos"}\n'
-        f"# {MARKER}: iOS uses ios_system virtual processes, never libc fork/exec.\n",
-        "subprocess iOS platform guard",
-    )
-    text = _replace_once(
-        text,
-        "_USE_POSIX_SPAWN = _use_posix_spawn()\n",
-        "_USE_POSIX_SPAWN = _use_posix_spawn()\n"
-        'if sys.platform == "ios":\n'
-        "    # Route iOS Popen through the patched _posixsubprocess bridge.\n"
-        "    _USE_POSIX_SPAWN = False\n",
-        "subprocess posix_spawn selection",
-    )
-    unsupported = '''        if sys.platform == "ios" and (
+        if platform_guard not in text:
+            legacy_assignment = '_can_fork_exec = sys.platform not in {"emscripten", "wasi", "tvos", "watchos"}\n'
+            if legacy_assignment not in text:
+                raise SystemExit("legacy subprocess iOS fork guard not found")
+            text = text.replace(legacy_assignment, platform_guard + disabled_comment, 1)
+            legacy_comment = f"# {MARKER}: iOS uses ios_system virtual processes, never libc fork/exec.\n"
+            text = text.replace(legacy_comment, "", 1)
+        old_spawn_override = (
+            'if sys.platform == "ios":\n'
+            "    # Route iOS Popen through the patched _posixsubprocess bridge.\n"
+            "    _USE_POSIX_SPAWN = False\n"
+        )
+        text = text.replace(old_spawn_override, "", 1)
+        old_capability_guard = '''        if sys.platform == "ios" and (
             preexec_fn is not None or start_new_session
             or process_group not in (None, -1) or pass_fds
             or user is not None or group is not None or extra_groups is not None
@@ -68,12 +68,18 @@ def patch_subprocess(path: Path) -> None:
                 "preexec_fn, pass_fds, credential changes, or umask overrides",
             )
 '''
-    guard_start = text.find("        if not _can_fork_exec:")
-    if guard_start >= 0:
-        cleanup = text.find("        _cleanup()", guard_start)
-        if cleanup < 0:
-            raise SystemExit("subprocess Popen capability guard end anchor not found")
-        text = text[:cleanup] + unsupported + text[cleanup:]
+        text = text.replace(old_capability_guard, "", 1)
+        if "if not _can_fork_exec:" not in text:
+            raise SystemExit("subprocess iOS Popen restriction anchor not found")
+        _write(path, text)
+        return
+    if platform_guard not in text or "if not _can_fork_exec:" not in text:
+        raise SystemExit("subprocess iOS Popen restriction anchor not found")
+    text = text.replace(
+        platform_guard,
+        platform_guard + disabled_comment,
+        1,
+    )
     _write(path, text)
 
 
@@ -332,7 +338,6 @@ def patch_native_tree(root: Path) -> None:
     modules.mkdir(parents=True, exist_ok=True)
     shutil.copyfile(BRIDGE_SOURCE, modules / "ios_system_bridge.h")
     patch_posixmodule(modules / "posixmodule.c")
-    patch_posixsubprocess(modules / "_posixsubprocess.c")
     patch_subprocess(root / "Lib" / "subprocess.py")
 
 
