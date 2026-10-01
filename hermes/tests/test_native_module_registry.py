@@ -50,6 +50,21 @@ class NativeModuleRegistryTests(unittest.TestCase):
 
         self.assertEqual(module_config.ensure_required_static_modules(setup_lines), setup_lines)
 
+    def test_marks_stdlib_extensions_static_before_configure(self):
+        setup_template = Path("Setup.stdlib.in")
+        setup_template.write_text(
+            "*static*\n_static_module _static.c\n*shared*\n_ssl _ssl.c\n",
+            encoding="utf-8",
+        )
+        try:
+            module_config.configure_static_module_template(setup_template)
+            self.assertEqual(
+                setup_template.read_text(encoding="utf-8").splitlines(),
+                ["*static*", "_static_module _static.c", "*static*", "_ssl _ssl.c"],
+            )
+        finally:
+            setup_template.unlink()
+
 
     def test_fails_build_validation_if_ssl_initializer_is_missing(self):
         with self.assertRaisesRegex(RuntimeError, "_ssl"):

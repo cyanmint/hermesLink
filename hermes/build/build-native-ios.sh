@@ -133,8 +133,15 @@ int __isPlatformVersionAtLeast(uint32_t platform, uint32_t major, uint32_t minor
     return 1;
 }
 EOF
-clang --target=arm64-apple-ios${DEPLOYMENT_TARGET} -isysroot "$SDK_ROOT" \
-  -c "$TARGET_ROOT/ios_compat.c" -o "$TARGET_ROOT/ios_compat.o"
+clang --target=arm64-apple-ios${DEPLOYMENT_TARGET} -isysroot "$SDK_ROOT" -c "$TARGET_ROOT/ios_compat.c" -o "$TARGET_ROOT/ios_compat.o"
+python3 - "$ROOT/build" "$TARGET_ROOT/Modules/Setup.stdlib.in" <<'PY'
+import sys
+from pathlib import Path
+sys.path.insert(0, sys.argv[1])
+from configure_native_modules import configure_static_module_template
+
+configure_static_module_template(Path(sys.argv[2]))
+PY
 (cd "$TARGET_ROOT" && \
   PATH="$TOOLBIN:/usr/bin:/bin" CC=arm64-apple-ios-clang AR=arm64-apple-ios-ar RANLIB=arm64-apple-ios-ranlib \
     CPPFLAGS="-DOPENSSL_THREADS -I$OPENSSL_INSTALL/include" \

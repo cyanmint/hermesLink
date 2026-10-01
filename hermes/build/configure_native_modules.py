@@ -28,6 +28,13 @@ def ensure_required_static_modules(lines: list[str]) -> list[str]:
     return result
 
 
+def configure_static_module_template(path: Path) -> None:
+    """Make Setup.stdlib extensions static before configure generates Makefile."""
+    lines = path.read_text(encoding="utf-8").splitlines()
+    lines = ["*static*" if line.strip() == "*shared*" else line for line in lines]
+    path.write_text("\n".join(lines) + "\n", encoding="utf-8", newline="\n")
+
+
 def configure_setup_file(path: Path) -> list[str]:
     lines = ensure_required_static_modules(path.read_text(encoding="utf-8").splitlines())
     path.write_text("\n".join(lines) + "\n", encoding="utf-8", newline="\n")
