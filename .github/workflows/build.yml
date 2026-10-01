@@ -449,7 +449,6 @@ jobs:
           python-version: '3.13'
 
       - name: Build HermesLink simulator app
-        continue-on-error: true
         run: |
           set -euo pipefail
           set -o pipefail
@@ -460,12 +459,15 @@ jobs:
             -configuration Debug \
             -destination 'generic/platform=iOS Simulator' \
             -derivedDataPath "$RUNNER_TEMP/HermesLinkSimulatorE2E" \
+            ARCHS=arm64 \
+            ONLY_ACTIVE_ARCH=YES \
             IPHONEOS_DEPLOYMENT_TARGET='16.1' \
             CODE_SIGNING_ALLOWED=NO | tee "$RUNNER_TEMP/hermeslink-simulator-e2e-build.log" | xcpretty
-          test -d "$RUNNER_TEMP/HermesLinkSimulatorE2E/Build/Products/Debug-iphonesimulator/Blink.app"
+          app="$RUNNER_TEMP/HermesLinkSimulatorE2E/Build/Products/Debug-iphonesimulator/HermesLink.app"
+          test -d "$app"
+          test -s "$app/Info.plist"
 
       - name: Run Copilot WebUI conversation in simulator
-        continue-on-error: true
         env:
           COPILOT_GITHUB_TOKEN: ${{ secrets.COPILOT_GITHUB_TOKEN }}
           SIMULATOR_APP_PATH: ${{ runner.temp }}/HermesLinkSimulatorE2E/Build/Products/Debug-iphonesimulator/HermesLink.app
