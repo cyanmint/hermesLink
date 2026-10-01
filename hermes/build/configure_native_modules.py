@@ -30,6 +30,11 @@ def ensure_required_static_modules(lines: list[str]) -> list[str]:
     return result
 
 
+def merge_native_module_objects(configured: list[str], discovered: list[str]) -> list[str]:
+    """Keep configured module objects while adding objects found by the build."""
+    return sorted(set(configured) | set(discovered))
+
+
 def configure_static_module_template(path: Path) -> None:
     """Make Setup.stdlib extensions static before configure generates Makefile."""
     lines = path.read_text(encoding="utf-8").splitlines()

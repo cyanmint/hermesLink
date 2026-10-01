@@ -26,6 +26,26 @@ class NativeModuleRegistryTests(unittest.TestCase):
         self.assertIn(("_hermesios", "_hermesiosmodule.c"), module_config.REQUIRED_STATIC_MODULES)
         self.assertIn("_hermesios", registry.REQUIRED_NATIVE_MODULES)
 
+    def test_native_build_keeps_setup_objects_missing_from_make_dry_run(self):
+        configured = ["Modules/_hermesiosmodule.o", "Modules/_ssl.o"]
+        discovered = ["Modules/getpath.o", "Modules/_ssl.o"]
+
+        self.assertEqual(
+            module_config.merge_native_module_objects(configured, discovered),
+            ["Modules/_hermesiosmodule.o", "Modules/_ssl.o", "Modules/getpath.o"],
+        )
+
+    def test_ipa_assembly_waits_for_every_requested_build_component(self):
+        workflow = (
+            Path(__file__).resolve().parents[2] / ".github" / "workflows" / "build.yml"
+        ).read_text(encoding="utf-8")
+
+        for job in ("build-runtime-zip", "build-native-runtime", "build-app"):
+            self.assertIn(
+                f"needs.{job}.result == 'success' || needs.{job}.result == 'skipped'",
+                workflow,
+            )
+
     def test_ios_async_system_module_streams_output_and_cancels_native_thread(self):
         source_path = (
             Path(__file__).resolve().parents[1] / "overlay" / "cpython" / "ios_async_system.c"

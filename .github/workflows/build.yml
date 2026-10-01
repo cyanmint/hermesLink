@@ -490,7 +490,13 @@ jobs:
   assemble-ipa:
     name: Assemble HermesLink IPA
     needs: [decide, prepare-release, build-runtime-zip, build-native-runtime, build-app]
-    if: always()
+    if: >-
+      always() &&
+      needs.decide.result == 'success' &&
+      needs.prepare-release.result == 'success' &&
+      (needs.build-runtime-zip.result == 'success' || needs.build-runtime-zip.result == 'skipped') &&
+      (needs.build-native-runtime.result == 'success' || needs.build-native-runtime.result == 'skipped') &&
+      (needs.build-app.result == 'success' || needs.build-app.result == 'skipped')
     runs-on: macos-latest
     permissions:
       contents: read

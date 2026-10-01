@@ -189,11 +189,15 @@ pathlib.Path(pathlib.Path(makefile).parent / "native-module-objects.txt").write_
 PY
 (cd "$TARGET_ROOT" && \
   PATH="$TOOLBIN:/usr/bin:/bin" make -n -o Makefile libpython3.13.a > native-libpython-dryrun.txt)
-python3 - "$TARGET_ROOT/native-libpython-dryrun.txt" "$TARGET_ROOT/native-module-objects.txt" <<'PY'
+python3 - "$ROOT/build" "$TARGET_ROOT/native-libpython-dryrun.txt" "$TARGET_ROOT/native-module-objects.txt" <<'PY'
 from pathlib import Path
 import shlex, sys
 import re
-dryrun, output = map(Path, sys.argv[1:])
+sys.path.insert(0, sys.argv[1])
+from configure_native_modules import merge_native_module_objects
+
+dryrun, output = map(Path, sys.argv[2:])
+configured = output.read_text(encoding="utf-8").splitlines() if output.is_file() else []
 objects = set()
 for line in dryrun.read_text(encoding="utf-8", errors="replace").splitlines():
     if "libpython3.13.a" not in line or " rcs " not in f" {line} ":
@@ -217,7 +221,8 @@ for index, line in enumerate(make_lines):
     objects.update(token for token in value.split() if token.endswith(".o"))
 if not objects:
     raise SystemExit("could not extract libpython object list from Makefile dry-run")
-output.write_text("\n".join(sorted(objects)) + "\n", encoding="utf-8", newline="\n")
+merged_objects = merge_native_module_objects(configured, sorted(objects))
+output.write_text("\n".join(merged_objects) + "\n", encoding="utf-8", newline="\n")
 PY
 (cd "$TARGET_ROOT" && \
   PATH="$TOOLBIN:/usr/bin:/bin" make -o Makefile -o Modules/config.c -o Modules/config.h -j"${JOBS:-16}" \
