@@ -171,7 +171,6 @@ from configure_native_modules import ensure_required_static_modules
 source, target, makefile = sys.argv[2:]
 lines = pathlib.Path(source).read_text().splitlines()
 for i, line in enumerate(lines):
-    if line.strip() == "*shared*": lines[i] = "*static*"
     if line.startswith("_decimal "): lines[i] += " -IModules/_decimal/libmpdec Modules/_decimal/libmpdec/libmpdec.a"
 lines = ensure_required_static_modules(lines)
 pathlib.Path(target).write_text("\n".join(lines) + "\n")

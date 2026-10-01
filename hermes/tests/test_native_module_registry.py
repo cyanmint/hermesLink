@@ -53,14 +53,14 @@ class NativeModuleRegistryTests(unittest.TestCase):
     def test_marks_stdlib_extensions_static_before_configure(self):
         setup_template = Path("Setup.stdlib.in")
         setup_template.write_text(
-            "*static*\n_static_module _static.c\n*shared*\n_ssl _ssl.c\n",
+            "*@MODULE_BUILDTYPE@*\n_static_module _static.c\n*shared*\n_ssl _ssl.c\n",
             encoding="utf-8",
         )
         try:
             module_config.configure_static_module_template(setup_template)
             self.assertEqual(
                 setup_template.read_text(encoding="utf-8").splitlines(),
-                ["*static*", "_static_module _static.c", "*static*", "_ssl _ssl.c"],
+                ["*static*", "_static_module _static.c", "*shared*", "_ssl _ssl.c"],
             )
         finally:
             setup_template.unlink()
