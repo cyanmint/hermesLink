@@ -58,6 +58,74 @@ class UserVisiblePathTests(unittest.TestCase):
         self.assertIn('setenv("HERMES_RUNTIME_ROOT", [BlinkPaths hermesHomePath].UTF8String, 1);', command)
         self.assertNotIn('bundle pathForResource:@"hermesrt"', command)
 
+    def test_ios_documents_workspace_is_exempt_from_private_var_blocklist(self):
+        with tempfile.TemporaryDirectory() as temporary:
+            api_dir = Path(temporary) / "api"
+            api_dir.mkdir()
+            config_path = api_dir / "config.py"
+            config_path.write_text(
+                "import os\n"
+                "from pathlib import Path\n"
+                'HOST = os.getenv("HERMES_WEBUI_HOST", "127.0.0.1")\n'
+                'PORT = int(os.getenv("HERMES_WEBUI_PORT", "8787"))\n'
+                "def get_static_root() -> Path:\n"
+                '    return REPO_ROOT / "static"\n'
+                "def _discover_agent_dir() -> Path:\n"
+                '    """Locate the agent checkout.\n'
+                '    """\n'
+                '    return Path("agent")\n'
+                'LAST_WORKSPACE_FILE = STATE_DIR / "last_workspace.txt"\n',
+                encoding="utf-8",
+                newline="\n",
+            )
+            workspace_path = api_dir / "workspace.py"
+            workspace_path.write_text(
+                "from pathlib import Path, PurePosixPath\n"
+                '_BOOT_DEFAULT_WORKSPACE = PurePosixPath("/private/var/mobile/Containers/Data/Application/01234567-89ab-cdef-0123-456789abcdef/Documents/workspace")\n'
+                "def _is_blocked_posix_workspace_path(path):\n"
+                '    value = PurePosixPath(str(path))\n'
+                '    return value == PurePosixPath("/private/var") or value.is_relative_to(PurePosixPath("/private/var"))\n'
+                "def _is_blocked_workspace_path(candidate: Path, raw_path: str | Path | None = None) -> bool:\n"
+                '    """Return True when candidate points at a known OS/system directory.\n'
+                '    Compare raw and resolved paths.\n'
+                '    """\n'
+                "    posix_probe = raw_path if raw_path is not None else candidate.as_posix()\n"
+                "    if _is_blocked_posix_workspace_path(posix_probe):\n"
+                "        return True\n"
+                "    return False\n",
+                encoding="utf-8",
+                newline="\n",
+            )
+            subprocess.run([sys.executable, str(PATCH_PATH), str(config_path)], check=True)
+            subprocess.run([sys.executable, str(PATCH_PATH), str(config_path)], check=True)
+
+            patched_workspace = workspace_path.read_text(encoding="utf-8")
+            self.assertEqual(patched_workspace.count("def _hermes_ios_documents_workspace("), 1)
+            self.assertEqual(patched_workspace.count("if _hermes_ios_documents_workspace(candidate):"), 1)
+            namespace = {}
+            exec(compile(patched_workspace, str(workspace_path), "exec"), namespace)
+            default_workspace = namespace["_BOOT_DEFAULT_WORKSPACE"]
+            self.assertFalse(namespace["_is_blocked_workspace_path"](default_workspace, default_workspace))
+            self.assertFalse(
+                namespace["_is_blocked_workspace_path"](
+                    default_workspace / "project",
+                    default_workspace / "project",
+                )
+            )
+            self.assertTrue(
+                namespace["_is_blocked_workspace_path"](
+                    default_workspace.parent / "private-data",
+                    default_workspace.parent / "private-data",
+                )
+            )
+            namespace["_BOOT_DEFAULT_WORKSPACE"] = namespace["PurePosixPath"]("/private/var/db/workspace")
+            self.assertTrue(
+                namespace["_is_blocked_workspace_path"](
+                    namespace["_BOOT_DEFAULT_WORKSPACE"],
+                    namespace["_BOOT_DEFAULT_WORKSPACE"],
+                )
+            )
+
     def test_zip_agent_imports_directly_and_legacy_workspace_pointers_migrate(self):
         with tempfile.TemporaryDirectory() as temporary:
             root = Path(temporary)
@@ -98,6 +166,20 @@ class UserVisiblePathTests(unittest.TestCase):
                 '    return REPO_ROOT / "static"\n'
                 "def _discover_agent_dir() -> Path:\n"
                 "    return Path(__file__).parent\n",
+                encoding="utf-8",
+                newline="\n",
+            )
+            (root / "workspace.py").write_text(
+                "from pathlib import Path, PurePosixPath\n"
+                '_BOOT_DEFAULT_WORKSPACE = PurePosixPath("/workspace")\n'
+                "def _is_blocked_workspace_path(candidate: Path, raw_path: str | Path | None = None) -> bool:\n"
+                '    """Return True when candidate points at a known OS/system directory.\n'
+                '    Compare raw and resolved paths.\n'
+                '    """\n'
+                "    posix_probe = raw_path if raw_path is not None else candidate.as_posix()\n"
+                "    if _is_blocked_posix_workspace_path(posix_probe):\n"
+                "        return True\n"
+                "    return False\n",
                 encoding="utf-8",
                 newline="\n",
             )

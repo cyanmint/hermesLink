@@ -5,6 +5,7 @@ from __future__ import annotations
 import json
 import os
 import plistlib
+import re
 import shlex
 import subprocess
 import sys
@@ -188,12 +189,34 @@ def _request_json(path: str, payload: dict | None = None, *, timeout: int = 30) 
         with urllib.request.urlopen(request, timeout=timeout) as response:
             decoded = json.loads(response.read().decode("utf-8"))
     except urllib.error.HTTPError as exc:
-        raise E2EError(f"{path} returned HTTP {exc.code}") from None
+        detail = _safe_http_error_detail(exc)
+        suffix = f": {detail}" if detail else ""
+        raise E2EError(f"{path} returned HTTP {exc.code}{suffix}") from None
     except (urllib.error.URLError, TimeoutError, OSError, json.JSONDecodeError):
         raise E2EError(f"{path} request failed") from None
     if not isinstance(decoded, dict):
         raise E2EError(f"{path} returned an invalid response")
     return decoded
+
+
+def _safe_http_error_detail(error: urllib.error.HTTPError) -> str:
+    """Extract a bounded JSON error message without printing response bodies or secrets."""
+    try:
+        payload = json.loads(error.read(4096).decode("utf-8", errors="replace"))
+    except (OSError, UnicodeError, json.JSONDecodeError):
+        return ""
+    if not isinstance(payload, dict):
+        return ""
+    detail = payload.get("error", payload.get("message"))
+    if not isinstance(detail, str):
+        return ""
+    detail = re.sub(r"(?i)(bearer\s+)[A-Za-z0-9._~+/=-]+", r"\1[redacted]", detail)
+    detail = re.sub(
+        r"(?i)\b(?:gh[pousr]_[A-Za-z0-9_]{20,}|github_pat_[A-Za-z0-9_]{20,}|sk-[A-Za-z0-9_-]{20,})\b",
+        "[redacted]",
+        detail,
+    )
+    return " ".join(detail.split())[:400]
 
 
 def _wait_for_webui(timeout_seconds: int = 180) -> None:
@@ -252,16 +275,18 @@ def _prepare_and_launch(app_path: Path, token: str) -> tuple[str, str, Path, str
     data_container = Path(_simctl(["get_app_container", simulator_id, str(bundle_id), "data"]))
     documents = data_container / "Documents"
     home = documents / "HermesHome"
+    workspace = documents / "workspace"
     documents.mkdir(parents=True, exist_ok=True)
+    workspace.mkdir(parents=True, exist_ok=True)
     sentinel = f"{PROOF_PREFIX}{uuid.uuid4().hex}.txt"
-    (documents / sentinel).write_text("simulator ls proof\n", encoding="utf-8", newline="\n")
-    _write_simulator_config(home, documents)
+    (workspace / sentinel).write_text("simulator ls proof\n", encoding="utf-8", newline="\n")
+    _write_simulator_config(home, workspace)
     _simctl(
         ["launch", "--terminate-running-process", simulator_id, str(bundle_id)],
         token=token,
         timeout=60,
     )
-    return simulator_id, str(bundle_id), documents, sentinel
+    return simulator_id, str(bundle_id), workspace, sentinel
 
 
 def run_e2e(app_path: Path, token: str) -> None:

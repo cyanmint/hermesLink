@@ -165,3 +165,49 @@ if "def _migrate_legacy_workspace_state()" not in text:
     text = text.replace(workspace_anchor, workspace_migration, 1)
 
 path.write_text(text, encoding="utf-8", newline="\n")
+
+workspace_path = path.with_name("workspace.py")
+workspace_text = workspace_path.read_text(encoding="utf-8")
+workspace_helper = '''def _hermes_ios_documents_workspace(candidate: Path) -> bool:
+    """Allow only the configured workspace inside this app's iOS Documents container."""
+    try:
+        candidate_path = PurePosixPath(str(candidate).replace("\\\\", "/"))
+        default_path = PurePosixPath(str(_BOOT_DEFAULT_WORKSPACE).replace("\\\\", "/"))
+        candidate_path.relative_to(default_path)
+    except (TypeError, ValueError):
+        return False
+
+    parts = default_path.parts
+    if parts[:3] == ("/", "private", "var"):
+        parts = parts[3:]
+    elif parts[:2] == ("/", "var"):
+        parts = parts[2:]
+    else:
+        return False
+    if len(parts) < 7 or parts[:4] != ("mobile", "Containers", "Data", "Application") or parts[5] != "Documents":
+        return False
+    uuid_parts = parts[4].split("-")
+    return (
+        [len(part) for part in uuid_parts] == [8, 4, 4, 4, 12]
+        and all(char in "0123456789abcdefABCDEF" for part in uuid_parts for char in part)
+    )
+
+
+'''
+if "def _hermes_ios_documents_workspace(candidate: Path) -> bool:" not in workspace_text:
+    workspace_anchor = "def _is_blocked_workspace_path(candidate: Path, raw_path: str | Path | None = None) -> bool:\n"
+    if workspace_anchor not in workspace_text:
+        raise SystemExit("iOS workspace policy patch anchor not found")
+    workspace_text = workspace_text.replace(workspace_anchor, workspace_helper + workspace_anchor, 1)
+
+workspace_check = "    if _is_blocked_posix_workspace_path(posix_probe):\n"
+workspace_replacement = (
+    "    if _hermes_ios_documents_workspace(candidate):\n"
+    "        return False\n"
+    "    if _is_blocked_posix_workspace_path(posix_probe):\n"
+)
+if "    if _hermes_ios_documents_workspace(candidate):\n        return False\n" not in workspace_text:
+    if workspace_check not in workspace_text:
+        raise SystemExit("iOS workspace blocklist patch anchor not found")
+    workspace_text = workspace_text.replace(workspace_check, workspace_replacement, 1)
+workspace_path.write_text(workspace_text, encoding="utf-8", newline="\n")

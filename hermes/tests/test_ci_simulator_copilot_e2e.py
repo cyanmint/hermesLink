@@ -1,4 +1,6 @@
+import io
 import os
+import urllib.error
 import unittest
 from unittest.mock import patch
 
@@ -7,6 +9,24 @@ from ci_simulator_copilot_e2e import has_successful_ls_tool_run, parse_sse_event
 
 
 class CopilotSimulatorE2ETests(unittest.TestCase):
+    def test_http_error_keeps_safe_server_detail_and_redacts_credentials(self):
+        error = urllib.error.HTTPError(
+            "http://127.0.0.1/api/session/new",
+            400,
+            "Bad Request",
+            {},
+            io.BytesIO(
+                b'{"error":"Path rejected; Authorization: Bearer ghp_123456789012345678901234567890"}'
+            ),
+        )
+        with patch("ci_simulator_copilot_e2e.urllib.request.urlopen", side_effect=error):
+            with self.assertRaises(e2e.E2EError) as raised:
+                e2e._request_json("/api/session/new", {})
+
+        self.assertIn("HTTP 400: Path rejected", str(raised.exception))
+        self.assertIn("[redacted]", str(raised.exception))
+        self.assertNotIn("ghp_", str(raised.exception))
+
     def test_parses_named_multiline_sse_json_events(self):
         events = list(
             parse_sse_events(
