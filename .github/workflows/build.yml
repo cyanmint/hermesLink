@@ -468,7 +468,7 @@ jobs:
         continue-on-error: true
         env:
           COPILOT_GITHUB_TOKEN: ${{ secrets.COPILOT_GITHUB_TOKEN }}
-          SIMULATOR_APP_PATH: ${{ runner.temp }}/HermesLinkSimulatorE2E/Build/Products/Debug-iphonesimulator/Blink.app
+          SIMULATOR_APP_PATH: ${{ runner.temp }}/HermesLinkSimulatorE2E/Build/Products/Debug-iphonesimulator/HermesLink.app
         run: |
           set -euo pipefail
           set -o pipefail
