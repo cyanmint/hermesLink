@@ -58,7 +58,7 @@ class UserVisiblePathTests(unittest.TestCase):
         self.assertIn('setenv("HERMES_RUNTIME_ROOT", [BlinkPaths hermesHomePath].UTF8String, 1);', command)
         self.assertNotIn('bundle pathForResource:@"hermesrt"', command)
 
-    def test_ios_documents_workspace_is_exempt_from_private_var_blocklist(self):
+    def test_any_directory_can_be_selected_as_workspace(self):
         with tempfile.TemporaryDirectory() as temporary:
             api_dir = Path(temporary) / "api"
             api_dir.mkdir()
@@ -96,12 +96,29 @@ class UserVisiblePathTests(unittest.TestCase):
                 encoding="utf-8",
                 newline="\n",
             )
+            with workspace_path.open("a", encoding="utf-8", newline="\n") as stream:
+                stream.write("def _is_within(path, root):\n    return path == root\n")
+            routes_path = api_dir / "routes.py"
+            routes_path.write_text(
+                "def _handle_workspace_add(handler, body):\n"
+                '    path_str = body.get("path", "").strip()\n'
+                "    try:\n"
+                "        candidate = Path(path_str).expanduser().resolve()\n"
+                "    except (ValueError, OSError, RuntimeError) as e:\n"
+                '        return bad(handler, f"Invalid path: {e}")\n'
+                "    if _is_blocked_system_path(candidate):\n"
+                '        return bad(handler, f"Path points to a system directory: {candidate}")\n'
+                "    if auto_create:\n"
+                "        candidate.mkdir(parents=True, exist_ok=True)\n",
+                encoding="utf-8",
+                newline="\n",
+            )
             subprocess.run([sys.executable, str(PATCH_PATH), str(config_path)], check=True)
             subprocess.run([sys.executable, str(PATCH_PATH), str(config_path)], check=True)
 
             patched_workspace = workspace_path.read_text(encoding="utf-8")
-            self.assertEqual(patched_workspace.count("def _hermes_ios_documents_workspace("), 1)
-            self.assertEqual(patched_workspace.count("if _hermes_ios_documents_workspace(candidate):"), 1)
+            self.assertEqual(patched_workspace.count("def _is_blocked_workspace_path("), 1)
+            self.assertNotIn("_hermes_ios_documents_workspace", patched_workspace)
             namespace = {}
             exec(compile(patched_workspace, str(workspace_path), "exec"), namespace)
             default_workspace = namespace["_BOOT_DEFAULT_WORKSPACE"]
@@ -112,19 +129,26 @@ class UserVisiblePathTests(unittest.TestCase):
                     default_workspace / "project",
                 )
             )
-            self.assertTrue(
+            self.assertFalse(
                 namespace["_is_blocked_workspace_path"](
                     default_workspace.parent / "private-data",
                     default_workspace.parent / "private-data",
                 )
             )
             namespace["_BOOT_DEFAULT_WORKSPACE"] = namespace["PurePosixPath"]("/private/var/db/workspace")
-            self.assertTrue(
+            self.assertFalse(
                 namespace["_is_blocked_workspace_path"](
                     namespace["_BOOT_DEFAULT_WORKSPACE"],
                     namespace["_BOOT_DEFAULT_WORKSPACE"],
                 )
             )
+            for path in ("/etc/ssh", "/usr/bin", "/private/var/db"):
+                with self.subTest(path=path):
+                    self.assertFalse(namespace["_is_blocked_workspace_path"](namespace["Path"](path), path))
+
+            patched_routes = routes_path.read_text(encoding="utf-8")
+            self.assertNotIn("if _is_blocked_system_path(candidate):", patched_routes)
+            self.assertNotIn("Path points to a system directory", patched_routes)
 
     def test_zip_agent_imports_directly_and_legacy_workspace_pointers_migrate(self):
         with tempfile.TemporaryDirectory() as temporary:
@@ -179,7 +203,14 @@ class UserVisiblePathTests(unittest.TestCase):
                 "    posix_probe = raw_path if raw_path is not None else candidate.as_posix()\n"
                 "    if _is_blocked_posix_workspace_path(posix_probe):\n"
                 "        return True\n"
-                "    return False\n",
+                "    return False\n"
+                "def _is_within(path, root):\n"
+                "    return path == root\n",
+                encoding="utf-8",
+                newline="\n",
+            )
+            (root / "routes.py").write_text(
+                "def _handle_workspace_add(handler, body):\n    pass\n",
                 encoding="utf-8",
                 newline="\n",
             )

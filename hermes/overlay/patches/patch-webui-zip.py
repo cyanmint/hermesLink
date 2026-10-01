@@ -167,47 +167,49 @@ if "def _migrate_legacy_workspace_state()" not in text:
 path.write_text(text, encoding="utf-8", newline="\n")
 
 workspace_path = path.with_name("workspace.py")
+
+# Replace the OS-root denylist for workspace selection with an allow-all
+# policy. File operations retain their separate workspace-boundary checks.
 workspace_text = workspace_path.read_text(encoding="utf-8")
-workspace_helper = '''def _hermes_ios_documents_workspace(candidate: Path) -> bool:
-    """Allow only the configured workspace inside this app's iOS Documents container."""
-    try:
-        candidate_path = PurePosixPath(str(candidate).replace("\\\\", "/"))
-        default_path = PurePosixPath(str(_BOOT_DEFAULT_WORKSPACE).replace("\\\\", "/"))
-        candidate_path.relative_to(default_path)
-    except (TypeError, ValueError):
-        return False
+legacy_helper = "def _hermes_ios_documents_workspace(candidate: Path) -> bool:"
+if legacy_helper in workspace_text:
+    helper_start = workspace_text.index(legacy_helper)
+    helper_end = workspace_text.find("def _is_blocked_workspace_path(", helper_start)
+    if helper_end < 0:
+        raise SystemExit("legacy iOS workspace exception terminator not found")
+    workspace_text = workspace_text[:helper_start] + workspace_text[helper_end:]
 
-    parts = default_path.parts
-    if parts[:3] == ("/", "private", "var"):
-        parts = parts[3:]
-    elif parts[:2] == ("/", "var"):
-        parts = parts[2:]
-    else:
-        return False
-    if len(parts) < 7 or parts[:4] != ("mobile", "Containers", "Data", "Application") or parts[5] != "Documents":
-        return False
-    uuid_parts = parts[4].split("-")
-    return (
-        [len(part) for part in uuid_parts] == [8, 4, 4, 4, 12]
-        and all(char in "0123456789abcdefABCDEF" for part in uuid_parts for char in part)
-    )
-
-
+workspace_start = workspace_text.find("def _is_blocked_workspace_path(")
+workspace_end = workspace_text.find("def _is_within(", workspace_start)
+if workspace_start < 0 or workspace_end < 0:
+    raise SystemExit("workspace path validator patch anchor not found")
+workspace_override = '''def _is_blocked_workspace_path(candidate: Path, raw_path: str | Path | None = None) -> bool:
+    """Allow any directory to be selected as a workspace, including OS roots."""
+    return False
 '''
-if "def _hermes_ios_documents_workspace(candidate: Path) -> bool:" not in workspace_text:
-    workspace_anchor = "def _is_blocked_workspace_path(candidate: Path, raw_path: str | Path | None = None) -> bool:\n"
-    if workspace_anchor not in workspace_text:
-        raise SystemExit("iOS workspace policy patch anchor not found")
-    workspace_text = workspace_text.replace(workspace_anchor, workspace_helper + workspace_anchor, 1)
+workspace_text = workspace_text[:workspace_start] + workspace_override + workspace_text[workspace_end:]
+workspace_path.write_text(workspace_text, encoding="utf-8", newline="")
 
-workspace_check = "    if _is_blocked_posix_workspace_path(posix_probe):\n"
-workspace_replacement = (
-    "    if _hermes_ios_documents_workspace(candidate):\n"
-    "        return False\n"
-    "    if _is_blocked_posix_workspace_path(posix_probe):\n"
+routes_path = path.with_name("routes.py")
+routes_text = routes_path.read_text(encoding="utf-8")
+workspace_add_start = routes_text.find("def _handle_workspace_add(")
+if workspace_add_start < 0:
+    raise SystemExit("workspace add route patch anchor not found")
+system_comment_start = routes_text.find(
+    "    # Validate the path is NOT a blocked system root BEFORE any filesystem mutation.",
+    workspace_add_start,
 )
-if "    if _hermes_ios_documents_workspace(candidate):\n        return False\n" not in workspace_text:
-    if workspace_check not in workspace_text:
-        raise SystemExit("iOS workspace blocklist patch anchor not found")
-    workspace_text = workspace_text.replace(workspace_check, workspace_replacement, 1)
-workspace_path.write_text(workspace_text, encoding="utf-8", newline="\n")
+if system_comment_start >= 0:
+    validation_start = routes_text.find("    try:", system_comment_start)
+    if validation_start < 0:
+        raise SystemExit("workspace system-root comment terminator not found")
+    routes_text = routes_text[:system_comment_start] + routes_text[validation_start:]
+system_guard_start = routes_text.find("    if _is_blocked_system_path(candidate):", workspace_add_start)
+if system_guard_start >= 0:
+    system_guard_end = routes_text.find("    if auto_create:", system_guard_start)
+    if system_guard_end < 0:
+        raise SystemExit("workspace add system guard terminator not found")
+    routes_text = routes_text[:system_guard_start] + routes_text[system_guard_end:]
+elif "if _is_blocked_system_path(candidate):" in routes_text[workspace_add_start:]:
+    raise SystemExit("workspace add system guard could not be removed")
+routes_path.write_text(routes_text, encoding="utf-8", newline="")
