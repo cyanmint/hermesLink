@@ -51,7 +51,7 @@ jobs:
       run_app: ${{ steps.decision.outputs.run_app }}
     steps:
       - name: Check out HermesLink
-        uses: actions/checkout@v4
+        uses: actions/checkout@v7
         with:
           fetch-depth: 0
 
@@ -146,7 +146,7 @@ jobs:
       contents: write
     steps:
       - name: Check out HermesLink
-        uses: actions/checkout@v4
+        uses: actions/checkout@v7
 
       - name: Create fixed release if missing
         env:
@@ -168,15 +168,17 @@ jobs:
       contents: write
     steps:
       - name: Check out HermesLink
-        uses: actions/checkout@v4
+        uses: actions/checkout@v7
 
       - name: Set up host Python
-        uses: actions/setup-python@v5
+        uses: actions/setup-python@v7
         with:
           python-version: '3.13'
 
       - name: Install uv
-        uses: astral-sh/setup-uv@v5
+        uses: astral-sh/setup-uv@v10
+        with:
+          enable-cache: false
 
       - name: Build and validate pure-Python runtime archive
         env:
@@ -204,15 +206,17 @@ jobs:
       contents: write
     steps:
       - name: Check out HermesLink
-        uses: actions/checkout@v4
+        uses: actions/checkout@v7
         with:
           submodules: true
 
       - name: Install uv
-        uses: astral-sh/setup-uv@v5
+        uses: astral-sh/setup-uv@v10
+        with:
+          enable-cache: false
 
       - name: Cache Hermes compilation
-        uses: actions/cache@v4
+        uses: actions/cache@v6
         with:
           path: ${{ runner.temp }}/hermes-build/native-ios
           key: ${{ runner.os }}-hermes-ios-${{ hashFiles('hermes/build/*.sh', 'hermes/overlay/**', 'hermes/patches/**') }}
@@ -253,12 +257,14 @@ jobs:
       contents: write
     steps:
       - name: Check out HermesLink
-        uses: actions/checkout@v4
+        uses: actions/checkout@v7
         with:
           submodules: true
 
       - name: Install uv
-        uses: astral-sh/setup-uv@v5
+        uses: astral-sh/setup-uv@v10
+        with:
+          enable-cache: false
 
       - name: Prepare link-only runtime placeholders
         run: |
@@ -295,7 +301,7 @@ jobs:
 
       - name: Cache unsigned app archive
         id: app_build_cache
-        uses: actions/cache@v4
+        uses: actions/cache@v6
         with:
           path: |
             ${{ runner.temp }}/HermesLink.xcarchive
@@ -304,7 +310,7 @@ jobs:
 
       - name: Cache framework builds
         id: cache
-        uses: actions/cache@v4
+        uses: actions/cache@v6
         with:
           path: |
             xcfs/.build
@@ -396,7 +402,7 @@ jobs:
       contents: read
     steps:
       - name: Check out HermesLink
-        uses: actions/checkout@v4
+        uses: actions/checkout@v7
         with:
           submodules: true
 
@@ -419,7 +425,7 @@ jobs:
 
       - name: Cache framework builds
         id: cache
-        uses: actions/cache@v4
+        uses: actions/cache@v6
         with:
           path: |
             xcfs/.build
@@ -438,7 +444,7 @@ jobs:
         run: cp template_setup.xcconfig developer_setup.xcconfig
 
       - name: Set up Python
-        uses: actions/setup-python@v5
+        uses: actions/setup-python@v7
         with:
           python-version: '3.13'
 
@@ -470,7 +476,7 @@ jobs:
 
       - name: Upload simulator Copilot E2E logs
         if: always()
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v7
         with:
           name: hermeslink-simulator-copilot-e2e-logs
           path: |
@@ -488,7 +494,7 @@ jobs:
       contents: read
     steps:
       - name: Check out HermesLink
-        uses: actions/checkout@v4
+        uses: actions/checkout@v7
 
       - name: Download app and runtime components from fixed release
         env:
@@ -538,7 +544,7 @@ jobs:
           unzip -Z1 "$RUNNER_TEMP/HermesLink.ipa" | grep -Fx 'Payload/HermesLink.app/Frameworks/HermesRuntime.framework/HermesRuntime'
 
       - name: Upload universal HermesLink IPA
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v7
         with:
           name: hermeslink-ipa
           path: ${{ runner.temp }}/HermesLink.ipa
