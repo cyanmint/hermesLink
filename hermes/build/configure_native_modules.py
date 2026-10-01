@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Ensure native TLS/hash extensions are built into the embedded iOS runtime."""
+"""Ensure required extensions are built into the embedded iOS runtime."""
 
 from __future__ import annotations
 
@@ -10,11 +10,12 @@ from pathlib import Path
 REQUIRED_STATIC_MODULES = (
     ("_ssl", "_ssl.c"),
     ("_hashlib", "_hashopenssl.c"),
+    ("_posixsubprocess", "_posixsubprocess.c"),
 )
 
 
 def ensure_required_static_modules(lines: list[str]) -> list[str]:
-    """Append TLS/hash extensions disabled by CPython's cross-build probes."""
+    """Append required extensions disabled by CPython's cross-build probes."""
     result = list(lines)
     active_names = set()
     for line in result:

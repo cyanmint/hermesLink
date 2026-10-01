@@ -219,7 +219,7 @@ jobs:
         uses: actions/cache@v6
         with:
           path: ${{ runner.temp }}/hermes-build/native-ios
-          key: ${{ runner.os }}-hermes-ios-${{ hashFiles('hermes/build/*.sh', 'hermes/overlay/**', 'hermes/patches/**') }}
+          key: ${{ runner.os }}-hermes-ios-${{ hashFiles('hermes/build/*.sh', 'hermes/build/*.py', 'hermes/overlay/**', 'hermes/patches/**') }}
           restore-keys: |
             ${{ runner.os }}-hermes-ios-
 

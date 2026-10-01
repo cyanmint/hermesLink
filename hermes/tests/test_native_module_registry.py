@@ -38,15 +38,28 @@ class NativeModuleRegistryTests(unittest.TestCase):
         self.assertIn("int hermes_register_native_modules(void) {", source)
         self.assertIn("return 0;", source)
 
-    def test_enables_ssl_extensions_when_configure_disables_them(self):
-        setup_lines = ["*static*", "#_ssl _ssl.c", "#_hashlib _hashopenssl.c"]
+    def test_enables_required_extensions_when_configure_disables_them(self):
+        setup_lines = [
+            "*static*",
+            "#_ssl _ssl.c",
+            "#_hashlib _hashopenssl.c",
+            "#_posixsubprocess _posixsubprocess.c",
+        ]
 
         result = module_config.ensure_required_static_modules(setup_lines)
 
-        self.assertEqual(result[-2:], ["_ssl _ssl.c", "_hashlib _hashopenssl.c"])
+        self.assertEqual(
+            result[-3:],
+            ["_ssl _ssl.c", "_hashlib _hashopenssl.c", "_posixsubprocess _posixsubprocess.c"],
+        )
 
-    def test_does_not_duplicate_ssl_extensions_already_enabled(self):
-        setup_lines = ["*static*", "_ssl _ssl.c", "_hashlib _hashopenssl.c"]
+    def test_does_not_duplicate_required_extensions_already_enabled(self):
+        setup_lines = [
+            "*static*",
+            "_ssl _ssl.c",
+            "_hashlib _hashopenssl.c",
+            "_posixsubprocess _posixsubprocess.c",
+        ]
 
         self.assertEqual(module_config.ensure_required_static_modules(setup_lines), setup_lines)
 
@@ -66,12 +79,12 @@ class NativeModuleRegistryTests(unittest.TestCase):
             setup_template.unlink()
 
 
-    def test_fails_build_validation_if_ssl_initializer_is_missing(self):
-        with self.assertRaisesRegex(RuntimeError, "_ssl"):
-            registry.require_native_modules(["_hashlib", "zlib"])
+    def test_fails_build_validation_if_posixsubprocess_initializer_is_missing(self):
+        with self.assertRaisesRegex(RuntimeError, "_posixsubprocess"):
+            registry.require_native_modules(["_ssl", "_hashlib"])
 
-    def test_accepts_required_tls_initializers(self):
-        registry.require_native_modules(["_ssl", "_hashlib"])
+    def test_accepts_required_native_initializers(self):
+        registry.require_native_modules(["_ssl", "_hashlib", "_posixsubprocess"])
 
 
 if __name__ == "__main__":
