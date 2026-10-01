@@ -67,38 +67,101 @@ def get_static_root() -> Path:
         raise SystemExit("get_static_root patch anchor not found")
     text = text.replace(old, new, 1)
 
-agent_marker = "# iOS ZIP runtime: the agent is importable from the outer archive.\n"
-agent_block = '''# iOS ZIP runtime: the agent is importable from the outer archive.
-if "_discover_agent_dir" in text:
-    pass
-'''
 # Inject at the start of the discovery function, before filesystem candidates.
 anchor = 'def _discover_agent_dir() -> Path:\n'
 injection = '''def _discover_agent_dir() -> Path:
-    # The bundled Agent lives inside hermesrt.zip.  Extract it to the writable
-    # HERMES_HOME so filesystem-based config/discovery code can use it on iOS.
+    # Point zipimport at the bundled Agent directly; never duplicate its source
+    # tree into the writable HERMES_HOME.
     _origin = str(Path(__file__).resolve()).replace(os.sep, "/")
     if ".zip/" in _origin:
         _archive = Path(_origin.split(".zip/", 1)[0] + ".zip")
-        _target = Path(os.getenv("HERMES_HOME", str(Path.home()))) / "HermesAgent"
         try:
             with zipfile.ZipFile(_archive) as _bundle:
-                _prefix = "hermes/"
-                for _name in _bundle.namelist():
-                    if not _name.startswith(_prefix) or _name.endswith("/"):
-                        continue
-                    _destination = _target / _name[len(_prefix):]
-                    _destination.parent.mkdir(parents=True, exist_ok=True)
-                    _data = _bundle.read(_name)
-                    if not _destination.exists() or _destination.read_bytes() != _data:
-                        _destination.write_bytes(_data)
-            return _target
+                _bundle.getinfo("hermes/hermes_cli/main.py")
+            return Path(str(_archive) + "/hermes")
         except (OSError, KeyError, zipfile.BadZipFile):
             pass
 '''
-if 'The bundled Agent lives at hermesrt.zip/hermes.' not in text:
+if "Point zipimport at the bundled Agent directly" not in text:
     if anchor not in text:
         raise SystemExit("agent discovery anchor not found")
     text = text.replace(anchor, injection, 1)
+
+# Replace the older iOS injection when upgrading an already-patched runtime.
+legacy_agent_comment = "    # The bundled Agent lives inside hermesrt.zip.  Extract it to the writable\n"
+legacy_agent_end = '    """\n    Locate the hermes-agent checkout'
+if legacy_agent_comment in text:
+    legacy_start = text.index(legacy_agent_comment)
+    legacy_end = text.find(legacy_agent_end, legacy_start)
+    if legacy_end < 0:
+        raise SystemExit("legacy agent extraction block terminator not found")
+    text = text[:legacy_start] + text[legacy_end:]
+
+workspace_anchor = 'LAST_WORKSPACE_FILE = STATE_DIR / "last_workspace.txt"\n'
+workspace_migration = '''LAST_WORKSPACE_FILE = STATE_DIR / "last_workspace.txt"
+
+
+def _migrate_legacy_workspace_state() -> None:
+    """Move persisted default-workspace pointers from ~/workspace to Documents/workspace."""
+    configured = os.getenv("HERMES_WEBUI_DEFAULT_WORKSPACE", "").strip()
+    if not configured:
+        return
+    try:
+        _preferred = str(Path(configured).expanduser().resolve())
+        _legacy = str((Path(HOME).expanduser() / "workspace").resolve())
+        if _preferred == _legacy:
+            return
+
+        def _is_legacy(value: object) -> bool:
+            if not isinstance(value, str) or not value.strip():
+                return False
+            try:
+                return str(Path(value).expanduser().resolve()) == _legacy
+            except (OSError, RuntimeError, ValueError):
+                return False
+
+        def _write_json(path: Path, value: object) -> None:
+            _temporary = path.with_name(path.name + ".tmp")
+            _temporary.write_text(json.dumps(value, ensure_ascii=False, indent=2) + "\\n", encoding="utf-8")
+            os.replace(_temporary, path)
+
+        try:
+            _settings = json.loads(SETTINGS_FILE.read_text(encoding="utf-8"))
+            if isinstance(_settings, dict) and _is_legacy(_settings.get("default_workspace")):
+                _settings["default_workspace"] = _preferred
+                _write_json(SETTINGS_FILE, _settings)
+        except (OSError, ValueError, TypeError):
+            pass
+
+        try:
+            _workspaces = json.loads(WORKSPACES_FILE.read_text(encoding="utf-8"))
+            if isinstance(_workspaces, list):
+                _changed = False
+                for _workspace in _workspaces:
+                    if isinstance(_workspace, dict) and _is_legacy(_workspace.get("path")):
+                        _workspace["path"] = _preferred
+                        _changed = True
+                if _changed:
+                    _write_json(WORKSPACES_FILE, _workspaces)
+        except (OSError, ValueError, TypeError):
+            pass
+
+        try:
+            if _is_legacy(LAST_WORKSPACE_FILE.read_text(encoding="utf-8").strip()):
+                _temporary = LAST_WORKSPACE_FILE.with_name(LAST_WORKSPACE_FILE.name + ".tmp")
+                _temporary.write_text(_preferred + "\\n", encoding="utf-8")
+                os.replace(_temporary, LAST_WORKSPACE_FILE)
+        except OSError:
+            pass
+    except (OSError, RuntimeError, ValueError):
+        pass
+
+
+_migrate_legacy_workspace_state()
+'''
+if "def _migrate_legacy_workspace_state()" not in text:
+    if workspace_anchor not in text:
+        raise SystemExit("workspace state migration anchor not found")
+    text = text.replace(workspace_anchor, workspace_migration, 1)
 
 path.write_text(text, encoding="utf-8", newline="\n")

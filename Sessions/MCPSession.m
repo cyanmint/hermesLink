@@ -33,6 +33,7 @@
 #include <string.h>
 #include <libgen.h>
 #include <sys/stat.h>
+#include <unistd.h>
 #include <dispatch/dispatch.h>
 
 #import "MCPSession.h"
@@ -91,13 +92,15 @@
     // Use the real shared Documents directory, not homePath/Documents: the
     // latter is a symlink created asynchronously and can become a private
     // shadow folder if a session starts before that link is installed.
-    NSString *workspacePath = [BlinkPaths documentsPath];
+    NSString *documentsPath = [BlinkPaths documentsPath];
+    NSString *workspacePath = [documentsPath stringByAppendingPathComponent:@"workspace"];
     NSString *hermesHomePath = [BlinkPaths hermesHomePath];
     [[NSFileManager defaultManager] createDirectoryAtPath:workspacePath
                                withIntermediateDirectories:YES
                                                 attributes:nil
                                                  error:nil];
     setenv("HERMES_HOME", hermesHomePath.UTF8String, 1);
+    setenv("HERMES_WEBUI_DEFAULT_WORKSPACE", workspacePath.UTF8String, 1);
     setenv("TERMINAL_CWD", workspacePath.UTF8String, 1);
     setenv("PWD", workspacePath.UTF8String, 1);
     chdir(workspacePath.UTF8String);

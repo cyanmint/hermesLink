@@ -1,4 +1,5 @@
 import importlib
+import json
 import os
 import plistlib
 import subprocess
@@ -22,9 +23,14 @@ class UserVisiblePathTests(unittest.TestCase):
         self.assertIn('NSString *hermesHomePath = [BlinkPaths hermesHomePath];', app_delegate)
         self.assertIn('setenv("HERMES_HOME", hermesHomePath.UTF8String, 1);', app_delegate)
         self.assertIn('setenv("HERMES_RUNTIME_ROOT", hermesHomePath.UTF8String, 1);', app_delegate)
-        self.assertIn('NSString *workspacePath = [BlinkPaths documentsPath];', mcp_session)
+        self.assertIn('NSString *workspacePath = [documentsPath stringByAppendingPathComponent:@"workspace"];', app_delegate)
+        self.assertIn('setenv("HERMES_WEBUI_DEFAULT_WORKSPACE", workspacePath.UTF8String, 1);', app_delegate)
+        self.assertIn('setenv("TERMINAL_CWD", workspacePath.UTF8String, 1);', app_delegate)
+        self.assertIn('NSString *documentsPath = [BlinkPaths documentsPath];', mcp_session)
+        self.assertIn('NSString *workspacePath = [documentsPath stringByAppendingPathComponent:@"workspace"];', mcp_session)
         self.assertIn('NSString *hermesHomePath = [BlinkPaths hermesHomePath];', mcp_session)
         self.assertIn('setenv("HERMES_HOME", hermesHomePath.UTF8String, 1);', mcp_session)
+        self.assertIn('setenv("HERMES_WEBUI_DEFAULT_WORKSPACE", workspacePath.UTF8String, 1);', mcp_session)
         self.assertIn('setenv("TERMINAL_CWD", workspacePath.UTF8String, 1);', mcp_session)
         self.assertIn('setenv("PWD", workspacePath.UTF8String, 1);', mcp_session)
         self.assertNotIn('stringByAppendingPathComponent:@"Documents"', mcp_session)
@@ -52,14 +58,39 @@ class UserVisiblePathTests(unittest.TestCase):
         self.assertIn('setenv("HERMES_RUNTIME_ROOT", [BlinkPaths hermesHomePath].UTF8String, 1);', command)
         self.assertNotIn('bundle pathForResource:@"hermesrt"', command)
 
-    def test_zip_agent_and_webui_assets_extract_to_visible_named_directories(self):
+    def test_zip_agent_imports_directly_and_legacy_workspace_pointers_migrate(self):
         with tempfile.TemporaryDirectory() as temporary:
             root = Path(temporary)
+            visible_home = root / "Files" / "HermesHome"
+            state_dir = visible_home / "webui"
+            state_dir.mkdir(parents=True)
+            legacy_home = root / "private" / "home"
+            legacy_workspace = legacy_home / "workspace"
+            preferred_workspace = root / "Files" / "workspace"
+            settings_path = state_dir / "settings.json"
+            workspaces_path = state_dir / "workspaces.json"
+            last_workspace_path = state_dir / "last_workspace.txt"
+            settings_path.write_text(
+                json.dumps({"default_workspace": str(legacy_workspace), "theme": "dark"}),
+                encoding="utf-8",
+            )
+            workspaces_path.write_text(
+                json.dumps([{"path": str(legacy_workspace), "name": "Home"}]),
+                encoding="utf-8",
+            )
+            last_workspace_path.write_text(str(legacy_workspace), encoding="utf-8")
             config = root / "config.py"
             config.write_text(
+                "import json\n"
                 "import os\n"
                 "import sys\n"
+                "import zipfile\n"
                 "from pathlib import Path\n"
+                'HOME = Path(os.environ["HERMES_TEST_HOME"])\n'
+                'STATE_DIR = Path(os.environ["HERMES_WEBUI_STATE_DIR"])\n'
+                'SETTINGS_FILE = STATE_DIR / "settings.json"\n'
+                'WORKSPACES_FILE = STATE_DIR / "workspaces.json"\n'
+                'LAST_WORKSPACE_FILE = STATE_DIR / "last_workspace.txt"\n'
                 "REPO_ROOT = Path(__file__).parent.parent\n"
                 'HOST = os.getenv("HERMES_WEBUI_HOST", "127.0.0.1")\n'
                 'PORT = int(os.getenv("HERMES_WEBUI_PORT", "8787"))\n'
@@ -78,32 +109,51 @@ class UserVisiblePathTests(unittest.TestCase):
                 bundle.writestr("hermes_webui/api/__init__.py", "")
                 bundle.writestr("hermes_webui/__init__.py", "")
                 bundle.writestr("hermes_webui/static/index.html", "visible webui assets")
+                bundle.writestr("hermes/hermes_cli/__init__.py", "")
                 bundle.writestr("hermes/hermes_cli/main.py", "# visible agent source\n")
 
-            visible_home = root / "Files" / "HermesHome"
-            visible_home.mkdir(parents=True)
             sys.path.insert(0, str(archive))
-            old_home = os.environ.get("HERMES_HOME")
+            env_names = ("HERMES_HOME", "HERMES_WEBUI_DEFAULT_WORKSPACE", "HERMES_TEST_HOME", "HERMES_WEBUI_STATE_DIR")
+            old_env = {name: os.environ.get(name) for name in env_names}
             os.environ["HERMES_HOME"] = str(visible_home)
+            os.environ["HERMES_WEBUI_DEFAULT_WORKSPACE"] = str(preferred_workspace)
+            os.environ["HERMES_TEST_HOME"] = str(legacy_home)
+            os.environ["HERMES_WEBUI_STATE_DIR"] = str(state_dir)
             try:
                 module = importlib.import_module("hermes_webui.api.config")
                 static_root = module.get_static_root()
                 agent_root = module._discover_agent_dir()
                 self.assertEqual(static_root, visible_home / "WebUIStatic")
                 self.assertEqual((static_root / "index.html").read_text(encoding="utf-8"), "visible webui assets")
-                self.assertEqual(agent_root, visible_home / "HermesAgent")
-                self.assertTrue((agent_root / "hermes_cli" / "main.py").is_file())
+                self.assertEqual(agent_root, Path(str(archive.resolve()) + "/hermes"))
+                self.assertFalse((visible_home / "HermesAgent").exists())
+                sys.path.insert(0, str(agent_root))
+                agent_module = importlib.import_module("hermes_cli.main")
+                self.assertEqual(
+                    Path(agent_module.__file__),
+                    Path(str(archive.resolve()) + "/hermes/hermes_cli/main.py"),
+                )
+                migrated_settings = json.loads(settings_path.read_text(encoding="utf-8"))
+                migrated_workspaces = json.loads(workspaces_path.read_text(encoding="utf-8"))
+                preferred_path = str(preferred_workspace.resolve())
+                self.assertEqual(migrated_settings["default_workspace"], preferred_path)
+                self.assertEqual(migrated_workspaces[0]["path"], preferred_path)
+                self.assertEqual(last_workspace_path.read_text(encoding="utf-8").strip(), preferred_path)
                 self.assertFalse(static_root.name.startswith("."))
-                self.assertFalse(agent_root.name.startswith("."))
             finally:
+                if "agent_root" in locals() and str(agent_root) in sys.path:
+                    sys.path.remove(str(agent_root))
                 sys.path.remove(str(archive))
+                sys.modules.pop("hermes_cli.main", None)
+                sys.modules.pop("hermes_cli", None)
                 sys.modules.pop("hermes_webui.api.config", None)
                 sys.modules.pop("hermes_webui.api", None)
                 sys.modules.pop("hermes_webui", None)
-                if old_home is None:
-                    os.environ.pop("HERMES_HOME", None)
-                else:
-                    os.environ["HERMES_HOME"] = old_home
+                for name, value in old_env.items():
+                    if value is None:
+                        os.environ.pop(name, None)
+                    else:
+                        os.environ[name] = value
 
 
 if __name__ == "__main__":

@@ -46,6 +46,7 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
+#include <unistd.h>
 #include <zlib.h>
 
 #ifdef BLINK_BUILD_ENABLED
@@ -307,7 +308,12 @@ void __setupProcessEnv(void) {
   // file sharing. Do not route Hermes through homePath/Documents: that path is
   // a symlink created asynchronously and can become a private shadow folder.
   NSString *documentsPath = [BlinkPaths documentsPath];
+  NSString *workspacePath = [documentsPath stringByAppendingPathComponent:@"workspace"];
   [[NSFileManager defaultManager] createDirectoryAtPath:documentsPath
+                             withIntermediateDirectories:YES
+                                              attributes:nil
+                                                   error:nil];
+  [[NSFileManager defaultManager] createDirectoryAtPath:workspacePath
                              withIntermediateDirectories:YES
                                               attributes:nil
                                                    error:nil];
@@ -319,8 +325,10 @@ void __setupProcessEnv(void) {
   setenv("CURL_HOME", homePath.UTF8String, 1);
   setenv("HERMES_HOME", hermesHomePath.UTF8String, 1);
   setenv("HERMES_RUNTIME_ROOT", hermesHomePath.UTF8String, 1);
-  setenv("TERMINAL_CWD", documentsPath.UTF8String, 1);
-  setenv("PWD", documentsPath.UTF8String, 1);
+  setenv("HERMES_WEBUI_DEFAULT_WORKSPACE", workspacePath.UTF8String, 1);
+  setenv("TERMINAL_CWD", workspacePath.UTF8String, 1);
+  setenv("PWD", workspacePath.UTF8String, 1);
+  chdir(workspacePath.UTF8String);
   
   NSNotificationCenter *nc = NSNotificationCenter.defaultCenter;
   [nc addObserver:self
