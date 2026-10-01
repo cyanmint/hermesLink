@@ -79,26 +79,35 @@ def patch_ios_local_environment(path: Path) -> None:
     if "class _IosSystemAsyncProcess:" in text:
         return
 
-    if not re.search(r"(?m)^import shlex$", text):
+    for import_name in ("shlex", "tempfile"):
+        if re.search(rf"(?m)^import {import_name}$", text):
+            continue
         import_anchor = "import re\n"
         if text.count(import_anchor) != 1:
             raise SystemExit(f"LocalEnvironment import anchor expected once: {path}")
-        text = text.replace(import_anchor, import_anchor + "import shlex\n", 1)
+        text = text.replace(import_anchor, import_anchor + f"import {import_name}\n", 1)
 
     class_anchor = "class LocalEnvironment(BaseEnvironment):\n"
     helper = '''class _IosSystemAsyncProcess:
-    def __init__(self, native, task_id: int, output_fd: int):
+    def __init__(self, native, task_id: int, output_fd: int, input_path: str | None = None):
         self._native = native
         self._task_id = task_id
         self._released = False
+        self._input_path = input_path
         self.pid = None
         self.returncode = None
         self.stdout = os.fdopen(output_fd, "r", encoding="utf-8", errors="replace")
 
     def _release(self):
         if not self._released:
-            self._native.close(self._task_id)
-            self._released = True
+            try:
+                self._native.close(self._task_id)
+            finally:
+                if self._input_path is not None:
+                    with contextlib.suppress(FileNotFoundError):
+                        os.unlink(self._input_path)
+                    self._input_path = None
+                self._released = True
 
     def poll(self):
         if self.returncode is None:
@@ -121,7 +130,7 @@ def patch_ios_local_environment(path: Path) -> None:
             self._release()
 
 
-def _ios_system_run_command(command: str, env: dict):
+def _ios_system_run_command(command: str, env: dict, stdin_data=None):
     import _hermesios
 
     argv = ["env", "-i"]
@@ -132,8 +141,26 @@ def _ios_system_run_command(command: str, env: dict):
     )
     argv.extend(("sh", "-c", command))
     ios_command = " ".join(shlex.quote(argument) for argument in argv)
-    task_id, output_fd = _hermesios.spawn(ios_command)
-    return _IosSystemAsyncProcess(_hermesios, task_id, output_fd)
+    input_path = None
+    if stdin_data is not None:
+        input_fd, input_path = tempfile.mkstemp(prefix="hermes-stdin-")
+        try:
+            with os.fdopen(input_fd, "wb") as input_file:
+                payload = stdin_data.encode("utf-8") if isinstance(stdin_data, str) else bytes(stdin_data)
+                input_file.write(payload)
+            ios_command += " < " + shlex.quote(input_path)
+        except BaseException:
+            with contextlib.suppress(FileNotFoundError):
+                os.unlink(input_path)
+            raise
+    try:
+        task_id, output_fd = _hermesios.spawn(ios_command)
+    except BaseException:
+        if input_path is not None:
+            with contextlib.suppress(FileNotFoundError):
+                os.unlink(input_path)
+        raise
+    return _IosSystemAsyncProcess(_hermesios, task_id, output_fd, input_path)
 
 
 '''
@@ -222,10 +249,8 @@ def _ios_system_run_command(command: str, env: dict):
     ios_line = "        ios_system_runtime = self._ios_system_runtime()\n"
     ios_branch = (
         "        if ios_system_runtime:\n"
-        "            if stdin_data is not None:\n"
-        '                raise OSError("ios_system terminal does not support piped stdin")\n'
         "            self._recover_cwd()\n"
-        "            return _ios_system_run_command(cmd_string, _make_run_env(self.env))\n"
+        "            return _ios_system_run_command(cmd_string, _make_run_env(self.env), stdin_data)\n"
     )
     if ios_line in method:
         shell_anchor = "        bash = _find_bash()\n"

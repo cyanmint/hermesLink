@@ -198,5 +198,12 @@
 		<string>ap:j:b:</string>
 		<string>no</string>
 	</array>
+	<key>sh</key>
+	<array>
+		<string>SELF</string>
+		<string>sh_main</string>
+		<string>c:h:</string>
+		<string>file</string>
+	</array>
 </dict>
 </plist>

@@ -132,10 +132,16 @@ class IosTerminalPatchTests(unittest.TestCase):
             calls = []
 
             native_calls = []
+            stdin_paths = []
 
             class FakeIosSystem:
                 def spawn(self, command):
                     calls.append(command)
+                    args = shlex.split(command)
+                    if "<" in args:
+                        input_path = Path(args[args.index("<") + 1])
+                        stdin_paths.append(input_path)
+                        native_calls.append(("stdin", input_path.read_bytes()))
                     read_fd, write_fd = os.pipe()
                     os.write(write_fd, b"ios-system-output\n")
                     os.close(write_fd)
@@ -170,10 +176,9 @@ class IosTerminalPatchTests(unittest.TestCase):
                 self.assertTrue(env._prefer_nonlogin)
                 wrapped = env._wrap_command("command -v rg 2>/dev/null", "/Documents/workspace")
                 proc = env._run_bash(wrapped, login=True)
-                with self.assertRaisesRegex(OSError, "does not support piped stdin"):
-                    env._run_bash("read", stdin_data="answer")
+                stdin_proc = env._run_bash("read", stdin_data="answer")
 
-            self.assertEqual(len(calls), 1)
+            self.assertEqual(len(calls), 2)
             args = shlex.split(calls[0])
             self.assertEqual(args[:2], ["env", "-i"])
             self.assertIn("TEST_VALUE=with spaces", args)
@@ -186,6 +191,11 @@ class IosTerminalPatchTests(unittest.TestCase):
             self.assertEqual(proc.wait(), 7)
             self.assertEqual(proc.stdout.read(), "ios-system-output\n")
             proc.stdout.close()
+            self.assertEqual(stdin_proc.wait(), 7)
+            stdin_proc.stdout.close()
+            self.assertIn(("stdin", b"answer"), native_calls)
+            self.assertEqual(len(stdin_paths), 1)
+            self.assertFalse(stdin_paths[0].exists())
             self.assertIsNone(proc.pid)
             self.assertIn(("spawn", calls[0]), native_calls)
             self.assertIn(("close", 7), native_calls)
@@ -380,7 +390,8 @@ class IosTerminalPatchTests(unittest.TestCase):
             self.assertEqual(path.read_text(encoding="utf-8"), first)
             self.assertIn("class _IosSystemAsyncProcess:", first)
             self.assertIn("_hermesios.spawn(ios_command)", first)
-            self.assertNotIn("tempfile.mkstemp", first)
+            self.assertIn("tempfile.mkstemp", first)
+            self.assertIn('ios_command += " < " + shlex.quote(input_path)', first)
             self.assertNotIn("os.system(", first)
             namespace = {}
             exec(compile(first, str(path), "exec"), namespace)
