@@ -108,7 +108,8 @@ class IosTerminalPatchTests(unittest.TestCase):
                 "    def _kill_process(self, proc): pass\n"
                 "class SiblingEnvironment:\n"
                 "    def _ios_system_runtime(self): return True\n"
-                "    def init_session(self): self.sibling_init_called = True\n",
+                "    def init_session(self): self.sibling_init_called = True\n"
+                "    def _run_bash(self): return 'sibling-runner'\n",
                 encoding="utf-8",
                 newline="\n",
             )
@@ -123,23 +124,44 @@ class IosTerminalPatchTests(unittest.TestCase):
             sibling.init_session()
             self.assertTrue(sibling.sibling_init_called)
             self.assertFalse(hasattr(sibling, "_snapshot_ready"))
+            self.assertEqual(sibling._run_bash(), "sibling-runner")
             env = env_type()
             env.cwd = "/Documents/workspace"
             env._cwd_marker = "__HERMES_CWD_test__"
             env.env = {"PATH": "/usr/bin:/bin", "TEST_VALUE": "with spaces"}
             calls = []
 
-            def fake_system(command):
-                calls.append(command)
-                args = shlex.split(command)
-                output_path = args[args.index(">") + 1]
-                Path(output_path).write_text("ios-system-output\n", encoding="utf-8")
-                return 7
+            native_calls = []
 
-            with patch.dict(os.environ, {"HERMES_IOS_TERMINAL": "1"}), patch.object(
+            class FakeIosSystem:
+                def spawn(self, command):
+                    calls.append(command)
+                    read_fd, write_fd = os.pipe()
+                    os.write(write_fd, b"ios-system-output\n")
+                    os.close(write_fd)
+                    native_calls.append(("spawn", command))
+                    return 7, read_fd
+
+                def poll(self, task_id):
+                    native_calls.append(("poll", task_id))
+                    return 7
+
+                def wait(self, task_id, timeout=None):
+                    native_calls.append(("wait", task_id, timeout))
+                    return 7
+
+                def kill(self, task_id):
+                    native_calls.append(("kill", task_id))
+
+                def close(self, task_id):
+                    native_calls.append(("close", task_id))
+
+            with patch.dict(os.environ, {"HERMES_IOS_TERMINAL": "1"}), patch.dict(
+                sys.modules, {"_hermesios": FakeIosSystem()}
+            ), patch.object(
                 namespace["subprocess"], "Popen", side_effect=AssertionError("Popen must not run on iOS")
             ), patch.object(
-                namespace["os"], "system", side_effect=fake_system
+                namespace["os"], "system", side_effect=AssertionError("synchronous os.system must not run")
             ):
                 env._snapshot_ready = True
                 env._prefer_nonlogin = False
@@ -158,17 +180,80 @@ class IosTerminalPatchTests(unittest.TestCase):
             shell_index = args.index("sh")
             self.assertEqual(args[shell_index + 1], "-c")
             self.assertIn("cd '/Documents/workspace' && command -v rg 2>/dev/null", args[shell_index + 2])
-            self.assertEqual(args[args.index(">") + 2 :], ["2>&1"])
+            self.assertNotIn(">", args)
             self.assertNotIn("HERMES_IOS_SYSTEM_SUBPROCESS", calls[0])
             self.assertEqual(proc.poll(), 7)
             self.assertEqual(proc.wait(), 7)
             self.assertEqual(proc.stdout.read(), "ios-system-output\n")
             proc.stdout.close()
+            self.assertIsNone(proc.pid)
+            self.assertIn(("spawn", calls[0]), native_calls)
+            self.assertIn(("close", 7), native_calls)
+            self.assertEqual([entry.name for entry in Path(directory).iterdir()], ["local.py"])
             self.assertEqual(
                 wrapped,
                 "cd '/Documents/workspace' && command -v rg 2>/dev/null "
                 "&& echo __HERMES_CWD_test__$PWD __HERMES_CWD_test__",
             )
+
+    def test_ios_local_environment_cancels_a_running_native_process(self):
+        with tempfile.TemporaryDirectory() as directory:
+            path = Path(directory) / "local.py"
+            path.write_text(
+                "import contextlib\nimport os\nimport re\nimport subprocess\nimport sys\n"
+                "import tempfile\n_IS_WINDOWS = False\n"
+                "def _find_bash(): return 'sh'\n"
+                "def _make_run_env(env): return env\n"
+                "class BaseEnvironment:\n"
+                "    def _quote_cwd_for_cd(self, cwd): return repr(cwd)\n"
+                "    def _kill_process(self, proc): proc.kill()\n"
+                "class LocalEnvironment(BaseEnvironment):\n"
+                "    def _ios_system_runtime(self): return True\n"
+                "    def _recover_cwd(self): pass\n"
+                "    def _run_bash(self, cmd_string, login=False, timeout=120, stdin_data=None):\n"
+                "        ios_system_runtime = self._ios_system_runtime()\n"
+                "        bash = _find_bash()\n"
+                "        return subprocess.Popen(['sh', '-c', cmd_string])\n",
+                encoding="utf-8",
+                newline="\n",
+            )
+            patcher.patch_ios_local_environment(path)
+            namespace = {}
+            exec(compile(path.read_text(encoding="utf-8"), str(path), "exec"), namespace)
+            native_calls = []
+
+            class FakeIosSystem:
+                def spawn(self, command):
+                    read_fd, write_fd = os.pipe()
+                    os.close(write_fd)
+                    return 23, read_fd
+
+                def poll(self, task_id):
+                    return None
+
+                def wait(self, task_id, timeout=None):
+                    native_calls.append(("wait", task_id, timeout))
+                    return None
+
+                def kill(self, task_id):
+                    native_calls.append(("kill", task_id))
+
+                def close(self, task_id):
+                    native_calls.append(("close", task_id))
+
+            with patch.dict(os.environ, {"HERMES_IOS_TERMINAL": "1"}), patch.dict(
+                sys.modules, {"_hermesios": FakeIosSystem()}
+            ):
+                env = namespace["LocalEnvironment"]()
+                env.cwd = "/workspace"
+                env.env = {}
+                proc = env._run_bash("sleep 300")
+                env._kill_process(proc)
+                proc.stdout.close()
+
+            self.assertIn(("kill", 23), native_calls)
+            self.assertIn(("wait", 23, 2.0), native_calls)
+            self.assertIn(("close", 23), native_calls)
 
     def test_local_environment_replaces_legacy_ios_popen_path(self):
         with tempfile.TemporaryDirectory() as directory:
@@ -216,23 +301,89 @@ class IosTerminalPatchTests(unittest.TestCase):
             env._cwd_marker = "__HERMES_CWD_test__"
             env.env = {"PATH": "/usr/bin:/bin"}
             calls = []
+            native_calls = []
 
-            def fake_system(command):
-                calls.append(command)
-                args = shlex.split(command)
-                Path(args[args.index(">") + 1]).write_text("ok\n", encoding="utf-8")
-                return 0
+            class FakeIosSystem:
+                def spawn(self, command):
+                    calls.append(command)
+                    read_fd, write_fd = os.pipe()
+                    os.write(write_fd, b"ok\n")
+                    os.close(write_fd)
+                    return 29, read_fd
 
-            with patch.object(
+                def poll(self, task_id):
+                    return 0
+
+                def wait(self, task_id, timeout=None):
+                    return 0
+
+                def kill(self, task_id):
+                    native_calls.append(("kill", task_id))
+
+                def close(self, task_id):
+                    native_calls.append(("close", task_id))
+
+            with patch.dict(sys.modules, {"_hermesios": FakeIosSystem()}), patch.object(
                 namespace["subprocess"], "Popen", side_effect=AssertionError("legacy Popen path ran")
-            ), patch.object(namespace["os"], "system", side_effect=fake_system):
+            ), patch.object(
+                namespace["os"], "system", side_effect=AssertionError("legacy sync ios_system path ran")
+            ):
                 result = env._run_bash("cd '/Documents/workspace' && pwd", login=True)
 
             self.assertEqual(len(calls), 1)
+            self.assertEqual(result.poll(), 0)
             self.assertEqual(result.returncode, 0)
             self.assertEqual(result.stdout.read(), "ok\n")
             result.stdout.close()
+            self.assertNotIn(">", shlex.split(calls[0]))
+            self.assertIn(("close", 29), native_calls)
             self.assertNotIn("HERMES_IOS_SYSTEM_SUBPROCESS", first)
+
+    def test_repatches_legacy_synchronous_ios_system_helper(self):
+        with tempfile.TemporaryDirectory() as directory:
+            path = Path(directory) / "local.py"
+            path.write_text(
+                "import contextlib\nimport os\nimport re\nimport shlex\nimport tempfile\n"
+                "class BaseEnvironment:\n"
+                "    def _kill_process(self, proc): proc.kill()\n"
+                "class _IosSystemCompletedProcess:\n"
+                "    def __init__(self, output_path, returncode):\n"
+                "        self.pid = None\n"
+                "        self.returncode = returncode\n"
+                "        self.stdout = open(output_path, 'r')\n"
+                "def _ios_system_run_command(command, env):\n"
+                "    output_fd, output_path = tempfile.mkstemp()\n"
+                "    os.close(output_fd)\n"
+                "    os.system(command + ' > ' + output_path)\n"
+                "    return _IosSystemCompletedProcess(output_path, 0)\n"
+                "class LocalEnvironment(BaseEnvironment):\n"
+                "    def _ios_system_runtime(self): return True\n"
+                "    def _recover_cwd(self): pass\n"
+                "    def _run_bash(self, cmd_string, login=False, timeout=120, stdin_data=None):\n"
+                "        ios_system_runtime = self._ios_system_runtime()\n"
+                "        if ios_system_runtime:\n"
+                "            if stdin_data is not None:\n"
+                "                raise OSError('piped stdin unsupported')\n"
+                "            self._recover_cwd()\n"
+                "            return _ios_system_run_command(cmd_string, self.env)\n"
+                "        bash = _find_bash()\n"
+                "        return bash\n"
+                "    def _kill_process(self, proc):\n"
+                "        proc.kill()\n",
+                encoding="utf-8",
+                newline="\n",
+            )
+
+            patcher.patch_ios_local_environment(path)
+            first = path.read_text(encoding="utf-8")
+            patcher.patch_ios_local_environment(path)
+            self.assertEqual(path.read_text(encoding="utf-8"), first)
+            self.assertIn("class _IosSystemAsyncProcess:", first)
+            self.assertIn("_hermesios.spawn(ios_command)", first)
+            self.assertNotIn("tempfile.mkstemp", first)
+            self.assertNotIn("os.system(", first)
+            namespace = {}
+            exec(compile(first, str(path), "exec"), namespace)
 
     def test_patch_is_idempotent(self):
         with tempfile.TemporaryDirectory() as directory:

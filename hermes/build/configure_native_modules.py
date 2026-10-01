@@ -11,6 +11,7 @@ REQUIRED_STATIC_MODULES = (
     ("_ssl", "_ssl.c"),
     ("_hashlib", "_hashopenssl.c"),
     ("_posixsubprocess", "_posixsubprocess.c"),
+    ("_hermesios", "_hermesiosmodule.c"),
 )
 
 

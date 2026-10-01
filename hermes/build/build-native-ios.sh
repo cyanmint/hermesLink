@@ -22,7 +22,7 @@ fi
 HOST_PYTHON=${HOST_PYTHON:-$BUILD_ROOT/host-python/bin/python3.13}
 export HOST_PYTHON
 CPYTHON_REF=${CPYTHON_REF:-v3.13.9}
-CPYTHON_IOS_SYSTEM_PATCH_VERSION=${CPYTHON_IOS_SYSTEM_PATCH_VERSION:-2}
+CPYTHON_IOS_SYSTEM_PATCH_VERSION=${CPYTHON_IOS_SYSTEM_PATCH_VERSION:-3}
 CPYTHON_ROOT=${CPYTHON_ROOT:-$BUILD_ROOT/cpython}
 OPENSSL_REF=${OPENSSL_REF:-openssl-3.3.2}
 OPENSSL_ROOT=${OPENSSL_ROOT:-$BUILD_ROOT/openssl}
@@ -125,6 +125,7 @@ else
   echo "Reusing cached CPython target objects for $TARGET_SOURCE_ID"
 fi
 "$HOST_PYTHON" "$ROOT/overlay/patches/patch-cpython-ios-system.py" "$TARGET_ROOT"
+cp "$ROOT/overlay/cpython/ios_async_system.c" "$TARGET_ROOT/Modules/_hermesiosmodule.c"
 BUILD_TRIPLE=$(cd "$TARGET_ROOT" && ./config.guess)
 cat > "$TARGET_ROOT/ios_compat.c" <<'EOF'
 #include <stdint.h>

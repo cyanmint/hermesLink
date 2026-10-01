@@ -19,6 +19,26 @@ class NativeModuleRegistryTests(unittest.TestCase):
         build_script = (Path(__file__).resolve().parents[1] / "build" / "build-native-ios.sh")
         self.assertIn("Modules/_posixsubprocess.o", build_script.read_text(encoding="utf-8"))
 
+    def test_native_build_compiles_and_registers_ios_async_system_module(self):
+        build_root = Path(__file__).resolve().parents[1] / "build"
+        build_script = (build_root / "build-native-ios.sh").read_text(encoding="utf-8")
+        self.assertIn("ios_async_system.c", build_script)
+        self.assertIn(("_hermesios", "_hermesiosmodule.c"), module_config.REQUIRED_STATIC_MODULES)
+        self.assertIn("_hermesios", registry.REQUIRED_NATIVE_MODULES)
+
+    def test_ios_async_system_module_streams_output_and_cancels_native_thread(self):
+        source_path = (
+            Path(__file__).resolve().parents[1] / "overlay" / "cpython" / "ios_async_system.c"
+        )
+        source = source_path.read_text(encoding="utf-8")
+        self.assertIn("pipe(fds)", source)
+        self.assertIn('ios_symbol("ios_setStreams")', source)
+        self.assertIn('ios_symbol("ios_getThreadId")', source)
+        self.assertIn("pthread_cancel(command_thread)", source)
+        self.assertIn("runner_session_id", source)
+        self.assertNotIn('ios_symbol("ios_closeSession")', source)
+        self.assertNotIn("mkstemp", source)
+
     def test_discovers_only_defined_python_module_initializers(self):
         nm_output = """\
 0000000000000000 T _PyInit__ssl
@@ -53,8 +73,13 @@ class NativeModuleRegistryTests(unittest.TestCase):
         result = module_config.ensure_required_static_modules(setup_lines)
 
         self.assertEqual(
-            result[-3:],
-            ["_ssl _ssl.c", "_hashlib _hashopenssl.c", "_posixsubprocess _posixsubprocess.c"],
+            result[-4:],
+            [
+                "_ssl _ssl.c",
+                "_hashlib _hashopenssl.c",
+                "_posixsubprocess _posixsubprocess.c",
+                "_hermesios _hermesiosmodule.c",
+            ],
         )
 
     def test_does_not_duplicate_required_extensions_already_enabled(self):
@@ -63,6 +88,7 @@ class NativeModuleRegistryTests(unittest.TestCase):
             "_ssl _ssl.c",
             "_hashlib _hashopenssl.c",
             "_posixsubprocess _posixsubprocess.c",
+            "_hermesios _hermesiosmodule.c",
         ]
 
         self.assertEqual(module_config.ensure_required_static_modules(setup_lines), setup_lines)
@@ -87,8 +113,36 @@ class NativeModuleRegistryTests(unittest.TestCase):
         with self.assertRaisesRegex(RuntimeError, "_posixsubprocess"):
             registry.require_native_modules(["_ssl", "_hashlib"])
 
+    def test_fails_build_validation_if_ios_async_system_initializer_is_missing(self):
+        with self.assertRaisesRegex(RuntimeError, "_hermesios"):
+            registry.require_native_modules(["_ssl", "_hashlib", "_posixsubprocess"])
+
     def test_accepts_required_native_initializers(self):
-        registry.require_native_modules(["_ssl", "_hashlib", "_posixsubprocess"])
+        registry.require_native_modules(["_ssl", "_hashlib", "_posixsubprocess", "_hermesios"])
+
+    def test_ios_async_system_module_owns_async_pipe_and_cancel_api(self):
+        source = (Path(__file__).resolve().parents[1] / "overlay" / "cpython" / "ios_async_system.c").read_text(
+            encoding="utf-8"
+        )
+        for symbol in ("PyInit__hermesios", "pthread_create", "pthread_cancel", "ios_setStreams", "pipe(fds)"):
+            self.assertIn(symbol, source)
+        self.assertNotIn("ios_killpid", source)
+        self.assertNotIn("mkstemp", source)
+
+    def test_ios_async_runner_separates_pipe_stream_ownership_and_pid_startup(self):
+        source = (Path(__file__).resolve().parents[1] / "overlay" / "cpython" / "ios_async_system.c").read_text(
+            encoding="utf-8"
+        )
+        self.assertIn('"ios_getThreadId"', source)
+        self.assertIn('"ios_releaseThreadId"', source)
+        self.assertIn("ios_symbol(required_symbols[index]) == NULL", source)
+        self.assertIn("int command_fd = dup(fileno(task->writer));", source)
+        self.assertIn('command_writer = fdopen(command_fd, "w")', source)
+        self.assertIn("set_streams(saved_stdin, command_writer, command_writer)", source)
+        self.assertIn("if ((intptr_t)command_thread > 0)", source)
+        self.assertIn("task->starting = 1", source)
+        self.assertIn("task->ios_pid = pid", source)
+        self.assertNotIn("set_streams(saved_stdin, task->writer, task->writer)", source)
 
 
 if __name__ == "__main__":

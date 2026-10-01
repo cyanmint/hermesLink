@@ -76,8 +76,7 @@ def patch_ios_local_terminal(path: Path) -> None:
 def patch_ios_local_environment(path: Path) -> None:
     """Run local iOS shell commands through ios_system, never subprocess.Popen."""
     text = path.read_text(encoding="utf-8")
-    marker = "def _ios_system_run_command("
-    if marker in text:
+    if "class _IosSystemAsyncProcess:" in text:
         return
 
     if not re.search(r"(?m)^import shlex$", text):
@@ -87,58 +86,64 @@ def patch_ios_local_environment(path: Path) -> None:
         text = text.replace(import_anchor, import_anchor + "import shlex\n", 1)
 
     class_anchor = "class LocalEnvironment(BaseEnvironment):\n"
-    helper = '''class _IosSystemCompletedProcess:
-    def __init__(self, output_path: str, returncode: int):
+    helper = '''class _IosSystemAsyncProcess:
+    def __init__(self, native, task_id: int, output_fd: int):
+        self._native = native
+        self._task_id = task_id
+        self._released = False
         self.pid = None
-        self.returncode = returncode
-        try:
-            self.stdout = open(output_path, "r", encoding="utf-8", errors="replace")
-        finally:
-            with contextlib.suppress(OSError):
-                os.unlink(output_path)
+        self.returncode = None
+        self.stdout = os.fdopen(output_fd, "r", encoding="utf-8", errors="replace")
+
+    def _release(self):
+        if not self._released:
+            self._native.close(self._task_id)
+            self._released = True
 
     def poll(self):
+        if self.returncode is None:
+            self.returncode = self._native.poll(self._task_id)
+            if self.returncode is not None:
+                self._release()
         return self.returncode
 
     def wait(self, timeout=None):
+        if self.returncode is None:
+            self.returncode = self._native.wait(self._task_id, timeout)
+            if self.returncode is not None:
+                self._release()
         return self.returncode
 
     def kill(self):
-        # ios_system executes this synchronous call to completion; it exposes no
-        # POSIX child PID that BaseEnvironment can signal after dispatch.
-        return None
+        if self.returncode is None:
+            self._native.kill(self._task_id)
+            self.returncode = self._native.wait(self._task_id, 2.0)
+            self._release()
 
 
 def _ios_system_run_command(command: str, env: dict):
-    output_fd, output_path = tempfile.mkstemp(prefix="hermes-ios-output-")
-    os.close(output_fd)
-    returncode = 1
-    try:
-        argv = ["env", "-i"]
-        argv.extend(
-            f"{key}={value}"
-            for key, value in env.items()
-            if isinstance(key, str) and re.fullmatch(r"[A-Za-z_][A-Za-z0-9_]*", key)
-        )
-        argv.extend(("sh", "-c", command))
-        ios_command = " ".join(shlex.quote(argument) for argument in argv)
-        ios_command += f" > {shlex.quote(output_path)} 2>&1"
-        status = os.system(ios_command)
-        if status < 0:
-            returncode = 1
-        elif status > 255:
-            with contextlib.suppress(AttributeError, ValueError):
-                returncode = os.waitstatus_to_exitcode(status)
-        else:
-            returncode = status
-    except OSError as exc:
-        with open(output_path, "w", encoding="utf-8", errors="replace") as output_file:
-            output_file.write(f"ios_system command failed: {exc}\\\\n")
-        returncode = 1
-    return _IosSystemCompletedProcess(output_path, returncode)
+    import _hermesios
+
+    argv = ["env", "-i"]
+    argv.extend(
+        f"{key}={value}"
+        for key, value in env.items()
+        if isinstance(key, str) and re.fullmatch(r"[A-Za-z_][A-Za-z0-9_]*", key)
+    )
+    argv.extend(("sh", "-c", command))
+    ios_command = " ".join(shlex.quote(argument) for argument in argv)
+    task_id, output_fd = _hermesios.spawn(ios_command)
+    return _IosSystemAsyncProcess(_hermesios, task_id, output_fd)
 
 
 '''
+    old_helper_anchor = "class _IosSystemCompletedProcess:\n"
+    if old_helper_anchor in text:
+        old_helper_start = text.index(old_helper_anchor)
+        old_helper_end = text.find(class_anchor, old_helper_start)
+        if old_helper_end < 0:
+            raise SystemExit(f"legacy iOS process helper boundary not found: {path}")
+        text = text[:old_helper_start] + helper + text[old_helper_end:]
     class_replacement = '''class LocalEnvironment(BaseEnvironment):
     def _ios_system_runtime(self) -> bool:
         return sys.platform == "ios" or os.environ.get("HERMES_IOS_TERMINAL") == "1"
@@ -166,7 +171,7 @@ def _ios_system_run_command(command: str, env: dict):
     initial_sibling = re.search(r"(?m)^class ", text[initial_body_start:])
     initial_class_end = initial_body_start + initial_sibling.start() if initial_sibling else len(text)
     runtime_method_present = "def _ios_system_runtime(self)" in text[initial_class_start:initial_class_end]
-    helper_present = "class _IosSystemCompletedProcess:" in text
+    helper_present = "class _IosSystemAsyncProcess:" in text
     if not runtime_method_present:
         insertion = ("" if helper_present else helper) + class_replacement
         text = text.replace(class_anchor, insertion, 1)
@@ -200,23 +205,36 @@ def _ios_system_run_command(command: str, env: dict):
                 local_class = local_class[:init_body] + init_guard + local_class[init_body:]
     text = text[:local_class_start] + local_class + text[local_class_end:]
 
-    method_start = text.find("    def _run_bash(")
-    method_end = text.find("\n    def _kill_process(", method_start)
-    if method_start < 0 or method_end < 0:
+    local_class_start = text.find(class_anchor)
+    local_body_start = local_class_start + len(class_anchor)
+    sibling_class = re.search(r"(?m)^class ", text[local_body_start:])
+    local_class_end = local_body_start + sibling_class.start() if sibling_class else len(text)
+    local_class = text[local_class_start:local_class_end]
+    method_start = local_class.find("    def _run_bash(")
+    if method_start < 0:
         raise SystemExit(f"LocalEnvironment _run_bash method boundary not found: {path}")
-    method = text[method_start:method_end]
+    method_end = local_class.find("\n    def _kill_process(", method_start)
+    if method_end < 0:
+        method_end = local_class.find("\n    def ", method_start + len("    def _run_bash("))
+    if method_end < 0:
+        method_end = len(local_class)
+    method = local_class[method_start:method_end]
     ios_line = "        ios_system_runtime = self._ios_system_runtime()\n"
     ios_branch = (
         "        if ios_system_runtime:\n"
         "            if stdin_data is not None:\n"
         '                raise OSError("ios_system terminal does not support piped stdin")\n'
         "            self._recover_cwd()\n"
-        "            # BaseEnvironment.execute applies the wall-clock deadline around this call.\n"
-        "            # ios_system has no cancellable child PID, so a timed-out worker is abandoned.\n"
         "            return _ios_system_run_command(cmd_string, _make_run_env(self.env))\n"
     )
     if ios_line in method:
-        method = method.replace(ios_line, ios_line + ios_branch, 1)
+        shell_anchor = "        bash = _find_bash()\n"
+        branch_start = method.find("        if ios_system_runtime:\n", method.find(ios_line) + len(ios_line))
+        shell_start = method.find(shell_anchor, branch_start)
+        if branch_start >= 0 and shell_start >= 0:
+            method = method[:branch_start] + ios_branch + method[shell_start:]
+        elif ios_branch not in method:
+            method = method.replace(ios_line, ios_line + ios_branch, 1)
     else:
         shell_anchor = "        bash = _find_bash()\n"
         if method.count(shell_anchor) != 1:
@@ -230,7 +248,51 @@ def _ios_system_run_command(command: str, env: dict):
         '        if ios_system_runtime:\n            ios_run_env["HERMES_IOS_SYSTEM_SUBPROCESS"] = "1"\n',
         "",
     )
-    text = text[:method_start] + method + text[method_end:]
+    method = method.replace(") -> subprocess.Popen:", ") -> _IosSystemAsyncProcess | subprocess.Popen:", 1)
+    local_class = local_class[:method_start] + method + local_class[method_end:]
+    text = text[:local_class_start] + local_class + text[local_class_end:]
+
+    local_class_start = text.find(class_anchor)
+    local_body_start = local_class_start + len(class_anchor)
+    sibling_class = re.search(r"(?m)^class ", text[local_body_start:])
+    local_class_end = local_body_start + sibling_class.start() if sibling_class else len(text)
+    local_class = text[local_class_start:local_class_end]
+    kill_start = local_class.find("    def _kill_process(")
+    ios_kill_guard = (
+        "        if self._ios_system_runtime():\n"
+        "            with contextlib.suppress(OSError):\n"
+        "                proc.kill()\n"
+        "            return\n"
+    )
+    if kill_start < 0:
+        if local_class and not local_class.endswith("\n"):
+            local_class += "\n"
+        local_class += (
+            "\n    def _kill_process(self, proc):\n"
+            + ios_kill_guard
+            + "        return super()._kill_process(proc)\n"
+        )
+        text = text[:local_class_start] + local_class + text[local_class_end:]
+    else:
+        signature_end = local_class.find("\n", kill_start)
+        signature_line = local_class[kill_start:signature_end]
+        if ":" not in signature_line:
+            raise SystemExit(f"LocalEnvironment _kill_process signature malformed: {path}")
+        header, inline_body = signature_line.split(":", 1)
+        if ios_kill_guard not in local_class[signature_end + 1:]:
+            if inline_body.strip():
+                replacement = (
+                    header
+                    + ":\n"
+                    + ios_kill_guard
+                    + "        "
+                    + inline_body.strip()
+                    + "\n"
+                )
+                local_class = local_class[:kill_start] + replacement + local_class[signature_end + 1:]
+            else:
+                local_class = local_class[:signature_end + 1] + ios_kill_guard + local_class[signature_end + 1:]
+        text = text[:local_class_start] + local_class + text[local_class_end:]
     path.write_text(text, encoding="utf-8", newline="\n")
 
 
