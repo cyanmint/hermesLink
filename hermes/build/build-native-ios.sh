@@ -22,6 +22,7 @@ fi
 HOST_PYTHON=${HOST_PYTHON:-$BUILD_ROOT/host-python/bin/python3.13}
 export HOST_PYTHON
 CPYTHON_REF=${CPYTHON_REF:-v3.13.9}
+CPYTHON_IOS_SYSTEM_PATCH_VERSION=${CPYTHON_IOS_SYSTEM_PATCH_VERSION:-1}
 CPYTHON_ROOT=${CPYTHON_ROOT:-$BUILD_ROOT/cpython}
 OPENSSL_REF=${OPENSSL_REF:-openssl-3.3.2}
 OPENSSL_ROOT=${OPENSSL_ROOT:-$BUILD_ROOT/openssl}
@@ -114,14 +115,16 @@ fi
 
 TARGET_ROOT=$BUILD_ROOT/target-cpython
 TARGET_STAMP="$TARGET_ROOT/.hermes-cpython-ref"
-if [ ! -f "$TARGET_STAMP" ] || [ "$(cat "$TARGET_STAMP")" != "$CPYTHON_REF" ]; then
+TARGET_SOURCE_ID="$CPYTHON_REF/ios-system-bridge-$CPYTHON_IOS_SYSTEM_PATCH_VERSION"
+if [ ! -f "$TARGET_STAMP" ] || [ "$(cat "$TARGET_STAMP")" != "$TARGET_SOURCE_ID" ]; then
   rm -rf "$TARGET_ROOT"
   mkdir -p "$TARGET_ROOT"
   git -C "$CPYTHON_ROOT" archive HEAD | tar -x -C "$TARGET_ROOT"
-  printf '%s\n' "$CPYTHON_REF" > "$TARGET_STAMP"
+  printf '%s\n' "$TARGET_SOURCE_ID" > "$TARGET_STAMP"
 else
-  echo "Reusing cached CPython target objects for $CPYTHON_REF"
+  echo "Reusing cached CPython target objects for $TARGET_SOURCE_ID"
 fi
+"$HOST_PYTHON" "$ROOT/overlay/patches/patch-cpython-ios-system.py" "$TARGET_ROOT"
 BUILD_TRIPLE=$(cd "$TARGET_ROOT" && ./config.guess)
 cat > "$TARGET_ROOT/ios_compat.c" <<'EOF'
 #include <stdint.h>

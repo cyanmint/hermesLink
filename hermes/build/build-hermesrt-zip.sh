@@ -55,6 +55,7 @@ STAGE=$(mktemp -d "$BUILD_ROOT/stage.XXXXXX")
 trap 'rm -rf "$STAGE"' EXIT
 mkdir -p "$STAGE/hermes" "$STAGE/hermes-webui" "$STAGE/python/site-packages"
 cp -a "$CPYTHON_ROOT/Lib/." "$STAGE/python/"
+"$HOST_PYTHON" "$ROOT/overlay/patches/patch-cpython-ios-system.py" --stdlib-only "$STAGE/python"
 for package in acp_adapter agent cron gateway hermes_cli plugins providers tools tui_gateway hermes; do
   [ -d "$HERMES_SOURCE/$package" ] && cp -a "$HERMES_SOURCE/$package" "$STAGE/hermes/"
 done

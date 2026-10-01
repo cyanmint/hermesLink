@@ -11,13 +11,16 @@ Under the project's stated attribution policy, AI-generated content has no copyr
 - `hermes/build/fetch-sources.sh`
 - `hermes/build/package-native-ios.sh`
 - `hermes/overlay/cpython/Programs/hermes_main.c`
+- `hermes/overlay/cpython/ios_system_bridge.h`
 - `hermes/overlay/hermes/agent/legacy_responses.py`
 - `hermes/overlay/hermes/hermes_cli/doctor_state.py`
 - `hermes/overlay/hermes/hermes_cli/upgrade.py`
 - `hermes/overlay/patches/patch-agent-sdk-compat.py`
+- `hermes/overlay/patches/patch-cpython-ios-system.py`
 - `hermes/overlay/patches/patch-ios-stability.py`
 - `hermes/overlay/patches/patch-webui-zip.py`
 - `hermes/overlay/python/sitecustomize.py`
+- `hermes/tests/test_cpython_ios_system_patch.py`
 - `install_hermes_runtime.sh`
 
 ## Project license
