@@ -15,6 +15,10 @@ CONFIG_SPEC.loader.exec_module(module_config)
 
 
 class NativeModuleRegistryTests(unittest.TestCase):
+    def test_native_build_explicitly_compiles_required_posix_subprocess_object(self):
+        build_script = (Path(__file__).resolve().parents[1] / "build" / "build-native-ios.sh")
+        self.assertIn("Modules/_posixsubprocess.o", build_script.read_text(encoding="utf-8"))
+
     def test_discovers_only_defined_python_module_initializers(self):
         nm_output = """\
 0000000000000000 T _PyInit__ssl
