@@ -359,6 +359,23 @@ jobs:
           test -x /tmp/hermeslink-ish/build/ios-toolchain/clang
           test -d /tmp/hermeslink-ish/source/.git
 
+      - name: Adapt Linux Meson build metadata for macOS
+        env:
+          MESON_BUILD_DIR: /tmp/hermeslink-ish/build/meson
+        run: |
+          set -euo pipefail
+          meson_executable="$(command -v meson)"
+          python3 - "$MESON_BUILD_DIR/build.ninja" "$meson_executable" <<'PY'
+          from pathlib import Path
+          import sys
+
+          build_file = Path(sys.argv[1])
+          contents = build_file.read_text(encoding="utf-8")
+          if "/usr/bin/meson" not in contents:
+              raise SystemExit(f"expected Linux Meson path in {build_file}")
+          build_file.write_text(contents.replace("/usr/bin/meson", sys.argv[2]), encoding="utf-8")
+          PY
+
       - name: Build iSH Xcode host-interop libraries
         env:
           BUILD_ROOT: /tmp/hermeslink-ish/build
