@@ -452,6 +452,7 @@ jobs:
           </dict></plist>
           EOF
           mkdir -p Frameworks/Ish.framework
+          mkdir -p Resources
           cat > "$RUNNER_TEMP/ish_runtime_stub.c" <<'EOF'
           #include "ish_kernel_bridge.h"
           int ish_configure(const char *storage_base, ish_log_handler log_handler) {
@@ -467,7 +468,7 @@ jobs:
             (void)output_fd;
             (void)cols;
             (void)rows;
-            if (exit_code_out != NULL) *exit_code_out = 0;
+            if (exit_code_out) *exit_code_out = 0;
             return ISH_RUN_ERR_NOT_AVAILABLE;
           }
           EOF
@@ -489,6 +490,7 @@ jobs:
           EOF
           printf 'runtime omitted from app component\n' > "$RUNNER_TEMP/runtime-stub.txt"
           (cd "$RUNNER_TEMP" && zip -q "$GITHUB_WORKSPACE/Resources/hermesrt.zip" runtime-stub.txt)
+          tar -czf Resources/ish-rootfs.tar.gz -C "$RUNNER_TEMP" runtime-stub.txt
 
       - name: Set runtime-free app cache key
         id: runtime_hash
@@ -752,9 +754,10 @@ jobs:
           GH_TOKEN: ${{ github.token }}
         run: |
           set -euo pipefail
-          mkdir -p "$RUNNER_TEMP/hermeslink-components/app" "$RUNNER_TEMP/Payload"
+          mkdir -p "$RUNNER_TEMP/hermeslink-components/app" \
+            "$RUNNER_TEMP/ish-native-assets" "$RUNNER_TEMP/Payload"
           release_url="https://github.com/${GITHUB_REPOSITORY}/releases/download/${HERMES_RUNTIME_RELEASE_TAG}"
-          for asset in HermesLink.app.zip HermesRuntime.framework.zip hermesrt.zip; do
+          for asset in HermesLink.app.zip HermesRuntime.framework.zip hermesrt.zip ISHLinuxNative.zip; do
             curl --fail --location --retry 5 --retry-all-errors \
               --header "Authorization: Bearer $GH_TOKEN" \
               --header 'Accept: application/octet-stream' \
@@ -765,6 +768,11 @@ jobs:
           unzip -t "$RUNNER_TEMP/hermeslink-components/HermesLink.app.zip"
           python3 hermes/build/validate-runtime-zip.py "$RUNNER_TEMP/hermeslink-components/hermesrt.zip"
           unzip -t "$RUNNER_TEMP/hermeslink-components/HermesRuntime.framework.zip"
+          unzip -t "$RUNNER_TEMP/hermeslink-components/ISHLinuxNative.zip"
+          unzip -q "$RUNNER_TEMP/hermeslink-components/ISHLinuxNative.zip" \
+            -d "$RUNNER_TEMP/ish-native-assets"
+          test -x "$RUNNER_TEMP/ish-native-assets/Frameworks/Ish.framework/Ish"
+          test -s "$RUNNER_TEMP/ish-native-assets/Resources/ish-rootfs.tar.gz"
           ditto -x -k "$RUNNER_TEMP/hermeslink-components/HermesLink.app.zip" \
             "$RUNNER_TEMP/hermeslink-components/app"
           app="$(find "$RUNNER_TEMP/hermeslink-components/app" -maxdepth 2 -type d -name '*.app' -print -quit)"
@@ -773,13 +781,18 @@ jobs:
           mkdir -p "$RUNNER_TEMP/Payload/HermesLink.app/Frameworks"
           unzip -q "$RUNNER_TEMP/hermeslink-components/HermesRuntime.framework.zip" \
             -d "$RUNNER_TEMP/Payload/HermesLink.app/Frameworks"
+          /usr/bin/ditto "$RUNNER_TEMP/ish-native-assets/Frameworks/Ish.framework" \
+            "$RUNNER_TEMP/Payload/HermesLink.app/Frameworks/Ish.framework"
           install -m 644 "$RUNNER_TEMP/hermeslink-components/hermesrt.zip" \
             "$RUNNER_TEMP/Payload/HermesLink.app/hermesrt.zip"
+          install -m 644 "$RUNNER_TEMP/ish-native-assets/Resources/ish-rootfs.tar.gz" \
+            "$RUNNER_TEMP/Payload/HermesLink.app/ish-rootfs.tar.gz"
           test -f "$RUNNER_TEMP/Payload/HermesLink.app/Info.plist"
           test -x "$RUNNER_TEMP/Payload/HermesLink.app/HermesLink"
           test -x "$RUNNER_TEMP/Payload/HermesLink.app/Frameworks/Ish.framework/Ish"
           test -x "$RUNNER_TEMP/Payload/HermesLink.app/Frameworks/HermesRuntime.framework/HermesRuntime"
           test -s "$RUNNER_TEMP/Payload/HermesLink.app/hermesrt.zip"
+          test -s "$RUNNER_TEMP/Payload/HermesLink.app/ish-rootfs.tar.gz"
 
       - name: Sign and package IPA
         run: |
@@ -794,6 +807,7 @@ jobs:
           unzip -Z1 "$RUNNER_TEMP/HermesLink.ipa" | grep -Fx 'Payload/HermesLink.app/Info.plist'
           unzip -Z1 "$RUNNER_TEMP/HermesLink.ipa" | grep -Fx 'Payload/HermesLink.app/HermesLink'
           unzip -Z1 "$RUNNER_TEMP/HermesLink.ipa" | grep -Fx 'Payload/HermesLink.app/hermesrt.zip'
+          unzip -Z1 "$RUNNER_TEMP/HermesLink.ipa" | grep -Fx 'Payload/HermesLink.app/ish-rootfs.tar.gz'
           unzip -Z1 "$RUNNER_TEMP/HermesLink.ipa" | grep -Fx 'Payload/HermesLink.app/Frameworks/HermesRuntime.framework/HermesRuntime'
           unzip -Z1 "$RUNNER_TEMP/HermesLink.ipa" | grep -Fx 'Payload/HermesLink.app/Frameworks/Ish.framework/Ish'
 
