@@ -392,11 +392,14 @@ jobs:
           bash hermes/build/package-ish-framework.sh \
             hermes/build/external/ish/lib \
             "$RUNNER_TEMP/ish-native-package/Frameworks"
+          mkdir -p "$RUNNER_TEMP/ish-native-package/Resources"
+          bash hermes/build/fetch-ish-source.sh --rootfs-only \
+            "$RUNNER_TEMP/ish-native-package/Resources/ish-rootfs.tar.gz"
 
       - name: Package iSH native build output
         run: |
           set -euo pipefail
-          (cd "$RUNNER_TEMP/ish-native-package" && zip -qry "$GITHUB_WORKSPACE/ISHLinuxNative.zip" Frameworks)
+          (cd "$RUNNER_TEMP/ish-native-package" && zip -qry "$GITHUB_WORKSPACE/ISHLinuxNative.zip" Frameworks Resources)
           unzip -t ISHLinuxNative.zip
 
       - name: Publish ISHLinuxNative.zip to fixed release
@@ -405,14 +408,9 @@ jobs:
         run: gh release upload "$HERMES_RUNTIME_RELEASE_TAG" ISHLinuxNative.zip --clobber
 
   build-app:
-    name: Build HermesLink app without hermesrt.zip & native HermesRuntime.framework (macOS)
-    needs: [decide, prepare-release, build-ish-runtime]
-    if: >-
-      always() &&
-      needs.decide.outputs.run_app == 'true' &&
-      needs.prepare-release.result == 'success' &&
-      (needs.build-ish-runtime.result == 'success' ||
-       (needs.build-ish-runtime.result == 'skipped' && needs.decide.outputs.run_ish_runtime != 'true'))
+    name: Build HermesLink app without runtime assets (macOS)
+    needs: [decide, prepare-release]
+    if: needs.decide.outputs.run_app == 'true' && needs.prepare-release.result == 'success'
     runs-on: macos-latest
     permissions:
       contents: write
@@ -453,27 +451,48 @@ jobs:
             <key>CFBundlePackageType</key><string>FMWK</string>
           </dict></plist>
           EOF
+          mkdir -p Frameworks/Ish.framework
+          cat > "$RUNNER_TEMP/ish_runtime_stub.c" <<'EOF'
+          #include "ish_kernel_bridge.h"
+          int ish_configure(const char *storage_base, ish_log_handler log_handler) {
+            (void)storage_base;
+            (void)log_handler;
+            return ISH_RUN_OK;
+          }
+          int ish_kernel_ensure_booted(void) { return ISH_RUN_ERR_NOT_AVAILABLE; }
+          int ish_run_command(const char *command, int input_fd, int output_fd,
+                              int cols, int rows, int *exit_code_out) {
+            (void)command;
+            (void)input_fd;
+            (void)output_fd;
+            (void)cols;
+            (void)rows;
+            if (exit_code_out != NULL) *exit_code_out = 0;
+            return ISH_RUN_ERR_NOT_AVAILABLE;
+          }
+          EOF
+          xcrun --sdk iphoneos clang \
+            -target arm64-apple-ios16.1 \
+            -isysroot "$(xcrun --sdk iphoneos --show-sdk-path)" \
+            -I "$GITHUB_WORKSPACE/ISHBridge" \
+            -dynamiclib "$RUNNER_TEMP/ish_runtime_stub.c" \
+            -install_name '@rpath/Ish.framework/Ish' \
+            -o Frameworks/Ish.framework/Ish
+          cat > Frameworks/Ish.framework/Info.plist <<'EOF'
+          <?xml version="1.0" encoding="UTF-8"?>
+          <!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+          <plist version="1.0"><dict>
+            <key>CFBundleExecutable</key><string>Ish</string>
+            <key>CFBundleIdentifier</key><string>com.cyan.hermeslink.ish-link-stub</string>
+            <key>CFBundlePackageType</key><string>FMWK</string>
+          </dict></plist>
+          EOF
           printf 'runtime omitted from app component\n' > "$RUNNER_TEMP/runtime-stub.txt"
           (cd "$RUNNER_TEMP" && zip -q "$GITHUB_WORKSPACE/Resources/hermesrt.zip" runtime-stub.txt)
 
       - name: Set runtime-free app cache key
         id: runtime_hash
-        run: echo 'sha256=ish-native' >> "$GITHUB_OUTPUT"
-
-      - name: Install pinned iSH runtime and rootfs
-        env:
-          GH_TOKEN: ${{ github.token }}
-        run: |
-          set -euo pipefail
-          mkdir -p "$RUNNER_TEMP/ish-native-download" "$RUNNER_TEMP/ish-native-package"
-          gh release download "$HERMES_RUNTIME_RELEASE_TAG" \
-            --pattern ISHLinuxNative.zip \
-            --dir "$RUNNER_TEMP/ish-native-download"
-          unzip -q "$RUNNER_TEMP/ish-native-download/ISHLinuxNative.zip" \
-            -d "$RUNNER_TEMP/ish-native-package"
-          bash hermes/build/fetch-ish-source.sh --rootfs-only \
-            "$RUNNER_TEMP/ish-native-package/rootfs.tar.gz"
-          bash install_ish_runtime.sh "$RUNNER_TEMP/ish-native-package"
+        run: echo 'sha256=runtime-link-stubs' >> "$GITHUB_OUTPUT"
 
       - name: Cache unsigned app archive
         id: app_build_cache
@@ -573,9 +592,12 @@ jobs:
           set -euo pipefail
           app="$(find "$RUNNER_TEMP/HermesLink.xcarchive/Products/Applications" -maxdepth 1 -type d -name '*.app' -print -quit)"
           test -n "$app"
-          rm -rf "$app/Frameworks/HermesRuntime.framework" "$app/hermesrt.zip"
+          rm -rf "$app/Frameworks/HermesRuntime.framework" \
+            "$app/Frameworks/Ish.framework" "$app/hermesrt.zip" "$app/ish-rootfs.tar.gz"
           test ! -e "$app/Frameworks/HermesRuntime.framework"
+          test ! -e "$app/Frameworks/Ish.framework"
           test ! -e "$app/hermesrt.zip"
+          test ! -e "$app/ish-rootfs.tar.gz"
 
       - name: Package and publish runtime-free app
         run: |
@@ -584,11 +606,10 @@ jobs:
           test -n "$app"
           test -f "$app/Info.plist"
           test -x "$app/HermesLink"
-          test -x "$app/Frameworks/Ish.framework/Ish"
           mkdir -p "$RUNNER_TEMP/runtime-free-app"
           /usr/bin/ditto -c -k --sequesterRsrc --keepParent "$app" \
             "$RUNNER_TEMP/runtime-free-app/HermesLink.app.zip"
-          if unzip -Z1 "$RUNNER_TEMP/runtime-free-app/HermesLink.app.zip" | grep -E 'HermesRuntime\.framework|hermesrt\.zip'; then
+          if unzip -Z1 "$RUNNER_TEMP/runtime-free-app/HermesLink.app.zip" | grep -E 'HermesRuntime\.framework|Ish\.framework|hermesrt\.zip|ish-rootfs\.tar\.gz'; then
             echo "runtime-free app unexpectedly contains Hermes runtime assets" >&2
             exit 1
           fi
