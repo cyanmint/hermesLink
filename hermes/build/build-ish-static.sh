@@ -2,24 +2,11 @@
 # HermesLink AI-generated glue code; created by cyanmint's coding agent.
 # AI-generated content has no copyright holder and is not subject to copyright.
 #
-# Builds the pinned upstream iSH Linux-kernel-as-library target
-# (hermes/build/external/ish/source, fetched/verified by
-# hermes/build/fetch-ish-source.sh) into static libraries HermesLink's
-# Blink Xcode target links against (ISHBridge/*). This wraps the pinned
-# source's OWN Meson/Ninja + Xcode build-phase scripts
-# (app/xcode-meson.sh, app/xcode-ninja.sh) rather than re-implementing
-# iSH's kernel build, so we stay byte-for-byte on upstream's own build
-# logic for the actual Linux kernel compile.
+# Builds the pinned upstream iSH kernel. Linux cross-compiles the Meson/Ninja
+# archives; macOS builds the Xcode host-interop libraries and assembles them.
 #
-# Requirements: Xcode command line tools (clang targeting arm64-apple-ios,
-# `xcrun`, `xcodebuild`), Homebrew LLVM/LLD, Meson, and Ninja. This script
-# preflight-checks for them and fails with a clear, actionable message
-# instead of attempting a partial/likely-broken build when any are missing —
-# it does not attempt the Linux-hosted clang
-# cross-compile fallback that hermes/build/build-native-ios.sh uses for
-# CPython, because iSH's kernel build (deps/linux via Meson custom
-# targets) is far more tightly coupled to Xcode's own build environment
-# variables than a plain CPython ./configure cross-build is.
+# Linux Meson builds require Clang/LLD, Meson/Ninja, and the Theos iOS SDK.
+# The Xcode host-interop stage requires macOS, Xcode, and Homebrew LLVM/LLD.
 set -euo pipefail
 
 ROOT=$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)
@@ -52,7 +39,9 @@ command -v ninja >/dev/null 2>&1 || fail "requires Ninja; 'ninja' not found on P
 TOOLCHAIN_BIN="$BUILD_ROOT/ios-toolchain"
 mkdir -p "$TOOLCHAIN_BIN"
 HOST_OS=$(uname -s)
-if [ "$HOST_OS" = Darwin ]; then
+if [ "$BUILD_MODE" = "--xcode-only" ]; then
+  [ -x "$TOOLCHAIN_BIN/clang" ] && [ -x "$TOOLCHAIN_BIN/xcrun" ] || fail "missing Linux Meson toolchain artifact"
+elif [ "$HOST_OS" = Darwin ]; then
   command -v xcrun >/dev/null 2>&1 || fail "requires Xcode command line tools: 'xcrun' not found"
   if [ "$BUILD_MODE" != "--meson-only" ]; then
     command -v xcodebuild >/dev/null 2>&1 || fail "requires Xcode command line tools: 'xcodebuild' not found"
@@ -114,9 +103,13 @@ fi
 echo "unsupported Linux xcrun invocation: \$*" >&2
 exit 2
 EOF
+  cat > "$TOOLCHAIN_BIN/nm" <<EOF
+#!/bin/sh
+exec "$(command -v llvm-nm)" "\$@"
+EOF
 fi
 chmod +x "$TOOLCHAIN_BIN/clang"
-if [ "$HOST_OS" = Linux ]; then chmod +x "$TOOLCHAIN_BIN/xcrun"; fi
+if [ "$HOST_OS" = Linux ]; then chmod +x "$TOOLCHAIN_BIN/xcrun" "$TOOLCHAIN_BIN/nm"; fi
 export PATH="$TOOLCHAIN_BIN:$PATH"
 
 mkdir -p "$MESON_BUILD_DIR" "$OUTPUT_DIR"
@@ -135,20 +128,28 @@ export ISH_LOG
 export ISH_LOGGER
 export ISH_KERNEL=linux
 PRODUCTS_DIR="$BUILD_ROOT/xcode/Build/Products/$CONFIGURATION-iphoneos"
+MESON_ARCHIVES=(deps/liblinux.a libfakefs.a libish_emu.a)
+MESON_NINJA_TARGETS="${MESON_ARCHIVES[*]}"
+if [ "$BUILD_MODE" = "--xcode-only" ]; then
+  export NINJA_TARGETS="$MESON_NINJA_TARGETS"
+fi
 
 if [ "$BUILD_MODE" != "--xcode-only" ]; then
   echo "build-ish-static.sh: configuring (meson) ..."
   bash "$ISH_SOURCE/app/xcode-meson.sh"
 
-  echo "build-ish-static.sh: building (ninja) ..."
-  (cd "$MESON_BUILD_DIR" && bash "$ISH_SOURCE/app/xcode-ninja.sh")
+  echo "build-ish-static.sh: building Meson archives ..."
+  (cd "$MESON_BUILD_DIR" && bash "$ISH_SOURCE/app/xcode-ninja.sh" "${MESON_ARCHIVES[@]}")
+  if [ "$HOST_OS" = Linux ]; then
+    for archive in "${MESON_ARCHIVES[@]}"; do
+      llvm-ranlib "$MESON_BUILD_DIR/$archive"
+    done
+  fi
 fi
 
 if [ "$BUILD_MODE" = "--meson-only" ]; then
-  for archive in \
-    "$MESON_BUILD_DIR/deps/liblinux.a" \
-    "$MESON_BUILD_DIR/libfakefs.a" \
-    "$MESON_BUILD_DIR/libish_emu.a"; do
+  for archive in "${MESON_ARCHIVES[@]}"; do
+    archive="$MESON_BUILD_DIR/$archive"
     [ -s "$archive" ] || fail "required Meson iSH archive was not produced: $archive"
   done
   echo "build-ish-static.sh: Linux Meson stage produced the kernel, fakefs, and emulator archives"
@@ -172,6 +173,7 @@ for target in libiSHLinux libiSHLinuxUser; do
     ONLY_ACTIVE_ARCH=YES \
     CODE_SIGNING_ALLOWED=NO \
     CONFIGURATION_BUILD_DIR="$PRODUCTS_DIR" \
+    NINJA_TARGETS="$NINJA_TARGETS" \
     MESON_BUILD_DIR="$MESON_BUILD_DIR" \
     ISH_KERNEL=linux
 done

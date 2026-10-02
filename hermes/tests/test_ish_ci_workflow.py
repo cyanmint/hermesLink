@@ -23,6 +23,7 @@ class IshRuntimeWorkflowTests(unittest.TestCase):
 
     def test_workflow_file_is_valid_yaml(self) -> None:
         self.assertIn("build-ish-runtime", self.workflow["jobs"])
+        self.assertIn("build-ish-meson", self.workflow["jobs"])
 
     def test_decide_job_exposes_a_run_ish_runtime_output(self) -> None:
         outputs = self.workflow["jobs"]["decide"]["outputs"]
@@ -33,6 +34,21 @@ class IshRuntimeWorkflowTests(unittest.TestCase):
         self.assertEqual(job["runs-on"], "macos-latest")
         self.assertFalse(job.get("continue-on-error", False))
         self.assertIn("run_ish_runtime", str(job["if"]))
+
+    def test_ish_meson_archives_are_cross_compiled_and_uploaded_on_linux(self) -> None:
+        job = self.workflow["jobs"]["build-ish-meson"]
+        self.assertEqual(job["runs-on"], "ubuntu-latest")
+        steps_text = str(job["steps"])
+        self.assertIn("build-ish-static.sh --meson-only", steps_text)
+        self.assertIn("actions/upload-artifact@v7", steps_text)
+        self.assertIn("include-hidden-files", steps_text)
+
+    def test_macos_ish_job_downloads_linux_archives_and_builds_xcode_targets(self) -> None:
+        job = self.workflow["jobs"]["build-ish-runtime"]
+        self.assertIn("build-ish-meson", job["needs"])
+        steps_text = str(job["steps"])
+        self.assertIn("actions/download-artifact@v7", steps_text)
+        self.assertIn("build-ish-static.sh --xcode-only", steps_text)
 
     def test_ish_runtime_job_is_required_for_app_archive_and_ipa(self) -> None:
         for job_name in ("build-app", "assemble-ipa"):

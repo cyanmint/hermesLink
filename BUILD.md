@@ -126,14 +126,17 @@ registered alongside `terminal` in the standard Hermes bundles. The design:
   every standard Hermes bundle that already includes `terminal` —
   `hermes-cli`, `hermes-telegram`, the `coding` posture, etc. — picks up
   `ish` the same way.
-- **Native build** — `hermes/build/build-ish-static.sh` runs upstream's Meson
-  and Ninja build phases and builds its iOS host-interoperability Xcode
-  targets. `install_ish_runtime.sh` installs the resulting upstream
+- **Native build** — the Linux `build-ish-meson` CI stage cross-compiles the
+  upstream kernel, fakefs, and emulator Meson/Ninja archives for iOS, then
+  transfers the complete build tree to the macOS `build-ish-runtime` stage.
+  That stage reuses those archives and builds only the iOS host-interoperability
+  Xcode targets. `install_ish_runtime.sh` installs the resulting upstream
   `libiSHLinux.a`, `libiSHLinuxUser.a`, `liblinux.a`, `libfakefs.a`, and
-  `libish_emu.a` archives together with the pinned rootfs. The macOS
-  `build-ish-runtime` CI job publishes the
-  libraries as `ISHLinuxNative.zip`; the app job downloads and installs them,
-  enables `ISH_NATIVE_AVAILABLE=YES`, and archives the real kernel bridge.
+  `libish_emu.a` archives together with the pinned rootfs. The macOS job
+  publishes the libraries as `ISHLinuxNative.zip`; the app job downloads and
+  installs them, enables `ISH_NATIVE_AVAILABLE=YES`, and archives the real
+  kernel bridge. Native HermesRuntime.framework is also cross-compiled on
+  Linux; the Xcode app archive and IPA assembly remain macOS jobs.
   The native kernel build is mandatory for app/IPA jobs. Its first successful
   end-to-end CI run is still required to validate the exact Xcode/Meson output
   and final app link.

@@ -2,6 +2,8 @@ import importlib.util
 import unittest
 from pathlib import Path
 
+import yaml
+
 
 SCRIPT_PATH = Path(__file__).resolve().parents[1] / "build" / "generate-native-module-registry.py"
 SPEC = importlib.util.spec_from_file_location("native_module_registry", SCRIPT_PATH)
@@ -69,6 +71,19 @@ class NativeModuleRegistryTests(unittest.TestCase):
                 f"needs.{job}.result == 'success' || needs.{job}.result == 'skipped'",
                 workflow,
             )
+
+    def test_native_runtime_cross_compiles_on_linux_and_uses_portable_zip(self):
+        workflow_path = (
+            Path(__file__).resolve().parents[2] / ".github" / "workflows" / "build.yml"
+        )
+        workflow = yaml.safe_load(workflow_path.read_text(encoding="utf-8"))
+        job = workflow["jobs"]["build-native-runtime"]
+        self.assertEqual(job["runs-on"], "ubuntu-latest")
+        steps_text = str(job["steps"])
+        self.assertIn("actions/setup-python@v7", steps_text)
+        self.assertIn("clang lld llvm", steps_text)
+        self.assertIn("zip -qry", steps_text)
+        self.assertNotIn("ditto", steps_text)
 
     def test_ios_async_system_module_streams_output_and_cancels_native_thread(self):
         source_path = (

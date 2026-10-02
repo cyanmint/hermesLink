@@ -217,22 +217,26 @@ jobs:
         run: gh release upload "$HERMES_RUNTIME_RELEASE_TAG" hermes/hermesrt.zip --clobber
 
   build-native-runtime:
-    name: Build native iOS runtime (macOS)
+    name: Build native iOS runtime (Linux cross-compile)
     needs: [decide, prepare-release]
     if: needs.decide.outputs.run_native_runtime == 'true'
-    runs-on: macos-latest
+    runs-on: ubuntu-latest
     permissions:
       contents: write
     steps:
       - name: Check out HermesLink
         uses: actions/checkout@v7
-        with:
-          submodules: true
 
-      - name: Install uv
-        uses: astral-sh/setup-uv@v10.2.0
+      - name: Install Linux iOS cross-compilation tools
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y clang lld llvm
+
+      - name: Set up host Python
+        id: host-python
+        uses: actions/setup-python@v7
         with:
-          enable-cache: false
+          python-version: '3.13'
 
       - name: Cache Hermes compilation
         uses: actions/cache@v6
@@ -248,6 +252,7 @@ jobs:
           IPHONEOS_DEPLOYMENT_TARGET: '16.1'
           HERMES_BUILD_RUNTIME_ZIP: '0'
           JOBS: 4
+          HOST_PYTHON: ${{ steps.host-python.outputs.python-path }}
         run: |
           set -euo pipefail
           chmod +x hermes/build/*.sh
@@ -257,9 +262,8 @@ jobs:
       - name: Package native framework
         run: |
           set -euo pipefail
-          ditto -c -k --sequesterRsrc --keepParent \
-            hermes/Frameworks/HermesRuntime.framework \
-            hermes/HermesRuntime.framework.zip
+          (cd hermes/Frameworks && \
+            zip -qry "$GITHUB_WORKSPACE/hermes/HermesRuntime.framework.zip" HermesRuntime.framework)
           unzip -t hermes/HermesRuntime.framework.zip
 
       - name: Publish HermesRuntime.framework.zip to fixed release
@@ -267,9 +271,55 @@ jobs:
           GH_TOKEN: ${{ github.token }}
         run: gh release upload "$HERMES_RUNTIME_RELEASE_TAG" hermes/HermesRuntime.framework.zip --clobber
 
+  build-ish-meson:
+    name: Cross-compile iSH Meson archives (Linux)
+    needs: [decide, prepare-release]
+    if: needs.decide.outputs.run_ish_runtime == 'true'
+    runs-on: ubuntu-latest
+    steps:
+      - name: Check out HermesLink
+        uses: actions/checkout@v7
+
+      - name: Install Linux iOS cross-compilation tools
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y clang lld llvm meson ninja-build
+
+      - name: Fetch pinned iSH source and Alpine rootfs
+        run: |
+          set -euo pipefail
+          chmod +x hermes/build/*.sh
+          bash hermes/build/fetch-ish-source.sh /tmp/hermeslink-ish
+
+      - name: Cache iSH Meson build
+        uses: actions/cache@v6
+        with:
+          path: /tmp/hermeslink-ish/build
+          key: ${{ runner.os }}-hermes-ish-meson-ios16.5-${{ hashFiles('hermes/build/build-ish-static.sh', 'hermes/build/external/SOURCES') }}
+
+      - name: Build iSH Meson archives
+        env:
+          BUILD_ROOT: /tmp/hermeslink-ish/build
+          MESON_BUILD_DIR: /tmp/hermeslink-ish/build/meson
+          ISH_SOURCE: /tmp/hermeslink-ish/source
+          IOS_SDK_VERSION: '16.5'
+          IPHONEOS_DEPLOYMENT_TARGET: '16.1'
+        run: bash hermes/build/build-ish-static.sh --meson-only
+
+      - name: Upload iSH Meson build for Xcode stage
+        uses: actions/upload-artifact@v7
+        with:
+          name: ish-meson-build
+          path: |
+            /tmp/hermeslink-ish/build/meson
+            /tmp/hermeslink-ish/build/ios-toolchain
+            /tmp/hermeslink-ish/build/sdks/iPhoneOS16.5.sdk
+          include-hidden-files: true
+          if-no-files-found: error
+
   build-ish-runtime:
     name: Build iSH native static libraries (macOS)
-    needs: [decide, prepare-release]
+    needs: [decide, prepare-release, build-ish-meson]
     if: needs.decide.outputs.run_ish_runtime == 'true'
     runs-on: macos-latest
     permissions:
@@ -285,19 +335,21 @@ jobs:
         run: |
           set -euo pipefail
           chmod +x hermes/build/*.sh
-          bash hermes/build/fetch-ish-source.sh
+          bash hermes/build/fetch-ish-source.sh /tmp/hermeslink-ish
 
-      - name: Cache iSH Meson build
-        uses: actions/cache@v6
+      - name: Download Linux iSH Meson build
+        uses: actions/download-artifact@v7
         with:
-          path: ${{ runner.temp }}/hermes-build/ish-native
-          key: ${{ runner.os }}-hermes-ish-${{ hashFiles('hermes/build/build-ish-static.sh', 'hermes/build/external/SOURCES') }}
+          name: ish-meson-build
+          path: /tmp/hermeslink-ish/build
 
-      - name: Build iSH static libraries
+      - name: Build iSH Xcode host-interop libraries
         env:
-          BUILD_ROOT: ${{ runner.temp }}/hermes-build/ish-native
+          BUILD_ROOT: /tmp/hermeslink-ish/build
+          MESON_BUILD_DIR: /tmp/hermeslink-ish/build/meson
+          ISH_SOURCE: /tmp/hermeslink-ish/source
           IPHONEOS_DEPLOYMENT_TARGET: '16.1'
-        run: bash hermes/build/build-ish-static.sh
+        run: bash hermes/build/build-ish-static.sh --xcode-only
 
       - name: Package iSH native build output
         run: |

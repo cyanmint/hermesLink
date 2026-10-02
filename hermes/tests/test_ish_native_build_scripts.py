@@ -33,6 +33,9 @@ class BuildIshStaticScriptTests(unittest.TestCase):
         self.assertIn("command -v meson", source)
         self.assertIn("command -v ninja", source)
         self.assertIn("xcrun --sdk iphoneos --find clang", source)
+        self.assertIn("BUILD_MODE=${1:-all}", source)
+        self.assertIn('--meson-only', source)
+        self.assertIn('--xcode-only', source)
 
     def test_script_builds_upstream_kernel_and_host_interop_targets(self) -> None:
         source = BUILD_SCRIPT.read_text(encoding="utf-8")
@@ -48,11 +51,14 @@ class BuildIshStaticScriptTests(unittest.TestCase):
         self.assertIn('libfakefs.a', source)
         self.assertIn('libish_emu.a', source)
         self.assertIn("ISH_KERNEL=linux", source)
-        self.assertIn("SDKROOT=$(xcrun --sdk iphoneos --show-sdk-path)", source)
+        self.assertIn("xcrun --sdk iphoneos --show-sdk-path", source)
         self.assertIn('exec "$LLVM_BIN/clang" -isysroot "$SDKROOT"', source)
         self.assertIn('-miphoneos-version-min="$IPHONEOS_DEPLOYMENT_TARGET"', source)
         self.assertIn('PATH="$TOOLCHAIN_BIN:$PATH"', source)
         self.assertIn('PATH="$LLVM_BIN:$LLD_BIN:$PATH"', source)
+        self.assertIn("--target=arm64-apple-ios${IPHONEOS_DEPLOYMENT_TARGET}", source)
+        self.assertIn('llvm-ranlib "$MESON_BUILD_DIR/$archive"', source)
+        self.assertIn('NINJA_TARGETS="$NINJA_TARGETS"', source)
         self.assertIn("brew --prefix llvm", source)
         self.assertIn("brew --prefix lld", source)
 
