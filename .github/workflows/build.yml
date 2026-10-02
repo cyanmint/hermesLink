@@ -927,6 +927,21 @@ jobs:
           if [ -d "$base_lproj" ]; then
             test -s "$base_lproj/Info.plist"
           fi
+          locales_bundle="$RUNNER_TEMP/Payload/HermesLink.app/locales.bundle"
+          if [ -d "$locales_bundle" ] && [ ! -f "$locales_bundle/Info.plist" ]; then
+            cat > "$locales_bundle/Info.plist" <<'EOF'
+          <?xml version="1.0" encoding="UTF-8"?>
+          <!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+          <plist version="1.0"><dict>
+            <key>CFBundleIdentifier</key><string>com.cyan.hermeslink.locales</string>
+            <key>CFBundleName</key><string>locales</string>
+            <key>CFBundlePackageType</key><string>BNDL</string>
+          </dict></plist>
+          EOF
+          fi
+          if [ -d "$locales_bundle" ]; then
+            test -s "$locales_bundle/Info.plist"
+          fi
 
       - name: Sign and package IPA
         run: |
