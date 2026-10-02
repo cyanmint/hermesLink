@@ -880,7 +880,7 @@ jobs:
           while IFS= read -r -d '' extension; do
             codesign --force --sign - --timestamp=none "$extension"
           done < <(find "$app/PlugIns" -type d -name '*.appex' -prune -print0)
-          codesign --force --sign - --timestamp=none "$app"
+          codesign --force --deep --sign - --timestamp=none "$app"
           while IFS= read -r -d '' bundle; do
             if [ -f "$bundle/Info.plist" ] &&
               [ "$(/usr/libexec/PlistBuddy -c 'Print :CFBundlePackageType' "$bundle/Info.plist" 2>/dev/null || true)" = BNDL ]; then

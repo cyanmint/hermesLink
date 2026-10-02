@@ -223,9 +223,9 @@ class IshRuntimeWorkflowTests(unittest.TestCase):
         self.assertIn("set -x", signing_text)
         self.assertLess(signing_text.index(bundle_signing), signing_text.index(framework_signing))
         self.assertLess(signing_text.index(framework_signing), signing_text.index(extension_signing))
-        self.assertIn('codesign --force --sign - --timestamp=none "$app"', signing_text)
+        self.assertIn('codesign --force --deep --sign - --timestamp=none "$app"', signing_text)
         self.assertEqual(signing_text.count("codesign --verify --strict --verbose=2"), 3)
-        self.assertNotIn("codesign --deep", signing_text)
+        self.assertNotIn("codesign --verify --deep", signing_text)
         self.assertNotIn('codesign --verify --verbose=2 "$app"', signing_text)
 
     def test_all_e2e_jobs_are_optional_and_start_only_after_ipa_assembly(self) -> None:
