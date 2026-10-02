@@ -156,6 +156,9 @@ jobs:
             ish_xcode_auto=true
           fi
           run_ish_runtime="$(choose "$ISH_RUNTIME_OVERRIDE" "$ish_xcode_auto")"
+          if [ "$run_ish_runtime" = true ]; then
+            app_changed=true
+          fi
           run_app="$(choose "$APP_OVERRIDE" "$app_changed")"
           printf 'python_runtime_changed=%s native_runtime_changed=%s ish_meson_changed=%s ish_xcode_changed=%s app_changed=%s\n' \
             "$python_runtime_changed" "$native_runtime_changed" "$ish_meson_changed" "$ish_xcode_changed" "$app_changed"

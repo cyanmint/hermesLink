@@ -75,6 +75,10 @@ class IshRuntimeWorkflowTests(unittest.TestCase):
             with self.subTest(job=job_name):
                 needs = self.workflow["jobs"][job_name].get("needs", [])
                 self.assertIn("build-ish-runtime", needs)
+        self.assertRegex(
+            self.text,
+            r'if \[ "\$run_ish_runtime" = true \]; then\n\s+app_changed=true\n\s+fi',
+        )
 
     def test_requested_ish_build_cannot_be_treated_as_a_skipped_optional_stage(self) -> None:
         app_condition = self.workflow["jobs"]["build-app"]["if"]
