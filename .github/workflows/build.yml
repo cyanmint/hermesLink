@@ -506,7 +506,7 @@ jobs:
         id: runtime_hash
         run: echo 'sha256=runtime-link-stubs' >> "$GITHUB_OUTPUT"
 
-      - name: Cache ad-hoc signed app archive
+      - name: Cache unsigned app archive
         id: app_build_cache
         uses: actions/cache@v6
         with:
@@ -537,7 +537,7 @@ jobs:
           cp template_setup.xcconfig developer_setup.xcconfig
           printf '\nISH_NATIVE_AVAILABLE = YES\n' >> developer_setup.xcconfig
 
-      - name: Build ad-hoc signed device archive
+      - name: Build unsigned device archive
         if: steps.app_build_cache.outputs.cache-hit != 'true'
         run: |
           set -o pipefail
@@ -548,10 +548,9 @@ jobs:
             -configuration Debug \
             -archivePath "$RUNNER_TEMP/HermesLink.xcarchive" \
             IPHONEOS_DEPLOYMENT_TARGET='16.1' \
-            CODE_SIGN_IDENTITY=- \
+            CODE_SIGN_IDENTITY='' \
             CODE_SIGNING_REQUIRED=NO \
-            CODE_SIGNING_ALLOWED=YES \
-            OTHER_CODE_SIGN_FLAGS=--deep \
+            CODE_SIGNING_ALLOWED=NO \
             ONLY_ACTIVE_ARCH=NO | tee "$RUNNER_TEMP/hermeslink-archive.log" | xcpretty
 
       - name: Show raw Xcode linker diagnostics
@@ -583,7 +582,7 @@ jobs:
               print(lines[index])
           PY
 
-      - name: Validate cached ad-hoc signed device archive
+      - name: Validate cached unsigned device archive
         if: steps.app_build_cache.outputs.cache-hit == 'true'
         run: |
           set -euo pipefail
