@@ -84,6 +84,7 @@ export CONFIGURATION
 export ISH_LOG
 export ISH_LOGGER
 export ISH_KERNEL=linux
+PRODUCTS_DIR="$BUILD_ROOT/xcode/Build/Products/$CONFIGURATION-iphoneos"
 
 echo "build-ish-static.sh: configuring (meson) ..."
 bash "$ISH_SOURCE/app/xcode-meson.sh"
@@ -101,15 +102,14 @@ for target in libiSHLinux libiSHLinuxUser; do
     -target "$target" \
     -configuration "$CONFIGURATION" \
     -sdk iphoneos \
-    -derivedDataPath "$BUILD_ROOT/xcode" \
     ARCHS="$ARCHS" \
     ONLY_ACTIVE_ARCH=YES \
     CODE_SIGNING_ALLOWED=NO \
+    CONFIGURATION_BUILD_DIR="$PRODUCTS_DIR" \
     MESON_BUILD_DIR="$MESON_BUILD_DIR" \
     ISH_KERNEL=linux
 done
 
-PRODUCTS_DIR="$BUILD_ROOT/xcode/Build/Products/$CONFIGURATION-iphoneos"
 for archive in \
   "$PRODUCTS_DIR/libiSHLinux.a" \
   "$PRODUCTS_DIR/libiSHLinuxUser.a" \
