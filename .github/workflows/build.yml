@@ -516,6 +516,35 @@ jobs:
             CODE_SIGNING_ALLOWED=NO \
             ONLY_ACTIVE_ARCH=NO | tee "$RUNNER_TEMP/hermeslink-archive.log" | xcpretty
 
+      - name: Show raw Xcode linker diagnostics
+        if: failure()
+        run: |
+          python3 - "$RUNNER_TEMP/hermeslink-archive.log" <<'PY'
+          from pathlib import Path
+          import sys
+
+          log = Path(sys.argv[1])
+          if not log.is_file():
+              print(f"Xcode archive log was not created: {log}")
+              raise SystemExit(0)
+          lines = log.read_text(encoding="utf-8", errors="replace").splitlines()
+          markers = (
+              "Undefined symbols for architecture",
+              "symbol(s) not found for architecture",
+              "ld: error:",
+              "clang: error:",
+          )
+          selected = set()
+          for index, line in enumerate(lines):
+              if any(marker in line for marker in markers):
+                  selected.update(range(max(0, index - 8), min(len(lines), index + 32)))
+          if not selected:
+              print("No raw linker error markers found; final Xcode output follows:")
+              selected.update(range(max(0, len(lines) - 100), len(lines)))
+          for index in sorted(selected):
+              print(lines[index])
+          PY
+
       - name: Validate cached unsigned device archive
         if: steps.app_build_cache.outputs.cache-hit == 'true'
         run: |

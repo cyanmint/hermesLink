@@ -25,6 +25,19 @@ class IshRuntimeWorkflowTests(unittest.TestCase):
         self.assertIn("build-ish-runtime", self.workflow["jobs"])
         self.assertIn("build-ish-meson", self.workflow["jobs"])
 
+    def test_app_build_failures_emit_raw_xcode_linker_diagnostics(self) -> None:
+        app_steps = self.workflow["jobs"]["build-app"]["steps"]
+        diagnostic_step = next(
+            step for step in app_steps if step["name"] == "Show raw Xcode linker diagnostics"
+        )
+        self.assertEqual(diagnostic_step["if"], "failure()")
+        for marker in (
+            "Undefined symbols for architecture",
+            "symbol(s) not found for architecture",
+            "ld: error:",
+        ):
+            self.assertIn(marker, diagnostic_step["run"])
+
     def test_decide_job_exposes_a_run_ish_runtime_output(self) -> None:
         outputs = self.workflow["jobs"]["decide"]["outputs"]
         self.assertIn("run_ish_meson", outputs)
