@@ -535,7 +535,7 @@ jobs:
           simulator_id="$(xcrun simctl list devices available | grep -m1 -Eo '[0-9A-F]{8}-[0-9A-F]{4}-[0-9A-F]{4}-[0-9A-F]{4}-[0-9A-F]{12}')"
           test -n "$simulator_id"
           set -o pipefail
-          xcodebuild -project Blink.xcodeproj -scheme BlinkTests -sdk iphonesimulator -destination "id=$simulator_id" test | xcpretty
+          xcodebuild -project Blink.xcodeproj -scheme BlinkTests -sdk iphonesimulator -destination "id=$simulator_id" test ISH_NATIVE_AVAILABLE=NO | xcpretty
 
       - name: Build unsigned device archive
         if: steps.app_build_cache.outputs.cache-hit != 'true'

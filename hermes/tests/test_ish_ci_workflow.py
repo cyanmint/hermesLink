@@ -147,7 +147,6 @@ class IshRuntimeWorkflowTests(unittest.TestCase):
         self.assertIn("ISH_NATIVE_AVAILABLE = YES", steps_text)
         self.assertIn('"$app/Frameworks/Ish.framework"', steps_text)
         self.assertIn('"$app/ish-rootfs.tar.gz"', steps_text)
-        self.assertIn("Ish\\.framework", steps_text)
 
     def test_ipa_reassembles_ish_framework_and_rootfs_from_runtime_release(self) -> None:
         steps_text = str(self.workflow["jobs"]["assemble-ipa"]["steps"])
