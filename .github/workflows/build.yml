@@ -853,6 +853,24 @@ jobs:
             -d "$RUNNER_TEMP/Payload/HermesLink.app/Frameworks"
           install -m 644 "$RUNNER_TEMP/hermeslink-components/hermesrt.zip" \
             "$RUNNER_TEMP/Payload/HermesLink.app/hermesrt.zip"
+          locales_bundle="$RUNNER_TEMP/Payload/HermesLink.app/locales.bundle"
+          if [ -d "$locales_bundle" ] && [ ! -f "$locales_bundle/Info.plist" ]; then
+            cat > "$locales_bundle/Info.plist" <<'EOF'
+          <?xml version="1.0" encoding="UTF-8"?>
+          <!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+          <plist version="1.0">
+          <dict>
+            <key>CFBundleIdentifier</key>
+            <string>com.cyan.hermeslink.locales</string>
+            <key>CFBundleName</key>
+            <string>locales</string>
+            <key>CFBundlePackageType</key>
+            <string>BNDL</string>
+          </dict>
+          </plist>
+          EOF
+          fi
+          test -f "$locales_bundle/Info.plist"
           test -f "$RUNNER_TEMP/Payload/HermesLink.app/Info.plist"
           test -x "$RUNNER_TEMP/Payload/HermesLink.app/HermesLink"
           test -x "$RUNNER_TEMP/Payload/HermesLink.app/Frameworks/Ish.framework/Ish"
@@ -873,6 +891,7 @@ jobs:
           unzip -Z1 "$RUNNER_TEMP/HermesLink.ipa" | grep -Fx 'Payload/HermesLink.app/HermesLink'
           unzip -Z1 "$RUNNER_TEMP/HermesLink.ipa" | grep -Fx 'Payload/HermesLink.app/hermesrt.zip'
           unzip -Z1 "$RUNNER_TEMP/HermesLink.ipa" | grep -Fx 'Payload/HermesLink.app/ish-rootfs.tar.gz'
+          unzip -Z1 "$RUNNER_TEMP/HermesLink.ipa" | grep -Fx 'Payload/HermesLink.app/locales.bundle/Info.plist'
           unzip -Z1 "$RUNNER_TEMP/HermesLink.ipa" | grep -Fx 'Payload/HermesLink.app/Frameworks/HermesRuntime.framework/HermesRuntime'
           unzip -Z1 "$RUNNER_TEMP/HermesLink.ipa" | grep -Fx 'Payload/HermesLink.app/Frameworks/Ish.framework/Ish'
 
