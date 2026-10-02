@@ -205,6 +205,14 @@ class IshRuntimeWorkflowTests(unittest.TestCase):
         self.assertIn('base_lproj/Info.plist', steps_text)
         self.assertIn('locales_bundle/Info.plist', steps_text)
 
+    def test_signed_app_and_final_ipa_retain_the_bundle_identifier(self) -> None:
+        steps_text = str(self.workflow["jobs"]["assemble-ipa"]["steps"])
+        self.assertGreaterEqual(steps_text.count("Print :CFBundleIdentifier"), 3)
+        self.assertIn("unzip -p", steps_text)
+        self.assertIn("HermesLink-IPA-Info.plist", steps_text)
+        self.assertIn("Payload/HermesLink.app/Info.plist", steps_text)
+        self.assertIn("com.hermeslink.app", steps_text)
+
     def test_all_test_jobs_are_opt_in_and_run_only_after_ipa_assembly(self) -> None:
         jobs = self.workflow["jobs"]
         workflow_dispatch = self.workflow.get("on", self.workflow.get(True))["workflow_dispatch"]

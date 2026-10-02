@@ -958,9 +958,16 @@ jobs:
           codesign --force --sign - --timestamp=none "$app/Frameworks/HermesRuntime.framework"
           codesign --force --deep --sign - --timestamp=none "$app"
           codesign --verify --deep --strict --verbose=2 "$app"
+          test "$(/usr/libexec/PlistBuddy -c 'Print :CFBundleIdentifier' "$app/Info.plist")" = \
+            'com.hermeslink.app'
           rm -f "$RUNNER_TEMP/HermesLink.ipa"
           (cd "$RUNNER_TEMP" && /usr/bin/zip -qry -X HermesLink.ipa Payload)
           unzip -Z1 "$RUNNER_TEMP/HermesLink.ipa" | grep -Fx 'Payload/HermesLink.app/Info.plist'
+          unzip -p "$RUNNER_TEMP/HermesLink.ipa" Payload/HermesLink.app/Info.plist \
+            > "$RUNNER_TEMP/HermesLink-IPA-Info.plist"
+          plutil -lint "$RUNNER_TEMP/HermesLink-IPA-Info.plist"
+          test "$(/usr/libexec/PlistBuddy -c 'Print :CFBundleIdentifier' \
+            "$RUNNER_TEMP/HermesLink-IPA-Info.plist")" = 'com.hermeslink.app'
           unzip -Z1 "$RUNNER_TEMP/HermesLink.ipa" | grep -Fx 'Payload/HermesLink.app/HermesLink'
           unzip -Z1 "$RUNNER_TEMP/HermesLink.ipa" | grep -Fx 'Payload/HermesLink.app/hermesrt.zip'
           unzip -Z1 "$RUNNER_TEMP/HermesLink.ipa" | grep -Fx 'Payload/HermesLink.app/ish-rootfs.tar.gz'
