@@ -147,7 +147,7 @@ PY
   PATH="$TOOLBIN:/usr/bin:/bin" CC=arm64-apple-ios-clang AR=arm64-apple-ios-ar RANLIB=arm64-apple-ios-ranlib \
     CPPFLAGS="-DOPENSSL_THREADS -I$OPENSSL_INSTALL/include" \
     LDFLAGS="-L$OPENSSL_INSTALL/lib" \
-    LIBS="$TARGET_ROOT/ios_compat.o -lssl -lcrypto" \
+    LIBS="$TARGET_ROOT/ios_compat.o -lssl -lcrypto -lsqlite3 -lz" \
     py_cv_module__lzma=n/a py_cv_module__bz2=n/a py_cv_module__dbm=n/a \
     py_cv_module__gdbm=n/a py_cv_module_readline=n/a py_cv_module__curses=n/a \
     py_cv_module__curses_panel=n/a py_cv_module__blake2=n/a py_cv_module__ctypes=n/a \

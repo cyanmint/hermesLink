@@ -33,6 +33,7 @@ class NativeModuleRegistryTests(unittest.TestCase):
 
         self.assertIn("--enable-framework", build_script)
         self.assertNotIn("--disable-framework", build_script)
+        self.assertIn("-lsqlite3 -lz", build_script)
         self.assertIn("Modules/_hacl/Hacl_Hash_SHA2.o", build_script)
         self.assertIn('find Modules/expat -maxdepth 1 -type f -name \'*.c\'', build_script)
         self.assertIn('"$LLVM_AR" rcs Modules/expat/libexpat.a', build_script)

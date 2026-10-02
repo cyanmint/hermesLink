@@ -44,6 +44,8 @@ class BuildIshStaticScriptTests(unittest.TestCase):
         self.assertIn('deps/liblinux.a', source)
         self.assertIn("ISH_KERNEL=linux", source)
         self.assertIn("SDKROOT=$(xcrun --sdk iphoneos --show-sdk-path)", source)
+        self.assertIn("-isysroot $SDKROOT", source)
+        self.assertIn("-miphoneos-version-min=$IPHONEOS_DEPLOYMENT_TARGET", source)
         self.assertIn('PATH="$LLVM_BIN:$LLD_BIN:$PATH"', source)
         self.assertIn("brew --prefix llvm", source)
         self.assertIn("brew --prefix lld", source)

@@ -73,6 +73,7 @@ export ISH_LOGGER
 export ISH_KERNEL=linux
 
 echo "build-ish-static.sh: configuring (meson) ..."
+export CFLAGS="${CFLAGS:+$CFLAGS }-isysroot $SDKROOT -miphoneos-version-min=$IPHONEOS_DEPLOYMENT_TARGET"
 bash "$ISH_SOURCE/app/xcode-meson.sh"
 
 echo "build-ish-static.sh: building (ninja) ..."
