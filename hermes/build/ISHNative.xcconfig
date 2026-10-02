@@ -21,7 +21,7 @@ ISH_EXCLUDED_SOURCES_YES = ish_kernel_bridge_stub.m
 EXCLUDED_SOURCE_FILE_NAMES = $(inherited) $(ISH_EXCLUDED_SOURCES_$(ISH_NATIVE_AVAILABLE))
 
 ISH_LDFLAGS_NO =
-ISH_LDFLAGS_YES = -llinux -liSHLinux -liSHLinuxUser
+ISH_LDFLAGS_YES = -llinux -liSHLinux -liSHLinuxUser -lfakefs -lish_emu
 OTHER_LDFLAGS = $(inherited) $(ISH_LDFLAGS_$(ISH_NATIVE_AVAILABLE))
 
 ISH_LIBRARY_SEARCH_PATHS_NO =

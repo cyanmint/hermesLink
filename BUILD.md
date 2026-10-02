@@ -129,8 +129,9 @@ registered alongside `terminal` in the standard Hermes bundles. The design:
 - **Native build** — `hermes/build/build-ish-static.sh` runs upstream's Meson
   and Ninja build phases and builds its iOS host-interoperability Xcode
   targets. `install_ish_runtime.sh` installs the resulting upstream
-  `libiSHLinux.a`, `libiSHLinuxUser.a`, and `liblinux.a` archives together with
-  the pinned rootfs. The macOS `build-ish-runtime` CI job publishes the
+  `libiSHLinux.a`, `libiSHLinuxUser.a`, `liblinux.a`, `libfakefs.a`, and
+  `libish_emu.a` archives together with the pinned rootfs. The macOS
+  `build-ish-runtime` CI job publishes the
   libraries as `ISHLinuxNative.zip`; the app job downloads and installs them,
   enables `ISH_NATIVE_AVAILABLE=YES`, and archives the real kernel bridge.
   The native kernel build is mandatory for app/IPA jobs. Its first successful

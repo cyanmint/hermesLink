@@ -101,8 +101,19 @@ PRODUCTS_DIR="$BUILD_ROOT/xcode/Build/Products/$CONFIGURATION-iphoneos"
 for archive in \
   "$PRODUCTS_DIR/libiSHLinux.a" \
   "$PRODUCTS_DIR/libiSHLinuxUser.a" \
-  "$MESON_BUILD_DIR/deps/liblinux.a"; do
+  "$MESON_BUILD_DIR/deps/liblinux.a" \
+  "$MESON_BUILD_DIR/libfakefs.a" \
+  "$MESON_BUILD_DIR/libish_emu.a"; do
   [ -s "$archive" ] || fail "required upstream iSH archive was not produced: $archive"
+done
+
+rm -f "$OUTPUT_DIR"/*.a "$OUTPUT_DIR/LinuxInterop.h"
+for archive in \
+  "$PRODUCTS_DIR/libiSHLinux.a" \
+  "$PRODUCTS_DIR/libiSHLinuxUser.a" \
+  "$MESON_BUILD_DIR/deps/liblinux.a" \
+  "$MESON_BUILD_DIR/libfakefs.a" \
+  "$MESON_BUILD_DIR/libish_emu.a"; do
   cp "$archive" "$OUTPUT_DIR/"
   echo "build-ish-static.sh: collected $(basename "$archive")"
 done

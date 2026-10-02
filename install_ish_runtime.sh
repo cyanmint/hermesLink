@@ -9,8 +9,8 @@
 # role for the Python runtime: this script places already-built artifacts
 # where the Blink target expects them; it does not build anything itself.
 #
-# build-ish-static.sh exports the pinned upstream iSH Xcode host bridge,
-# user-emulation archive, and Linux kernel archive under their upstream names.
+# build-ish-static.sh exports the pinned upstream iSH host bridge,
+# user-emulation, Linux kernel, fakefs, and emulator archives.
 # Require this exact set so the Blink target cannot silently build with an
 # incomplete or mismatched kernel runtime.
 set -euo pipefail
@@ -26,7 +26,7 @@ DEST_ROOTFS="$BLINK_ROOT/Resources/ish-rootfs.tar.gz"
 [ -d "$SOURCE_LIB_DIR" ] || { echo "missing iSH native build output directory: $SOURCE_LIB_DIR" >&2; exit 2; }
 [ -f "$SOURCE_LIB_DIR/LinuxInterop.h" ] || { echo "missing $SOURCE_LIB_DIR/LinuxInterop.h" >&2; exit 2; }
 
-for archive in libiSHLinux.a libiSHLinuxUser.a liblinux.a; do
+for archive in libiSHLinux.a libiSHLinuxUser.a liblinux.a libfakefs.a libish_emu.a; do
   [ -s "$SOURCE_LIB_DIR/$archive" ] || {
     echo "missing required iSH archive: $SOURCE_LIB_DIR/$archive" >&2
     exit 2
@@ -43,6 +43,8 @@ cp "$SOURCE_LIB_DIR/LinuxInterop.h" "$DEST_LIB_DIR.tmp/LinuxInterop.h"
 cp "$SOURCE_LIB_DIR/libiSHLinux.a" "$DEST_LIB_DIR.tmp/"
 cp "$SOURCE_LIB_DIR/libiSHLinuxUser.a" "$DEST_LIB_DIR.tmp/"
 cp "$SOURCE_LIB_DIR/liblinux.a" "$DEST_LIB_DIR.tmp/"
+cp "$SOURCE_LIB_DIR/libfakefs.a" "$DEST_LIB_DIR.tmp/"
+cp "$SOURCE_LIB_DIR/libish_emu.a" "$DEST_LIB_DIR.tmp/"
 
 install -m 644 "$SOURCE_ROOTFS" "$DEST_ROOTFS.tmp"
 rm -rf "$DEST_LIB_DIR"

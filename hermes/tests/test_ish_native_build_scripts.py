@@ -42,6 +42,8 @@ class BuildIshStaticScriptTests(unittest.TestCase):
         self.assertIn('-target "$target"', source)
         self.assertIn('libiSHLinux.a', source)
         self.assertIn('deps/liblinux.a', source)
+        self.assertIn('libfakefs.a', source)
+        self.assertIn('libish_emu.a', source)
         self.assertIn("ISH_KERNEL=linux", source)
         self.assertIn("SDKROOT=$(xcrun --sdk iphoneos --show-sdk-path)", source)
         self.assertIn("-isysroot $SDKROOT", source)
@@ -96,7 +98,13 @@ class InstallIshRuntimeScriptTests(unittest.TestCase):
     def _fake_input_with(
         self,
         rootfs_path: Path,
-        archive_names=("libiSHLinux.a", "libiSHLinuxUser.a", "liblinux.a"),
+        archive_names=(
+            "libiSHLinux.a",
+            "libiSHLinuxUser.a",
+            "liblinux.a",
+            "libfakefs.a",
+            "libish_emu.a",
+        ),
     ) -> Path:
         input_root = self.work_dir / "input"
         lib_dir = input_root / "lib"
@@ -125,6 +133,8 @@ class InstallIshRuntimeScriptTests(unittest.TestCase):
         self.assertTrue((blink_root / "Frameworks" / "ISHLinux" / "libiSHLinux.a").is_file())
         self.assertTrue((blink_root / "Frameworks" / "ISHLinux" / "libiSHLinuxUser.a").is_file())
         self.assertTrue((blink_root / "Frameworks" / "ISHLinux" / "liblinux.a").is_file())
+        self.assertTrue((blink_root / "Frameworks" / "ISHLinux" / "libfakefs.a").is_file())
+        self.assertTrue((blink_root / "Frameworks" / "ISHLinux" / "libish_emu.a").is_file())
         self.assertTrue((blink_root / "Frameworks" / "ISHLinux" / "LinuxInterop.h").is_file())
         installed_rootfs = blink_root / "Resources" / "ish-rootfs.tar.gz"
         self.assertTrue(installed_rootfs.is_file())
@@ -133,7 +143,13 @@ class InstallIshRuntimeScriptTests(unittest.TestCase):
     @unittest.skipUnless(PINNED_ROOTFS.exists(), "pinned iSH rootfs has not been fetched")
     def test_missing_required_archive_is_rejected(self) -> None:
         input_root = self._fake_input_with(
-            PINNED_ROOTFS, archive_names=("libiSHLinux.a", "libiSHLinuxUser.a"),
+            PINNED_ROOTFS,
+            archive_names=(
+                "libiSHLinux.a",
+                "libiSHLinuxUser.a",
+                "liblinux.a",
+                "libfakefs.a",
+            ),
         )
         blink_root = self.work_dir / "blink-root"
         blink_root.mkdir()
