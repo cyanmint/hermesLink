@@ -867,13 +867,18 @@ jobs:
         run: |
           set -euo pipefail
           app="$RUNNER_TEMP/Payload/HermesLink.app"
+          mkdir -p "$app/Fonts"
+          mv "$app/app-font-regular.ttf" "$app/Fonts/app-font-regular.ttf"
+          mv "$app/app-font-bold.ttf" "$app/Fonts/app-font-bold.ttf"
+          /usr/libexec/PlistBuddy -c 'Set :UIAppFonts:0 Fonts/app-font-regular.ttf' "$app/Info.plist"
+          /usr/libexec/PlistBuddy -c 'Set :UIAppFonts:1 Fonts/app-font-bold.ttf' "$app/Info.plist"
           while IFS= read -r -d '' code_bundle; do
             codesign --force --sign - --timestamp=none "$code_bundle"
           done < <(find "$app" -type d -name '*.framework' -prune -print0)
           while IFS= read -r -d '' extension; do
             codesign --force --sign - --timestamp=none "$extension"
           done < <(find "$app/PlugIns" -type d -name '*.appex' -prune -print0)
-          codesign --force --deep --sign - --timestamp=none "$app"
+          codesign --force --sign - --timestamp=none "$app"
           while IFS= read -r -d '' code_bundle; do
             codesign --verify --strict --verbose=2 "$code_bundle"
           done < <(find "$app" -type d -name '*.framework' -prune -print0)
