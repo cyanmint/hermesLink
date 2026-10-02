@@ -472,13 +472,15 @@ int ish_run_command(const char *command, int input_fd, int output_fd, int cols, 
     return ISH_RUN_ERR_INVALID_ARGUMENT;
   }
 
-  const char *argv[] = {"/bin/sh", "-c", script, NULL};
-  const char *envp[] = {
+  const char *argv_values[] = {"/bin/sh", "-c", script, NULL};
+  const char *envp_values[] = {
       "TERM=xterm-256color",
       "HOME=/root",
       "PATH=/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin",
       NULL,
   };
+  const char **argv = argv_values;
+  const char **envp = envp_values;
 
   __block int start_retval = -1;
   __block nsobj_t start_terminal = NULL;

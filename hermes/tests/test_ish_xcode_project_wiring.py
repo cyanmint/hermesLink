@@ -151,6 +151,13 @@ class IshNativeXcconfigTests(unittest.TestCase):
         self.assertIn("void FsInitialize(void)", source)
         self.assertIn("HermesLink owns rootfs provisioning", source)
 
+    def test_real_bridge_passes_capturable_argument_pointers_to_session_block(self) -> None:
+        source = (ISH_DIR / "ish_kernel_bridge.m").read_text(encoding="utf-8")
+        self.assertIn("const char *argv_values[]", source)
+        self.assertIn("const char *envp_values[]", source)
+        self.assertIn("const char **argv = argv_values", source)
+        self.assertIn("const char **envp = envp_values", source)
+
     def test_template_setup_includes_the_ish_native_xcconfig(self) -> None:
         source = TEMPLATE_XCCONFIG.read_text(encoding="utf-8")
         self.assertIn('#include "hermes/build/ISHNative.xcconfig"', source)
