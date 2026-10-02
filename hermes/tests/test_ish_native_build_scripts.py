@@ -121,7 +121,7 @@ class InstallIshRuntimeScriptTests(unittest.TestCase):
         )
         self.assertEqual(result.returncode, 0, result.stderr)
         self.assertTrue((blink_root / "Frameworks" / "ISHLinux" / "libiSHLinux.a").is_file())
-        self.assertTrue((blink_root / "Frameworks" / "ISHLinux" / "libISHLinuxUser.a").is_file())
+        self.assertTrue((blink_root / "Frameworks" / "ISHLinux" / "libiSHLinuxUser.a").is_file())
         self.assertTrue((blink_root / "Frameworks" / "ISHLinux" / "liblinux.a").is_file())
         self.assertTrue((blink_root / "Frameworks" / "ISHLinux" / "LinuxInterop.h").is_file())
         installed_rootfs = blink_root / "Resources" / "ish-rootfs.tar.gz"

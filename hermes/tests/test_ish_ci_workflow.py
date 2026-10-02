@@ -28,10 +28,10 @@ class IshRuntimeWorkflowTests(unittest.TestCase):
         outputs = self.workflow["jobs"]["decide"]["outputs"]
         self.assertIn("run_ish_runtime", outputs)
 
-    def test_ish_runtime_job_runs_on_macos_and_is_non_blocking(self) -> None:
+    def test_ish_runtime_job_runs_on_macos_and_is_blocking(self) -> None:
         job = self.workflow["jobs"]["build-ish-runtime"]
         self.assertEqual(job["runs-on"], "macos-latest")
-        self.assertTrue(job.get("continue-on-error"))
+        self.assertFalse(job.get("continue-on-error", False))
         self.assertIn("run_ish_runtime", str(job["if"]))
 
     def test_ish_runtime_job_is_required_for_app_archive_and_ipa(self) -> None:
