@@ -435,7 +435,7 @@ jobs:
         with:
           enable-cache: false
 
-      - name: Prepare Hermes runtime link placeholder
+      - name: Prepare runtime link placeholders
         run: |
           set -euo pipefail
           mkdir -p Frameworks/HermesRuntime.framework Resources
@@ -463,6 +463,47 @@ jobs:
           EOF
           printf 'runtime omitted from app component\n' > "$RUNNER_TEMP/runtime-stub.txt"
           (cd "$RUNNER_TEMP" && zip -q "$GITHUB_WORKSPACE/Resources/hermesrt.zip" runtime-stub.txt)
+          rm -rf Frameworks/Ish.framework
+          mkdir -p Frameworks/Ish.framework
+          cat > "$RUNNER_TEMP/ish_framework_link_stub.c" <<'EOF'
+          int ish_configure(const char *storage_base, void *log_handler) {
+            (void)storage_base;
+            (void)log_handler;
+            return 0;
+          }
+          int ish_kernel_ensure_booted(void) { return -6; }
+          int ish_run_command(const char *command, int input_fd, int output_fd,
+                              int cols, int rows, int *exit_code_out) {
+            (void)command;
+            (void)input_fd;
+            (void)output_fd;
+            (void)cols;
+            (void)rows;
+            if (exit_code_out) *exit_code_out = 0;
+            return -6;
+          }
+          EOF
+          xcrun --sdk iphoneos clang \
+            -target arm64-apple-ios16.1 \
+            -isysroot "$(xcrun --sdk iphoneos --show-sdk-path)" \
+            -dynamiclib "$RUNNER_TEMP/ish_framework_link_stub.c" \
+            -install_name '@rpath/Ish.framework/Ish' \
+            -Wl,-exported_symbol,_ish_configure \
+            -Wl,-exported_symbol,_ish_kernel_ensure_booted \
+            -Wl,-exported_symbol,_ish_run_command \
+            -o Frameworks/Ish.framework/Ish
+          cat > Frameworks/Ish.framework/Info.plist <<'EOF'
+          <?xml version="1.0" encoding="UTF-8"?>
+          <!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+          <plist version="1.0"><dict>
+            <key>CFBundleExecutable</key><string>Ish</string>
+            <key>CFBundleIdentifier</key><string>com.cyan.hermeslink.ish-link-stub</string>
+            <key>CFBundlePackageType</key><string>FMWK</string>
+            <key>CFBundleSupportedPlatforms</key><array><string>iPhoneOS</string></array>
+            <key>MinimumOSVersion</key><string>16.1</string>
+          </dict></plist>
+          EOF
+          : > Resources/ish-rootfs.tar.gz
 
       - name: Set runtime-free app cache key
         id: runtime_hash
@@ -497,6 +538,7 @@ jobs:
       - name: Prepare Xcode configuration
         run: |
           cp template_setup.xcconfig developer_setup.xcconfig
+          printf '\nISH_NATIVE_AVAILABLE = YES\n' >> developer_setup.xcconfig
 
       - name: Build unsigned device archive
         if: steps.app_build_cache.outputs.cache-hit != 'true'
@@ -555,9 +597,16 @@ jobs:
           set -euo pipefail
           app="$(find "$RUNNER_TEMP/HermesLink.xcarchive/Products/Applications" -maxdepth 1 -type d -name '*.app' -print -quit)"
           test -n "$app"
+          otool -L "$app/HermesLink" | grep -F '@rpath/Ish.framework/Ish'
           rm -rf "$app/Frameworks/HermesRuntime.framework" "$app/hermesrt.zip"
+          rm -rf "$app/Frameworks/Ish.framework"
+          rm -f "$app/ish-rootfs.tar.gz"
           test ! -e "$app/Frameworks/HermesRuntime.framework"
           test ! -e "$app/hermesrt.zip"
+          test ! -e "$app/Frameworks/Ish.framework"
+          test ! -e "$app/ish-rootfs.tar.gz"
+          rm -rf Frameworks/Ish.framework
+          rm -f Resources/ish-rootfs.tar.gz
 
       - name: Package runtime-free app component
         run: |
@@ -808,6 +857,8 @@ jobs:
           test -f "$RUNNER_TEMP/Payload/HermesLink.app/Info.plist"
           test -x "$RUNNER_TEMP/Payload/HermesLink.app/HermesLink"
           test -x "$RUNNER_TEMP/Payload/HermesLink.app/Frameworks/Ish.framework/Ish"
+          otool -L "$RUNNER_TEMP/Payload/HermesLink.app/HermesLink" |
+            grep -F '@rpath/Ish.framework/Ish'
           test -x "$RUNNER_TEMP/Payload/HermesLink.app/Frameworks/HermesRuntime.framework/HermesRuntime"
           test -s "$RUNNER_TEMP/Payload/HermesLink.app/hermesrt.zip"
           python3 hermes/build/verify-ish-source.py \

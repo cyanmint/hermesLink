@@ -171,15 +171,22 @@ class IshRuntimeWorkflowTests(unittest.TestCase):
         self.assertGreaterEqual(self.text.count("hermes/build/ISHNative.xcconfig"), 1)
         self.assertGreaterEqual(self.text.count("install_ish_runtime.sh"), 1)
 
-    def test_app_component_excludes_hermes_and_ish_runtime_assets(self) -> None:
+    def test_app_component_links_ish_framework_using_removable_build_placeholders(self) -> None:
         job = self.workflow["jobs"]["build-app"]
         steps_text = str(job["steps"])
         self.assertNotIn("ISHLinuxNative.zip", steps_text)
         self.assertNotIn("install_ish_runtime.sh", steps_text)
-        self.assertNotIn("ISH_NATIVE_AVAILABLE = YES", steps_text)
+        self.assertIn("ISH_NATIVE_AVAILABLE = YES", steps_text)
+        self.assertIn("ish_framework_link_stub.c", steps_text)
+        self.assertIn("@rpath/Ish.framework/Ish", steps_text)
+        self.assertIn(": > Resources/ish-rootfs.tar.gz", steps_text)
         self.assertIn("runtime-free app component", steps_text)
         self.assertIn("app component unexpectedly contains iSH runtime assets", steps_text)
         self.assertIn("app component unexpectedly contains Hermes runtime assets", steps_text)
+        self.assertIn('rm -rf "$app/Frameworks/Ish.framework"', steps_text)
+        self.assertIn('rm -f "$app/ish-rootfs.tar.gz"', steps_text)
+        self.assertIn("otool -L", steps_text)
+        self.assertIn("@rpath/Ish.framework/Ish", steps_text)
 
     def test_ipa_preserves_real_ish_framework_and_rootfs_from_app_component(self) -> None:
         steps_text = str(self.workflow["jobs"]["assemble-ipa"]["steps"])
@@ -187,8 +194,11 @@ class IshRuntimeWorkflowTests(unittest.TestCase):
         self.assertIn("install_ish_runtime.sh", steps_text)
         self.assertIn("BLINK_ROOT=", steps_text)
         self.assertIn("Ish.framework/Ish", steps_text)
+        self.assertIn("otool -L", steps_text)
+        self.assertIn("@rpath/Ish.framework/Ish", steps_text)
         self.assertIn("ish-rootfs.tar.gz", steps_text)
         self.assertIn("verify-ish-source.py", steps_text)
+        self.assertIn("codesign --force --sign - --timestamp=none \"$app/Frameworks/Ish.framework\"", steps_text)
 
     def test_all_e2e_jobs_are_optional_and_start_only_after_ipa_assembly(self) -> None:
         jobs = self.workflow["jobs"]
