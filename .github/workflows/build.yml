@@ -905,7 +905,14 @@ jobs:
             -d "$RUNNER_TEMP/Payload/HermesLink.app/Frameworks"
           install -m 644 "$RUNNER_TEMP/hermeslink-components/hermesrt.zip" \
             "$RUNNER_TEMP/Payload/HermesLink.app/hermesrt.zip"
-          test -f "$RUNNER_TEMP/Payload/HermesLink.app/Info.plist"
+          app_info="$RUNNER_TEMP/Payload/HermesLink.app/Info.plist"
+          test -s "$app_info"
+          /usr/libexec/PlistBuddy -c 'Set :CFBundleIdentifier com.hermeslink.app' \
+            "$app_info" 2>/dev/null ||
+            /usr/libexec/PlistBuddy -c 'Add :CFBundleIdentifier string com.hermeslink.app' "$app_info"
+          test "$(/usr/libexec/PlistBuddy -c 'Print :CFBundleIdentifier' "$app_info")" = \
+            'com.hermeslink.app'
+          plutil -lint "$app_info"
           test -x "$RUNNER_TEMP/Payload/HermesLink.app/HermesLink"
           test -x "$RUNNER_TEMP/Payload/HermesLink.app/Frameworks/Ish.framework/Ish"
           test -x "$RUNNER_TEMP/Payload/HermesLink.app/Frameworks/HermesRuntime.framework/HermesRuntime"

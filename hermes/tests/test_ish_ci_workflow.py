@@ -199,6 +199,9 @@ class IshRuntimeWorkflowTests(unittest.TestCase):
         self.assertIn("Ish.framework/Ish", steps_text)
         self.assertIn("ish-rootfs.tar.gz", steps_text)
         self.assertIn("verify-ish-source.py", steps_text)
+        self.assertIn("Set :CFBundleIdentifier com.hermeslink.app", steps_text)
+        self.assertIn("Print :CFBundleIdentifier", steps_text)
+        self.assertIn("plutil -lint", steps_text)
         self.assertIn('base_lproj/Info.plist', steps_text)
         self.assertIn('locales_bundle/Info.plist', steps_text)
 
