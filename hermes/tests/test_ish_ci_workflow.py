@@ -193,6 +193,8 @@ class IshRuntimeWorkflowTests(unittest.TestCase):
         self.assertIn("ISHLinuxNative.zip", steps_text)
         self.assertIn("install_ish_runtime.sh", steps_text)
         self.assertIn("BLINK_ROOT=", steps_text)
+        self.assertIn('mv "$RUNNER_TEMP/Payload/HermesLink.app/Resources/ish-rootfs.tar.gz"', steps_text)
+        self.assertIn('"$RUNNER_TEMP/Payload/HermesLink.app/ish-rootfs.tar.gz"', steps_text)
         self.assertIn("Ish.framework/Ish", steps_text)
         self.assertIn("otool -L", steps_text)
         self.assertIn("@rpath/Ish.framework/Ish", steps_text)

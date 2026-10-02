@@ -850,6 +850,8 @@ jobs:
             -d "$RUNNER_TEMP/hermeslink-components/ish"
           BLINK_ROOT="$RUNNER_TEMP/Payload/HermesLink.app" \
             bash install_ish_runtime.sh "$RUNNER_TEMP/hermeslink-components/ish"
+          mv "$RUNNER_TEMP/Payload/HermesLink.app/Resources/ish-rootfs.tar.gz" \
+            "$RUNNER_TEMP/Payload/HermesLink.app/ish-rootfs.tar.gz"
           unzip -q "$RUNNER_TEMP/hermeslink-components/HermesRuntime.framework.zip" \
             -d "$RUNNER_TEMP/Payload/HermesLink.app/Frameworks"
           install -m 644 "$RUNNER_TEMP/hermeslink-components/hermesrt.zip" \
