@@ -34,6 +34,14 @@ class NativeModuleRegistryTests(unittest.TestCase):
         self.assertIn("--enable-framework", build_script)
         self.assertNotIn("--disable-framework", build_script)
         self.assertIn("-o Python.framework/Python", build_script)
+        self.assertIn(
+            "make -o Makefile -o Modules/config.c -o Modules/config.h -o Python.framework/Python",
+            build_script,
+        )
+        self.assertIn(
+            "make -o Makefile -o Python.framework/Python -j",
+            build_script,
+        )
         self.assertIn("-lsqlite3 -lz", build_script)
         self.assertIn("Modules/_hacl/Hacl_Hash_SHA2.o", build_script)
         self.assertIn('find Modules/expat -maxdepth 1 -type f -name \'*.c\'', build_script)
