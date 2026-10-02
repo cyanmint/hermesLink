@@ -912,6 +912,21 @@ jobs:
           test -s "$RUNNER_TEMP/Payload/HermesLink.app/hermesrt.zip"
           python3 hermes/build/verify-ish-source.py \
             --rootfs "$RUNNER_TEMP/Payload/HermesLink.app/ish-rootfs.tar.gz"
+          base_lproj="$RUNNER_TEMP/Payload/HermesLink.app/Base.lproj"
+          if [ -d "$base_lproj" ] && [ ! -f "$base_lproj/Info.plist" ]; then
+            cat > "$base_lproj/Info.plist" <<'EOF'
+          <?xml version="1.0" encoding="UTF-8"?>
+          <!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+          <plist version="1.0"><dict>
+            <key>CFBundleIdentifier</key><string>com.cyan.hermeslink.base-lproj</string>
+            <key>CFBundleName</key><string>Base</string>
+            <key>CFBundlePackageType</key><string>BNDL</string>
+          </dict></plist>
+          EOF
+          fi
+          if [ -d "$base_lproj" ]; then
+            test -s "$base_lproj/Info.plist"
+          fi
 
       - name: Sign and package IPA
         run: |

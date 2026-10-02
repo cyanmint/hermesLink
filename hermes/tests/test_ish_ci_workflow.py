@@ -199,6 +199,7 @@ class IshRuntimeWorkflowTests(unittest.TestCase):
         self.assertIn("Ish.framework/Ish", steps_text)
         self.assertIn("ish-rootfs.tar.gz", steps_text)
         self.assertIn("verify-ish-source.py", steps_text)
+        self.assertIn('base_lproj/Info.plist', steps_text)
 
     def test_all_test_jobs_are_opt_in_and_run_only_after_ipa_assembly(self) -> None:
         jobs = self.workflow["jobs"]
