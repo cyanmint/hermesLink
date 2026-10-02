@@ -196,6 +196,11 @@ class IshRuntimeWorkflowTests(unittest.TestCase):
 
     def test_ipa_preserves_real_ish_framework_and_rootfs_from_app_component(self) -> None:
         steps_text = str(self.workflow["jobs"]["assemble-ipa"]["steps"])
+        signing_text = next(
+            step["run"]
+            for step in self.workflow["jobs"]["assemble-ipa"]["steps"]
+            if step.get("name") == "Sign and package IPA"
+        )
         self.assertIn("ISHLinuxNative.zip", steps_text)
         self.assertIn("install_ish_runtime.sh", steps_text)
         self.assertIn("BLINK_ROOT=", steps_text)
@@ -206,16 +211,18 @@ class IshRuntimeWorkflowTests(unittest.TestCase):
         self.assertIn("@rpath/Ish.framework/Ish", steps_text)
         self.assertIn("ish-rootfs.tar.gz", steps_text)
         self.assertIn("verify-ish-source.py", steps_text)
-        self.assertIn(
-            'codesign --force --sign - --timestamp=none "$app/Frameworks/Ish.framework"',
-            steps_text,
-        )
-        self.assertIn(
-            'codesign --force --sign - --timestamp=none "$app/Frameworks/HermesRuntime.framework"',
-            steps_text,
-        )
-        self.assertIn('codesign --force --deep --sign - --timestamp=none "$app"', steps_text)
-        self.assertIn('codesign --verify --deep --strict --verbose=2 "$app"', steps_text)
+        bundle_signing = 'find "$app" -depth -type d -name \'*.bundle\' -print0'
+        framework_signing = 'find "$app" -type d -name \'*.framework\' -prune -print0'
+        extension_signing = 'find "$app/PlugIns" -type d -name \'*.appex\' -prune -print0'
+        self.assertIn(bundle_signing, signing_text)
+        self.assertIn(framework_signing, signing_text)
+        self.assertIn(extension_signing, signing_text)
+        self.assertLess(signing_text.index(bundle_signing), signing_text.index(framework_signing))
+        self.assertLess(signing_text.index(framework_signing), signing_text.index(extension_signing))
+        self.assertIn('codesign --force --sign - --timestamp=none "$app"', signing_text)
+        self.assertEqual(signing_text.count("codesign --verify --strict --verbose=2"), 3)
+        self.assertNotIn("codesign --deep", signing_text)
+        self.assertNotIn('codesign --verify --verbose=2 "$app"', signing_text)
 
     def test_all_e2e_jobs_are_optional_and_start_only_after_ipa_assembly(self) -> None:
         jobs = self.workflow["jobs"]
