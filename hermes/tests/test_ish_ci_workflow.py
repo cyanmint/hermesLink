@@ -195,39 +195,29 @@ class IshRuntimeWorkflowTests(unittest.TestCase):
         self.assertIn("@rpath/Ish.framework/Ish", steps_text)
 
     def test_ipa_preserves_real_ish_framework_and_rootfs_from_app_component(self) -> None:
-        steps_text = str(self.workflow["jobs"]["assemble-ipa"]["steps"])
-        signing_text = next(
+        job = self.workflow["jobs"]["assemble-ipa"]
+        steps_text = str(job["steps"])
+        packaging_text = next(
             step["run"]
-            for step in self.workflow["jobs"]["assemble-ipa"]["steps"]
-            if step.get("name") == "Sign and package IPA"
+            for step in job["steps"]
+            if step.get("name") == "Package unsigned IPA"
         )
+        self.assertEqual(job["runs-on"], "ubuntu-latest")
         self.assertIn("ISHLinuxNative.zip", steps_text)
         self.assertIn("install_ish_runtime.sh", steps_text)
         self.assertIn("BLINK_ROOT=", steps_text)
         self.assertIn('mv "$RUNNER_TEMP/Payload/HermesLink.app/Resources/ish-rootfs.tar.gz"', steps_text)
         self.assertIn('"$RUNNER_TEMP/Payload/HermesLink.app/ish-rootfs.tar.gz"', steps_text)
         self.assertIn("Ish.framework/Ish", steps_text)
-        self.assertIn("otool -L", steps_text)
+        self.assertIn("strings", steps_text)
         self.assertIn("@rpath/Ish.framework/Ish", steps_text)
         self.assertIn("ish-rootfs.tar.gz", steps_text)
         self.assertIn("verify-ish-source.py", steps_text)
-        bundle_signing = 'find "$app" -depth -type d -name \'*.bundle\' -print0'
-        framework_signing = 'find "$app" -type d -name \'*.framework\' -prune -print0'
-        extension_signing = 'find "$app/PlugIns" -type d -name \'*.appex\' -prune -print0'
-        self.assertIn(bundle_signing, signing_text)
-        self.assertIn(framework_signing, signing_text)
-        self.assertIn(extension_signing, signing_text)
-        self.assertIn('[ -f "$bundle/Info.plist" ]', signing_text)
-        self.assertIn("Print :CFBundlePackageType", signing_text)
-        self.assertIn("= BNDL ]; then", signing_text)
-        self.assertIn("set -x", signing_text)
-        self.assertLess(signing_text.index(bundle_signing), signing_text.index(framework_signing))
-        self.assertLess(signing_text.index(framework_signing), signing_text.index(extension_signing))
-        self.assertIn('codesign --force --sign - --timestamp=none "$app"', signing_text)
-        self.assertEqual(signing_text.count("codesign --verify --strict --verbose=2"), 3)
-        self.assertNotIn("codesign --verify --deep", signing_text)
-        self.assertNotIn("codesign --deep", signing_text)
-        self.assertNotIn('codesign --verify --verbose=2 "$app"', signing_text)
+        self.assertIn("unzip -q", steps_text)
+        self.assertIn("cp -a", steps_text)
+        self.assertIn("zip -qryy -X HermesLink.ipa Payload", packaging_text)
+        self.assertIn("unzip -t", packaging_text)
+        self.assertNotIn("codesign", steps_text)
 
     def test_all_e2e_jobs_are_optional_and_start_only_after_ipa_assembly(self) -> None:
         jobs = self.workflow["jobs"]

@@ -810,7 +810,7 @@ jobs:
        (needs.build-ish-runtime.result == 'skipped' && needs.decide.outputs.run_ish_runtime != 'true')) &&
       (needs.build-app.result == 'success' ||
        (needs.build-app.result == 'skipped' && needs.decide.outputs.run_app != 'true'))
-    runs-on: macos-latest
+    runs-on: ubuntu-latest
     permissions:
       contents: read
     steps:
@@ -836,11 +836,11 @@ jobs:
           python3 hermes/build/validate-runtime-zip.py "$RUNNER_TEMP/hermeslink-components/hermesrt.zip"
           unzip -t "$RUNNER_TEMP/hermeslink-components/HermesRuntime.framework.zip"
           unzip -t "$RUNNER_TEMP/hermeslink-components/ISHLinuxNative.zip"
-          ditto -x -k "$RUNNER_TEMP/hermeslink-components/HermesLink.app.zip" \
-            "$RUNNER_TEMP/hermeslink-components/app"
+          unzip -q "$RUNNER_TEMP/hermeslink-components/HermesLink.app.zip" \
+            -d "$RUNNER_TEMP/hermeslink-components/app"
           app="$(find "$RUNNER_TEMP/hermeslink-components/app" -maxdepth 2 -type d -name '*.app' -print -quit)"
           test -n "$app"
-          /usr/bin/ditto "$app" "$RUNNER_TEMP/Payload/HermesLink.app"
+          cp -a "$app" "$RUNNER_TEMP/Payload/HermesLink.app"
           mkdir -p "$RUNNER_TEMP/Payload/HermesLink.app/Frameworks"
           mkdir -p "$RUNNER_TEMP/hermeslink-components/ish"
           unzip -q "$RUNNER_TEMP/hermeslink-components/ISHLinuxNative.zip" \
@@ -856,45 +856,19 @@ jobs:
           test -f "$RUNNER_TEMP/Payload/HermesLink.app/Info.plist"
           test -x "$RUNNER_TEMP/Payload/HermesLink.app/HermesLink"
           test -x "$RUNNER_TEMP/Payload/HermesLink.app/Frameworks/Ish.framework/Ish"
-          otool -L "$RUNNER_TEMP/Payload/HermesLink.app/HermesLink" |
+          strings "$RUNNER_TEMP/Payload/HermesLink.app/HermesLink" |
             grep -F '@rpath/Ish.framework/Ish'
           test -x "$RUNNER_TEMP/Payload/HermesLink.app/Frameworks/HermesRuntime.framework/HermesRuntime"
           test -s "$RUNNER_TEMP/Payload/HermesLink.app/hermesrt.zip"
           python3 hermes/build/verify-ish-source.py \
             --rootfs "$RUNNER_TEMP/Payload/HermesLink.app/ish-rootfs.tar.gz"
 
-      - name: Sign and package IPA
+      - name: Package unsigned IPA
         run: |
           set -euo pipefail
-          set -x
-          app="$RUNNER_TEMP/Payload/HermesLink.app"
-          while IFS= read -r -d '' bundle; do
-            if [ -f "$bundle/Info.plist" ] &&
-              [ "$(/usr/libexec/PlistBuddy -c 'Print :CFBundlePackageType' "$bundle/Info.plist" 2>/dev/null || true)" = BNDL ]; then
-              codesign --force --sign - --timestamp=none "$bundle"
-            fi
-          done < <(find "$app" -depth -type d -name '*.bundle' -print0)
-          while IFS= read -r -d '' code_bundle; do
-            codesign --force --sign - --timestamp=none "$code_bundle"
-          done < <(find "$app" -type d -name '*.framework' -prune -print0)
-          while IFS= read -r -d '' extension; do
-            codesign --force --sign - --timestamp=none "$extension"
-          done < <(find "$app/PlugIns" -type d -name '*.appex' -prune -print0)
-          codesign --force --sign - --timestamp=none "$app"
-          while IFS= read -r -d '' bundle; do
-            if [ -f "$bundle/Info.plist" ] &&
-              [ "$(/usr/libexec/PlistBuddy -c 'Print :CFBundlePackageType' "$bundle/Info.plist" 2>/dev/null || true)" = BNDL ]; then
-              codesign --verify --strict --verbose=2 "$bundle"
-            fi
-          done < <(find "$app" -depth -type d -name '*.bundle' -print0)
-          while IFS= read -r -d '' code_bundle; do
-            codesign --verify --strict --verbose=2 "$code_bundle"
-          done < <(find "$app" -type d -name '*.framework' -prune -print0)
-          while IFS= read -r -d '' extension; do
-            codesign --verify --strict --verbose=2 "$extension"
-          done < <(find "$app/PlugIns" -type d -name '*.appex' -prune -print0)
           rm -f "$RUNNER_TEMP/HermesLink.ipa"
-          (cd "$RUNNER_TEMP" && /usr/bin/zip -qry -X HermesLink.ipa Payload)
+          (cd "$RUNNER_TEMP" && zip -qryy -X HermesLink.ipa Payload)
+          unzip -t "$RUNNER_TEMP/HermesLink.ipa"
           unzip -Z1 "$RUNNER_TEMP/HermesLink.ipa" | grep -Fx 'Payload/HermesLink.app/Info.plist'
           unzip -Z1 "$RUNNER_TEMP/HermesLink.ipa" | grep -Fx 'Payload/HermesLink.app/HermesLink'
           unzip -Z1 "$RUNNER_TEMP/HermesLink.ipa" | grep -Fx 'Payload/HermesLink.app/hermesrt.zip'
