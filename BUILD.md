@@ -128,9 +128,11 @@ registered alongside `terminal` in the standard Hermes bundles. The design:
   `ish` the same way.
 - **Native build** — the Linux `build-ish-meson` CI stage cross-compiles the
   upstream kernel, fakefs, and emulator Meson/Ninja archives for iOS, then
-  transfers the complete build tree to the macOS `build-ish-runtime` stage.
-  That stage reuses those archives and builds only the iOS host-interoperability
-  Xcode targets. `install_ish_runtime.sh` installs the resulting upstream
+  packages the Meson build, pinned source checkout, and cross-toolchain as
+  `ISHMesonBuild.tar.gz` on the fixed GitHub Release. The macOS
+  `build-ish-runtime` stage downloads that release asset, reuses the Linux
+  build tree, and builds only the iOS host-interoperability Xcode targets.
+  `install_ish_runtime.sh` installs the resulting upstream
   `libiSHLinux.a`, `libiSHLinuxUser.a`, `liblinux.a`, `libfakefs.a`, and
   `libish_emu.a` archives together with the pinned rootfs. The macOS job
   publishes the libraries as `ISHLinuxNative.zip`; the app job downloads and

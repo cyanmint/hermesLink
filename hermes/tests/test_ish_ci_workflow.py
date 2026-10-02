@@ -28,6 +28,7 @@ class IshRuntimeWorkflowTests(unittest.TestCase):
     def test_decide_job_exposes_a_run_ish_runtime_output(self) -> None:
         outputs = self.workflow["jobs"]["decide"]["outputs"]
         self.assertIn("run_ish_runtime", outputs)
+        self.assertIn("has_asset ISHMesonBuild.tar.gz", self.text)
 
     def test_ish_runtime_job_runs_on_macos_and_is_blocking(self) -> None:
         job = self.workflow["jobs"]["build-ish-runtime"]
@@ -38,16 +39,22 @@ class IshRuntimeWorkflowTests(unittest.TestCase):
     def test_ish_meson_archives_are_cross_compiled_and_uploaded_on_linux(self) -> None:
         job = self.workflow["jobs"]["build-ish-meson"]
         self.assertEqual(job["runs-on"], "ubuntu-latest")
+        self.assertEqual(job["permissions"]["contents"], "write")
         steps_text = str(job["steps"])
         self.assertIn("build-ish-static.sh --meson-only", steps_text)
-        self.assertIn("actions/upload-artifact@v7", steps_text)
-        self.assertIn("include-hidden-files", steps_text)
+        self.assertIn("ISHMesonBuild.tar.gz", steps_text)
+        self.assertIn("gh release upload", steps_text)
+        self.assertIn("build/ios-toolchain", steps_text)
+        self.assertIn("source", steps_text)
 
-    def test_macos_ish_job_downloads_linux_archives_and_builds_xcode_targets(self) -> None:
+    def test_macos_ish_job_downloads_linux_release_and_builds_xcode_targets(self) -> None:
         job = self.workflow["jobs"]["build-ish-runtime"]
         self.assertIn("build-ish-meson", job["needs"])
         steps_text = str(job["steps"])
-        self.assertIn("actions/download-artifact@v7", steps_text)
+        self.assertIn("gh release download", steps_text)
+        self.assertIn("ISHMesonBuild.tar.gz", steps_text)
+        self.assertIn("tar -xzf", steps_text)
+        self.assertNotIn("actions/download-artifact@v7", steps_text)
         self.assertIn("build-ish-static.sh --xcode-only", steps_text)
 
     def test_ish_runtime_job_is_required_for_app_archive_and_ipa(self) -> None:
@@ -56,10 +63,19 @@ class IshRuntimeWorkflowTests(unittest.TestCase):
                 needs = self.workflow["jobs"][job_name].get("needs", [])
                 self.assertIn("build-ish-runtime", needs)
 
-    def test_ish_runtime_job_fetches_and_builds_via_the_authored_scripts(self) -> None:
+    def test_requested_ish_build_cannot_be_treated_as_a_skipped_optional_stage(self) -> None:
+        app_condition = self.workflow["jobs"]["build-app"]["if"]
+        ipa_condition = self.workflow["jobs"]["assemble-ipa"]["if"]
+        self.assertIn("needs.decide.outputs.run_ish_runtime != 'true'", app_condition)
+        self.assertIn("needs.decide.outputs.run_ish_runtime != 'true'", ipa_condition)
+        self.assertIn("build-ish-meson", self.workflow["jobs"]["assemble-ipa"]["needs"])
+
+    def test_linux_stage_fetches_source_and_macos_builds_via_the_authored_scripts(self) -> None:
+        linux_steps = str(self.workflow["jobs"]["build-ish-meson"]["steps"])
+        self.assertIn("fetch-ish-source.sh", linux_steps)
         job = self.workflow["jobs"]["build-ish-runtime"]
         steps_text = str(job["steps"])
-        self.assertIn("fetch-ish-source.sh", steps_text)
+        self.assertIn("ISHMesonBuild.tar.gz", steps_text)
         self.assertIn("build-ish-static.sh", steps_text)
         self.assertIn("meson", steps_text.lower())
         self.assertIn("ninja", steps_text.lower())
