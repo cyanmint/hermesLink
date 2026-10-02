@@ -137,9 +137,19 @@ class IshNativeXcconfigTests(unittest.TestCase):
             "ISH_LDFLAGS_YES = $(PROJECT_DIR)/Frameworks/ISHLinux/ish-sections.o "
             "-force_load $(PROJECT_DIR)/Frameworks/ISHLinux/liblinux.a "
             "-force_load $(PROJECT_DIR)/Frameworks/ISHLinux/libiSHLinux.a "
-            "-liSHLinuxUser -lfakefs -lish_emu",
+            "-liSHLinuxUser -lfakefs -lish_emu -lsqlite3",
             source,
         )
+        self.assertIn(
+            "BLINK_OTHER_LDFLAGS = $(inherited) $(ISH_LDFLAGS_$(ISH_NATIVE_AVAILABLE))",
+            source,
+        )
+        self.assertFalse(any(line.startswith("OTHER_LDFLAGS =") for line in source.splitlines()))
+
+    def test_real_bridge_provides_upstream_rootfs_initialization_hook(self) -> None:
+        source = (ISH_DIR / "ish_kernel_bridge.m").read_text(encoding="utf-8")
+        self.assertIn("void FsInitialize(void)", source)
+        self.assertIn("HermesLink owns rootfs provisioning", source)
 
     def test_template_setup_includes_the_ish_native_xcconfig(self) -> None:
         source = TEMPLATE_XCCONFIG.read_text(encoding="utf-8")

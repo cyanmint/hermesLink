@@ -22,8 +22,8 @@ ISH_EXCLUDED_SOURCES_YES = ish_kernel_bridge_stub.m
 EXCLUDED_SOURCE_FILE_NAMES = $(inherited) $(ISH_EXCLUDED_SOURCES_$(ISH_NATIVE_AVAILABLE))
 
 ISH_LDFLAGS_NO =
-ISH_LDFLAGS_YES = $(PROJECT_DIR)/Frameworks/ISHLinux/ish-sections.o -force_load $(PROJECT_DIR)/Frameworks/ISHLinux/liblinux.a -force_load $(PROJECT_DIR)/Frameworks/ISHLinux/libiSHLinux.a -liSHLinuxUser -lfakefs -lish_emu
-OTHER_LDFLAGS = $(inherited) $(ISH_LDFLAGS_$(ISH_NATIVE_AVAILABLE))
+ISH_LDFLAGS_YES = $(PROJECT_DIR)/Frameworks/ISHLinux/ish-sections.o -force_load $(PROJECT_DIR)/Frameworks/ISHLinux/liblinux.a -force_load $(PROJECT_DIR)/Frameworks/ISHLinux/libiSHLinux.a -liSHLinuxUser -lfakefs -lish_emu -lsqlite3
+BLINK_OTHER_LDFLAGS = $(inherited) $(ISH_LDFLAGS_$(ISH_NATIVE_AVAILABLE))
 
 ISH_LIBRARY_SEARCH_PATHS_NO =
 ISH_LIBRARY_SEARCH_PATHS_YES = $(PROJECT_DIR)/Frameworks/ISHLinux

@@ -274,6 +274,11 @@ const char *DefaultRootPath(void) {
   return g_rootfs_path;
 }
 
+void FsInitialize(void) {
+  /* Upstream's CurrentRoot.m only performs app-specific version and
+   * repository bookkeeping here; HermesLink owns rootfs provisioning. */
+}
+
 static NSString *ISHRootfsStorageDirectory(void) {
   NSString *base = [[BlinkPaths blink] stringByAppendingPathComponent:@"ish-root"];
   [[NSFileManager defaultManager] createDirectoryAtPath:base withIntermediateDirectories:YES attributes:nil error:nil];
