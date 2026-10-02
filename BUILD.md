@@ -135,22 +135,22 @@ registered alongside `terminal` in the standard Hermes bundles. The design:
   and links those archives plus the HermesLink bridge into a dynamic
   `Ish.framework`. The resulting framework is published in
   `ISHLinuxNative.zip` together with the pinned Alpine rootfs. The app archive
-  job is independent of that native build: it links against temporary
-  link-only runtime frameworks, then removes both frameworks, `hermesrt.zip`,
-  and the rootfs before publishing its app component. IPA assembly downloads
-  the real Hermes and iSH runtime assets and installs/signs them into the app.
-  This mirrors the HermesRuntime.framework link/embed path while keeping the
-  guest kernel out of the Blink app's own linker inputs. Native
-  HermesRuntime.framework is also cross-compiled on Linux; the app archive and
-  IPA assembly remain macOS jobs.
+  job installs that real framework and verifies/embeds the pinned rootfs,
+  enables `ISH_NATIVE_AVAILABLE=YES`, and builds against the actual kernel.
+  Only the temporary Hermes runtime framework and `hermesrt.zip` are omitted
+  from the app component; IPA assembly adds the actual Hermes runtime and
+  signs the app, retaining the real iSH framework and rootfs. This mirrors the
+  HermesRuntime.framework link/embed path while keeping the guest kernel out
+  of Blink's own linker inputs. Native HermesRuntime.framework is also
+  cross-compiled on Linux; the app archive and IPA assembly remain macOS jobs.
 - **Switchable link, safe default** — `hermes/build/ISHNative.xcconfig`
   (included from `template_setup.xcconfig`) defaults
   `ISH_NATIVE_AVAILABLE` to `NO`, which compiles
   `ISHBridge/ish_kernel_bridge_stub.m` (keeps `ish` registered everywhere,
   reporting the guest kernel as unavailable) instead of linking
-  `Ish.framework`. The CI app archive uses a temporary link-only framework
-  so it can be built independently of the iSH kernel stage; IPA assembly
-  still requires and installs the real framework.
+  `Ish.framework`. CI app builds explicitly set `ISH_NATIVE_AVAILABLE=YES`
+  only after installing the real framework and pinned rootfs; standalone
+  checkouts without those build artifacts retain the safe stub default.
 
 The fetched iSH source includes its GPLv3 and iOS additional-term notices;
 those licenses must be preserved in any eventual linked distribution.

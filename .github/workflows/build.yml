@@ -421,9 +421,14 @@ jobs:
         run: gh release upload "$HERMES_RUNTIME_RELEASE_TAG" ISHLinuxNative.zip --clobber
 
   build-app:
-    name: Build HermesLink app without runtime assets (macOS)
-    needs: [decide, prepare-release]
-    if: needs.decide.outputs.run_app == 'true' && needs.prepare-release.result == 'success'
+    name: Build HermesLink app with the native iSH kernel (macOS)
+    needs: [decide, prepare-release, build-ish-runtime]
+    if: >-
+      always() &&
+      needs.decide.outputs.run_app == 'true' &&
+      needs.prepare-release.result == 'success' &&
+      (needs.build-ish-runtime.result == 'success' ||
+       (needs.build-ish-runtime.result == 'skipped' && needs.decide.outputs.run_ish_runtime != 'true'))
     runs-on: macos-latest
     permissions:
       contents: write
@@ -438,7 +443,23 @@ jobs:
         with:
           enable-cache: false
 
-      - name: Prepare link-only runtime placeholders
+      - name: Install the real iSH framework and pinned rootfs
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+          mkdir -p "$RUNNER_TEMP/ish-native-assets"
+          gh release download "$HERMES_RUNTIME_RELEASE_TAG" \
+            --pattern ISHLinuxNative.zip \
+            --dir "$RUNNER_TEMP/ish-native-assets"
+          unzip -t "$RUNNER_TEMP/ish-native-assets/ISHLinuxNative.zip"
+          unzip -q "$RUNNER_TEMP/ish-native-assets/ISHLinuxNative.zip" \
+            -d "$RUNNER_TEMP/ish-native-assets/extracted"
+          bash install_ish_runtime.sh "$RUNNER_TEMP/ish-native-assets/extracted"
+          test -x Frameworks/Ish.framework/Ish
+          python3 hermes/build/verify-ish-source.py --rootfs Resources/ish-rootfs.tar.gz
+
+      - name: Prepare Hermes runtime link placeholder
         run: |
           set -euo pipefail
           mkdir -p Frameworks/HermesRuntime.framework Resources
@@ -464,46 +485,8 @@ jobs:
             <key>CFBundlePackageType</key><string>FMWK</string>
           </dict></plist>
           EOF
-          mkdir -p Frameworks/Ish.framework
-          mkdir -p Resources
-          cat > "$RUNNER_TEMP/ish_runtime_stub.c" <<'EOF'
-          #include "ish_kernel_bridge.h"
-          int ish_configure(const char *storage_base, ish_log_handler log_handler) {
-            (void)storage_base;
-            (void)log_handler;
-            return ISH_RUN_OK;
-          }
-          int ish_kernel_ensure_booted(void) { return ISH_RUN_ERR_NOT_AVAILABLE; }
-          int ish_run_command(const char *command, int input_fd, int output_fd,
-                              int cols, int rows, int *exit_code_out) {
-            (void)command;
-            (void)input_fd;
-            (void)output_fd;
-            (void)cols;
-            (void)rows;
-            if (exit_code_out) *exit_code_out = 0;
-            return ISH_RUN_ERR_NOT_AVAILABLE;
-          }
-          EOF
-          xcrun --sdk iphoneos clang \
-            -target arm64-apple-ios16.1 \
-            -isysroot "$(xcrun --sdk iphoneos --show-sdk-path)" \
-            -I "$GITHUB_WORKSPACE/ISHBridge" \
-            -dynamiclib "$RUNNER_TEMP/ish_runtime_stub.c" \
-            -install_name '@rpath/Ish.framework/Ish' \
-            -o Frameworks/Ish.framework/Ish
-          cat > Frameworks/Ish.framework/Info.plist <<'EOF'
-          <?xml version="1.0" encoding="UTF-8"?>
-          <!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
-          <plist version="1.0"><dict>
-            <key>CFBundleExecutable</key><string>Ish</string>
-            <key>CFBundleIdentifier</key><string>com.cyan.hermeslink.ish-link-stub</string>
-            <key>CFBundlePackageType</key><string>FMWK</string>
-          </dict></plist>
-          EOF
           printf 'runtime omitted from app component\n' > "$RUNNER_TEMP/runtime-stub.txt"
           (cd "$RUNNER_TEMP" && zip -q "$GITHUB_WORKSPACE/Resources/hermesrt.zip" runtime-stub.txt)
-          tar -czf Resources/ish-rootfs.tar.gz -C "$RUNNER_TEMP" runtime-stub.txt
 
       - name: Set runtime-free app cache key
         id: runtime_hash
@@ -607,14 +590,14 @@ jobs:
           set -euo pipefail
           app="$(find "$RUNNER_TEMP/HermesLink.xcarchive/Products/Applications" -maxdepth 1 -type d -name '*.app' -print -quit)"
           test -n "$app"
-          rm -rf "$app/Frameworks/HermesRuntime.framework" \
-            "$app/Frameworks/Ish.framework" "$app/hermesrt.zip" "$app/ish-rootfs.tar.gz"
+          rm -rf "$app/Frameworks/HermesRuntime.framework" "$app/hermesrt.zip"
           test ! -e "$app/Frameworks/HermesRuntime.framework"
-          test ! -e "$app/Frameworks/Ish.framework"
           test ! -e "$app/hermesrt.zip"
-          test ! -e "$app/ish-rootfs.tar.gz"
+          test -x "$app/Frameworks/Ish.framework/Ish"
+          test -s "$app/ish-rootfs.tar.gz"
+          python3 hermes/build/verify-ish-source.py --rootfs "$app/ish-rootfs.tar.gz"
 
-      - name: Package and publish runtime-free app
+      - name: Package app with the real iSH runtime
         run: |
           set -euo pipefail
           app="$(find "$RUNNER_TEMP/HermesLink.xcarchive/Products/Applications" -maxdepth 1 -type d -name '*.app' -print -quit)"
@@ -624,10 +607,14 @@ jobs:
           mkdir -p "$RUNNER_TEMP/runtime-free-app"
           /usr/bin/ditto -c -k --sequesterRsrc --keepParent "$app" \
             "$RUNNER_TEMP/runtime-free-app/HermesLink.app.zip"
-          if unzip -Z1 "$RUNNER_TEMP/runtime-free-app/HermesLink.app.zip" | grep -E 'HermesRuntime\.framework|Ish\.framework|hermesrt\.zip|ish-rootfs\.tar\.gz'; then
-            echo "runtime-free app unexpectedly contains Hermes runtime assets" >&2
+          if unzip -Z1 "$RUNNER_TEMP/runtime-free-app/HermesLink.app.zip" | grep -E 'HermesRuntime\.framework|hermesrt\.zip'; then
+            echo "app component unexpectedly contains Hermes runtime assets" >&2
             exit 1
           fi
+          unzip -Z1 "$RUNNER_TEMP/runtime-free-app/HermesLink.app.zip" |
+            grep -Fx 'HermesLink.app/Frameworks/Ish.framework/Ish'
+          unzip -Z1 "$RUNNER_TEMP/runtime-free-app/HermesLink.app.zip" |
+            grep -Fx 'HermesLink.app/ish-rootfs.tar.gz'
           GH_TOKEN="${{ github.token }}" gh release upload "$HERMES_RUNTIME_RELEASE_TAG" \
             "$RUNNER_TEMP/runtime-free-app/HermesLink.app.zip" --clobber
 
@@ -767,10 +754,9 @@ jobs:
           GH_TOKEN: ${{ github.token }}
         run: |
           set -euo pipefail
-          mkdir -p "$RUNNER_TEMP/hermeslink-components/app" \
-            "$RUNNER_TEMP/ish-native-assets" "$RUNNER_TEMP/Payload"
+          mkdir -p "$RUNNER_TEMP/hermeslink-components/app" "$RUNNER_TEMP/Payload"
           release_url="https://github.com/${GITHUB_REPOSITORY}/releases/download/${HERMES_RUNTIME_RELEASE_TAG}"
-          for asset in HermesLink.app.zip HermesRuntime.framework.zip hermesrt.zip ISHLinuxNative.zip; do
+          for asset in HermesLink.app.zip HermesRuntime.framework.zip hermesrt.zip; do
             curl --fail --location --retry 5 --retry-all-errors \
               --header "Authorization: Bearer $GH_TOKEN" \
               --header 'Accept: application/octet-stream' \
@@ -781,11 +767,6 @@ jobs:
           unzip -t "$RUNNER_TEMP/hermeslink-components/HermesLink.app.zip"
           python3 hermes/build/validate-runtime-zip.py "$RUNNER_TEMP/hermeslink-components/hermesrt.zip"
           unzip -t "$RUNNER_TEMP/hermeslink-components/HermesRuntime.framework.zip"
-          unzip -t "$RUNNER_TEMP/hermeslink-components/ISHLinuxNative.zip"
-          unzip -q "$RUNNER_TEMP/hermeslink-components/ISHLinuxNative.zip" \
-            -d "$RUNNER_TEMP/ish-native-assets"
-          test -x "$RUNNER_TEMP/ish-native-assets/Frameworks/Ish.framework/Ish"
-          test -s "$RUNNER_TEMP/ish-native-assets/Resources/ish-rootfs.tar.gz"
           ditto -x -k "$RUNNER_TEMP/hermeslink-components/HermesLink.app.zip" \
             "$RUNNER_TEMP/hermeslink-components/app"
           app="$(find "$RUNNER_TEMP/hermeslink-components/app" -maxdepth 2 -type d -name '*.app' -print -quit)"
@@ -794,18 +775,15 @@ jobs:
           mkdir -p "$RUNNER_TEMP/Payload/HermesLink.app/Frameworks"
           unzip -q "$RUNNER_TEMP/hermeslink-components/HermesRuntime.framework.zip" \
             -d "$RUNNER_TEMP/Payload/HermesLink.app/Frameworks"
-          /usr/bin/ditto "$RUNNER_TEMP/ish-native-assets/Frameworks/Ish.framework" \
-            "$RUNNER_TEMP/Payload/HermesLink.app/Frameworks/Ish.framework"
           install -m 644 "$RUNNER_TEMP/hermeslink-components/hermesrt.zip" \
             "$RUNNER_TEMP/Payload/HermesLink.app/hermesrt.zip"
-          install -m 644 "$RUNNER_TEMP/ish-native-assets/Resources/ish-rootfs.tar.gz" \
-            "$RUNNER_TEMP/Payload/HermesLink.app/ish-rootfs.tar.gz"
           test -f "$RUNNER_TEMP/Payload/HermesLink.app/Info.plist"
           test -x "$RUNNER_TEMP/Payload/HermesLink.app/HermesLink"
           test -x "$RUNNER_TEMP/Payload/HermesLink.app/Frameworks/Ish.framework/Ish"
           test -x "$RUNNER_TEMP/Payload/HermesLink.app/Frameworks/HermesRuntime.framework/HermesRuntime"
           test -s "$RUNNER_TEMP/Payload/HermesLink.app/hermesrt.zip"
-          test -s "$RUNNER_TEMP/Payload/HermesLink.app/ish-rootfs.tar.gz"
+          python3 hermes/build/verify-ish-source.py \
+            --rootfs "$RUNNER_TEMP/Payload/HermesLink.app/ish-rootfs.tar.gz"
 
       - name: Sign and package IPA
         run: |

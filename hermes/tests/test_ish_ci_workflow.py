@@ -83,9 +83,12 @@ class IshRuntimeWorkflowTests(unittest.TestCase):
         self.assertIn("build-ish-static.sh --xcode-only", steps_text)
         self.assertNotIn("Adapt Linux Meson build metadata for macOS", steps_text)
 
-    def test_app_archive_is_independent_of_ish_build_but_ipa_waits_for_it(self) -> None:
-        self.assertNotIn("build-ish-runtime", self.workflow["jobs"]["build-app"]["needs"])
+    def test_app_archive_and_ipa_wait_for_ish_runtime_when_it_must_be_built(self) -> None:
+        self.assertIn("build-ish-runtime", self.workflow["jobs"]["build-app"]["needs"])
         self.assertIn("build-ish-runtime", self.workflow["jobs"]["assemble-ipa"]["needs"])
+        app_condition = self.workflow["jobs"]["build-app"]["if"]
+        self.assertIn("needs.build-ish-runtime.result == 'success'", app_condition)
+        self.assertIn("needs.build-ish-runtime.result == 'skipped'", app_condition)
         self.assertRegex(
             self.text,
             r'if \[ "\$run_ish_runtime" = true \]; then\n\s+app_changed=true\n\s+fi',
@@ -94,7 +97,7 @@ class IshRuntimeWorkflowTests(unittest.TestCase):
     def test_requested_ish_build_cannot_be_treated_as_a_skipped_optional_stage(self) -> None:
         app_condition = self.workflow["jobs"]["build-app"]["if"]
         ipa_condition = self.workflow["jobs"]["assemble-ipa"]["if"]
-        self.assertNotIn("needs.decide.outputs.run_ish_runtime", app_condition)
+        self.assertIn("needs.decide.outputs.run_ish_runtime != 'true'", app_condition)
         self.assertIn("needs.decide.outputs.run_ish_runtime != 'true'", ipa_condition)
         self.assertIn("build-ish-meson", self.workflow["jobs"]["assemble-ipa"]["needs"])
 
@@ -138,23 +141,24 @@ class IshRuntimeWorkflowTests(unittest.TestCase):
         self.assertGreaterEqual(self.text.count("hermes/build/ISHNative.xcconfig"), 1)
         self.assertGreaterEqual(self.text.count("install_ish_runtime.sh"), 1)
 
-    def test_app_uses_runtime_link_stubs_and_publishes_no_runtime_assets(self) -> None:
+    def test_app_links_real_ish_runtime_and_publishes_its_rootfs(self) -> None:
         job = self.workflow["jobs"]["build-app"]
         steps_text = str(job["steps"])
-        self.assertNotIn("ISHLinuxNative.zip", steps_text)
-        self.assertNotIn("install_ish_runtime.sh", steps_text)
-        self.assertIn("ish_runtime_stub.c", steps_text)
-        self.assertIn("ISH_NATIVE_AVAILABLE = YES", steps_text)
-        self.assertIn('"$app/Frameworks/Ish.framework"', steps_text)
-        self.assertIn('"$app/ish-rootfs.tar.gz"', steps_text)
-
-    def test_ipa_reassembles_ish_framework_and_rootfs_from_runtime_release(self) -> None:
-        steps_text = str(self.workflow["jobs"]["assemble-ipa"]["steps"])
         self.assertIn("ISHLinuxNative.zip", steps_text)
-        self.assertIn("ish-native-assets/Frameworks/Ish.framework", steps_text)
-        self.assertIn("ish-native-assets/Resources/ish-rootfs.tar.gz", steps_text)
+        self.assertIn("install_ish_runtime.sh", steps_text)
+        self.assertNotIn("ish_runtime_stub.c", steps_text)
+        self.assertIn("ISH_NATIVE_AVAILABLE = YES", steps_text)
+        self.assertIn("test -x Frameworks/Ish.framework/Ish", steps_text)
+        self.assertIn("verify-ish-source.py --rootfs Resources/ish-rootfs.tar.gz", steps_text)
+        self.assertIn('test -x "$app/Frameworks/Ish.framework/Ish"', steps_text)
+        self.assertIn('test -s "$app/ish-rootfs.tar.gz"', steps_text)
+
+    def test_ipa_preserves_real_ish_framework_and_rootfs_from_app_component(self) -> None:
+        steps_text = str(self.workflow["jobs"]["assemble-ipa"]["steps"])
+        self.assertNotIn("ISHLinuxNative.zip", steps_text)
         self.assertIn("Ish.framework/Ish", steps_text)
         self.assertIn("ish-rootfs.tar.gz", steps_text)
+        self.assertIn("verify-ish-source.py", steps_text)
 
     def test_ish_release_contains_framework_and_pinned_rootfs(self) -> None:
         steps_text = str(self.workflow["jobs"]["build-ish-runtime"]["steps"])
