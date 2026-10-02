@@ -31,6 +31,8 @@ class NativeModuleRegistryTests(unittest.TestCase):
             Path(__file__).resolve().parents[1] / "build" / "build-native-ios.sh"
         ).read_text(encoding="utf-8")
 
+        self.assertIn("--disable-framework", build_script)
+        self.assertNotIn("--enable-framework", build_script)
         self.assertIn("Modules/_hacl/Hacl_Hash_SHA2.o", build_script)
         self.assertIn('find Modules/expat -maxdepth 1 -type f -name \'*.c\'', build_script)
         self.assertIn('"$LLVM_AR" rcs Modules/expat/libexpat.a', build_script)

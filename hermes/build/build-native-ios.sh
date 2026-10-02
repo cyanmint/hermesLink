@@ -157,13 +157,7 @@ PY
     --build="$BUILD_TRIPLE" --with-build-python="$HOST_PYTHON" \
     --with-openssl="$OPENSSL_INSTALL" --with-openssl-rpath=no \
     --without-ensurepip --disable-test-modules --disable-ipv6 --with-lto=no \
-    --enable-framework)
-python3 - "$TARGET_ROOT/Makefile" <<'PY'
-from pathlib import Path
-path = Path(__import__("sys").argv[1])
-text = path.read_text(encoding="utf-8")
-path.write_text(text.replace("Python.framework/Python", ""), encoding="utf-8", newline="\n")
-PY
+    --disable-framework)
 python3 - "$ROOT/build" "$TARGET_ROOT/Modules/Setup.stdlib" "$TARGET_ROOT/Modules/Setup.local" "$TARGET_ROOT/Makefile" <<'PY'
 import pathlib, sys
 sys.path.insert(0, sys.argv[1])
