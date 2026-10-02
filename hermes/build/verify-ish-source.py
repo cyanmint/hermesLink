@@ -75,7 +75,7 @@ def verify_source(source: Path) -> None:
                 str(source),
                 "status",
                 "--porcelain",
-                "--ignore-submodules=none",
+                "--ignore-submodules=all",
             ],
             text=True,
         )
@@ -89,6 +89,8 @@ def verify_source(source: Path) -> None:
         raise ValueError(
             f"iSH source or submodules have local modifications: {source}\n{changes}"
         )
+    # `git status` above ignores submodule worktree noise (notably the macOS
+    # Linux-kernel checkout); this recursive status still pins every gitlink.
     if any(line and line[0] != " " for line in status.splitlines()):
         raise ValueError("iSH submodules are uninitialized or differ from pinned revisions")
 

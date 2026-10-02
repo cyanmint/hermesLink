@@ -20,7 +20,7 @@
  *
  * Exactly one of this file or ish_kernel_bridge.m is ever compiled, never
  * both (see EXCLUDED_SOURCE_FILE_NAMES in hermes/build/ISHNative.xcconfig),
- * so this file does not implement the Terminal_*/DefaultRootPath/etc. ABI
+ * so this file does not implement the terminal or root-path ABI.
  * at all — nothing in this build configuration calls into the pinned
  * kernel sources that declare it. */
 
