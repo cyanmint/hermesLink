@@ -165,6 +165,7 @@ fi
 # The host targets depend on liblinux in Xcode, which would rerun Ninja and
 # reconfigure the Linux cross-build tree with macOS compilers.
 python3 "$ROOT/build/prepare-ish-xcode-project.py" "$ISH_SOURCE/iSH.xcodeproj/project.pbxproj"
+python3 "$ROOT/build/repack-ish-meson-archives.py" "$MESON_BUILD_DIR"
 for target in libiSHLinux libiSHLinuxUser; do
   echo "build-ish-static.sh: building upstream Xcode target $target ..."
   xcodebuild \

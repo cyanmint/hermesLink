@@ -8,6 +8,7 @@ exercised end-to-end against the real pinned rootfs archive when present."""
 
 from __future__ import annotations
 
+import os
 import shutil
 import subprocess
 import tempfile
@@ -18,6 +19,7 @@ from pathlib import Path
 ROOT = Path(__file__).resolve().parents[2]
 BUILD_SCRIPT = ROOT / "hermes" / "build" / "build-ish-static.sh"
 PREPARE_XCODE_PROJECT = ROOT / "hermes" / "build" / "prepare-ish-xcode-project.py"
+REPACK_MESON_ARCHIVES = ROOT / "hermes" / "build" / "repack-ish-meson-archives.py"
 INSTALL_SCRIPT = ROOT / "install_ish_runtime.sh"
 PINNED_ROOTFS = ROOT / "hermes" / "build" / "external" / "ish" / "rootfs.tar.gz"
 PINNED_SOURCE = ROOT / "hermes" / "build" / "external" / "ish" / "source"
@@ -158,6 +160,54 @@ class PrepareIshXcodeProjectTests(unittest.TestCase):
             )
         self.assertNotEqual(result.returncode, 0)
         self.assertIn("unexpected dependency list", result.stderr)
+
+
+class RepackIshMesonArchivesTests(unittest.TestCase):
+    def test_repackages_all_linux_archives_using_apple_libtool(self) -> None:
+        with tempfile.TemporaryDirectory() as temp_dir:
+            root = Path(temp_dir)
+            build_dir = root / "meson"
+            (build_dir / "deps").mkdir(parents=True)
+            fake_bin = root / "bin"
+            fake_bin.mkdir()
+            for archive in ("deps/liblinux.a", "libfakefs.a", "libish_emu.a"):
+                (build_dir / archive).write_bytes(b"GNU archive")
+
+            llvm_ar = fake_bin / "llvm-ar"
+            llvm_ar.write_text(
+                "#!/usr/bin/env python3\n"
+                "import sys\n"
+                "from pathlib import Path\n"
+                "if sys.argv[1] == 't':\n"
+                "    print('first.o\\nsecond.o')\n"
+                "elif sys.argv[1] == 'x':\n"
+                "    Path('first.o').write_bytes(b'first object')\n"
+                "    Path('second.o').write_bytes(b'second object')\n",
+                encoding="utf-8",
+            )
+            llvm_ar.chmod(0o755)
+
+            libtool = fake_bin / "libtool"
+            libtool.write_text(
+                "#!/usr/bin/env python3\n"
+                "import sys\n"
+                "from pathlib import Path\n"
+                "output = Path(sys.argv[sys.argv.index('-o') + 1])\n"
+                "output.write_bytes(b'Apple static archive')\n",
+                encoding="utf-8",
+            )
+            libtool.chmod(0o755)
+
+            result = subprocess.run(
+                ["python3", str(REPACK_MESON_ARCHIVES), str(build_dir)],
+                capture_output=True,
+                text=True,
+                env={"PATH": f"{fake_bin}:{os.environ['PATH']}"},
+            )
+
+            self.assertEqual(result.returncode, 0, result.stderr)
+            for archive in ("deps/liblinux.a", "libfakefs.a", "libish_emu.a"):
+                self.assertEqual((build_dir / archive).read_bytes(), b"Apple static archive")
 
 
 class InstallIshRuntimeScriptTests(unittest.TestCase):

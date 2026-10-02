@@ -95,6 +95,8 @@ class IshRuntimeWorkflowTests(unittest.TestCase):
         steps_text = str(job["steps"])
         self.assertIn("ISHMesonBuild.tar.gz", steps_text)
         self.assertIn("build-ish-static.sh", steps_text)
+        build_script = (ROOT / "hermes" / "build" / "build-ish-static.sh").read_text()
+        self.assertIn("repack-ish-meson-archives.py", build_script)
         self.assertIn("meson", steps_text.lower())
         self.assertIn("ninja", steps_text.lower())
 
@@ -109,6 +111,7 @@ class IshRuntimeWorkflowTests(unittest.TestCase):
             "ISHBridge/*", "hermes/build/build-ish-static.sh",
             "hermes/build/fetch-ish-source.sh", "hermes/build/verify-ish-source.py",
             "hermes/build/prepare-ish-xcode-project.py",
+            "hermes/build/repack-ish-meson-archives.py",
             "hermes/build/ISHNative.xcconfig", "install_ish_runtime.sh",
         ):
             with self.subTest(marker=marker):

@@ -115,7 +115,7 @@ jobs:
                 ;;
             esac
             case "$path" in
-              hermes/build/prepare-ish-xcode-project.py)
+              hermes/build/prepare-ish-xcode-project.py|hermes/build/repack-ish-meson-archives.py)
                 ish_xcode_changed=true
                 ;;
             esac
