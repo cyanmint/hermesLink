@@ -868,7 +868,10 @@ jobs:
           set -euo pipefail
           app="$RUNNER_TEMP/Payload/HermesLink.app"
           while IFS= read -r -d '' bundle; do
-            codesign --force --sign - --timestamp=none "$bundle"
+            if [ -f "$bundle/Info.plist" ] &&
+              [ "$(/usr/libexec/PlistBuddy -c 'Print :CFBundlePackageType' "$bundle/Info.plist" 2>/dev/null || true)" = BNDL ]; then
+              codesign --force --sign - --timestamp=none "$bundle"
+            fi
           done < <(find "$app" -depth -type d -name '*.bundle' -print0)
           while IFS= read -r -d '' code_bundle; do
             codesign --force --sign - --timestamp=none "$code_bundle"
@@ -878,7 +881,10 @@ jobs:
           done < <(find "$app/PlugIns" -type d -name '*.appex' -prune -print0)
           codesign --force --sign - --timestamp=none "$app"
           while IFS= read -r -d '' bundle; do
-            codesign --verify --strict --verbose=2 "$bundle"
+            if [ -f "$bundle/Info.plist" ] &&
+              [ "$(/usr/libexec/PlistBuddy -c 'Print :CFBundlePackageType' "$bundle/Info.plist" 2>/dev/null || true)" = BNDL ]; then
+              codesign --verify --strict --verbose=2 "$bundle"
+            fi
           done < <(find "$app" -depth -type d -name '*.bundle' -print0)
           while IFS= read -r -d '' code_bundle; do
             codesign --verify --strict --verbose=2 "$code_bundle"
