@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Launch HermesLink in iOS Simulator and verify a real Copilot terminal call."""
+"""Launch HermesLink in iOS Simulator and verify real Copilot iSH calls."""
 from __future__ import annotations
 
 import json
@@ -22,6 +22,8 @@ MODEL = "gpt-6-luna"
 PROVIDER = "copilot"
 BASE_URL = "http://127.0.0.1:8787"
 PROOF_PREFIX = "HermesLink-E2E-LS-PROOF-"
+ISH_PROOF_PREFIX = "HermesLink-E2E-ISH-COMMAND-"
+ISH_TOOL_PROOF_PREFIX = "HermesLink-E2E-ISH-TOOL-"
 
 
 class E2EError(RuntimeError):
@@ -75,7 +77,7 @@ def _tool_call_id(payload: dict) -> str | None:
     return None
 
 
-def _is_ls_command(payload: dict) -> bool:
+def _has_expected_command(payload: dict, expected_command: str) -> bool:
     args = payload.get("args")
     if isinstance(args, str):
         try:
@@ -91,18 +93,25 @@ def _is_ls_command(payload: dict) -> bool:
         words = shlex.split(command, posix=True)
     except ValueError:
         return False
-    return words == ["ls", "-la"]
+    try:
+        expected_words = shlex.split(expected_command, posix=True)
+    except ValueError:
+        return False
+    return words == expected_words
 
 
-def has_successful_ls_tool_run(
-    events: Iterable[tuple[str, object]], sentinel: str
+def has_successful_tool_run(
+    events: Iterable[tuple[str, object]],
+    tool_name: str,
+    command: str,
+    sentinel: str,
 ) -> bool:
     calls: list[tuple[str | None, dict]] = []
     completions: list[tuple[str | None, dict]] = []
     for event_name, raw_payload in events:
-        if not isinstance(raw_payload, dict) or raw_payload.get("name") != "terminal":
+        if not isinstance(raw_payload, dict) or raw_payload.get("name") != tool_name:
             continue
-        if event_name == "tool" and _is_ls_command(raw_payload):
+        if event_name == "tool" and _has_expected_command(raw_payload, command):
             calls.append((_tool_call_id(raw_payload), raw_payload))
         elif event_name == "tool_complete":
             completions.append((_tool_call_id(raw_payload), raw_payload))
@@ -117,6 +126,12 @@ def has_successful_ls_tool_run(
             if isinstance(preview, str) and sentinel in preview:
                 return True
     return False
+
+
+def has_successful_ls_tool_run(
+    events: Iterable[tuple[str, object]], sentinel: str
+) -> bool:
+    return has_successful_tool_run(events, "terminal", "ls -la", sentinel)
 
 
 def _simctl_env(token: str | None = None) -> dict[str, str]:
@@ -316,29 +331,62 @@ def run_e2e(app_path: Path, token: str) -> None:
         if yolo.get("yolo_enabled") is not True:
             raise E2EError("could not enable non-interactive tool approvals for the test session")
 
-        started = _request_json(
-            "/api/chat/start",
-            {
-                "session_id": session_id,
-                "message": (
-                    "Use the terminal tool to run exactly `ls -la` in the current workspace. "
-                    f"Do not claim success unless its output contains `{sentinel}`."
-                ),
-                "model": MODEL,
-                "model_provider": PROVIDER,
-                "explicit_model_pick": True,
-                "workspace": str(workspace),
-            },
-        )
-        stream_id = started.get("stream_id")
-        if not isinstance(stream_id, str) or not stream_id:
-            raise E2EError("chat start did not return a stream id")
-        events = _read_chat_stream(stream_id)
-        if not has_successful_ls_tool_run(events, sentinel):
+        if not _run_tool_proof(
+            session_id, workspace, "terminal", "ls -la", sentinel,
+            f"Use the terminal tool to run exactly `ls -la` in the current workspace. "
+            f"Do not claim success unless its output contains `{sentinel}`.",
+        ):
             raise E2EError("agent did not complete terminal ls with the simulator workspace proof file")
         print("PASS: Copilot conversation completed a real terminal ls and returned its workspace proof file")
+
+        command_proof = f"{ISH_PROOF_PREFIX}{uuid.uuid4().hex}"
+        command = f"ish printf {command_proof}"
+        if not _run_tool_proof(
+            session_id, workspace, "terminal", command, command_proof,
+            f"Use the terminal tool to run exactly `{command}`. "
+            f"Do not claim success unless the output contains `{command_proof}`.",
+        ):
+            raise E2EError("terminal did not execute the ish shell command and return its Alpine proof")
+        print("PASS: terminal executed the native ish command and returned its Alpine proof")
+
+        tool_proof = f"{ISH_TOOL_PROOF_PREFIX}{uuid.uuid4().hex}"
+        tool_command = f"printf {tool_proof}"
+        if not _run_tool_proof(
+            session_id, workspace, "ish", tool_command, tool_proof,
+            f"Use the ish tool, not terminal, to run exactly `{tool_command}` inside Alpine. "
+            f"Do not claim success unless the output contains `{tool_proof}`.",
+        ):
+            raise E2EError("agent did not complete the ish tool call with its Alpine proof")
+        print("PASS: Copilot conversation completed the ish tool and returned its Alpine proof")
     finally:
         _simctl(["shutdown", simulator_id], allow_failure=True, timeout=60)
+
+
+def _run_tool_proof(
+    session_id: str,
+    workspace: Path,
+    tool_name: str,
+    command: str,
+    sentinel: str,
+    message: str,
+) -> bool:
+    started = _request_json(
+        "/api/chat/start",
+        {
+            "session_id": session_id,
+            "message": message,
+            "model": MODEL,
+            "model_provider": PROVIDER,
+            "explicit_model_pick": True,
+            "workspace": str(workspace),
+        },
+    )
+    stream_id = started.get("stream_id")
+    if not isinstance(stream_id, str) or not stream_id:
+        raise E2EError("chat start did not return a stream id")
+    return has_successful_tool_run(
+        _read_chat_stream(stream_id), tool_name, command, sentinel
+    )
 
 
 def main() -> int:

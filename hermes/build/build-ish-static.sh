@@ -20,14 +20,29 @@ IPHONEOS_DEPLOYMENT_TARGET=${IPHONEOS_DEPLOYMENT_TARGET:-16.1}
 ISH_LOG=${ISH_LOG:-}
 ISH_LOGGER=${ISH_LOGGER:-nslog}
 BUILD_MODE=${1:-all}
-
+SDK_PLATFORM=${SDK_PLATFORM:-iphoneos}
 fail() {
   echo "build-ish-static.sh: $*" >&2
   exit 2
 }
 
+if [ "$BUILD_MODE" = "--simulator" ]; then
+  SDK_PLATFORM=iphonesimulator
+fi
+case "$SDK_PLATFORM" in
+  iphoneos)
+    MIN_VERSION_FLAG=-miphoneos-version-min
+    TARGET_TRIPLE=arm64-apple-ios"$IPHONEOS_DEPLOYMENT_TARGET"
+    ;;
+  iphonesimulator)
+    MIN_VERSION_FLAG=-mios-simulator-version-min
+    TARGET_TRIPLE=arm64-apple-ios"$IPHONEOS_DEPLOYMENT_TARGET"-simulator
+    ;;
+  *) fail "unsupported Apple SDK platform: $SDK_PLATFORM" ;;
+esac
+
 case "$BUILD_MODE" in
-  all|--meson-only|--xcode-only) ;;
+  all|--meson-only|--xcode-only|--simulator) ;;
   *) fail "unknown build mode: $BUILD_MODE" ;;
 esac
 
@@ -46,12 +61,12 @@ elif [ "$HOST_OS" = Darwin ]; then
   if [ "$BUILD_MODE" != "--meson-only" ]; then
     command -v xcodebuild >/dev/null 2>&1 || fail "requires Xcode command line tools: 'xcodebuild' not found"
   fi
-  xcrun --sdk iphoneos --find clang >/dev/null 2>&1 || fail "requires an installed iphoneos SDK (xcrun --sdk iphoneos --find clang failed)"
+  xcrun --sdk "$SDK_PLATFORM" --find clang >/dev/null 2>&1 || fail "requires an installed $SDK_PLATFORM SDK"
   command -v brew >/dev/null 2>&1 || fail "requires Homebrew to locate LLVM/LLD"
   LLVM_BIN="$(brew --prefix llvm)/bin"
   LLD_BIN="$(brew --prefix lld)/bin"
   [ -x "$LLVM_BIN/clang" ] && [ -x "$LLD_BIN/ld.lld" ] || fail "requires Homebrew LLVM and LLD (brew install llvm lld)"
-  SDKROOT=${SDKROOT:-$(xcrun --sdk iphoneos --show-sdk-path)}
+  SDKROOT=${SDKROOT:-$(xcrun --sdk "$SDK_PLATFORM" --show-sdk-path)}
   HOST_CLANG="$LLVM_BIN/clang"
   export PATH="$LLVM_BIN:$LLD_BIN:$PATH"
 elif [ "$HOST_OS" = Linux ]; then
@@ -84,7 +99,7 @@ export SDKROOT
 if [ "$HOST_OS" = Darwin ]; then
   cat > "$TOOLCHAIN_BIN/clang" <<EOF
 #!/bin/sh
-exec "$LLVM_BIN/clang" -isysroot "$SDKROOT" -miphoneos-version-min="$IPHONEOS_DEPLOYMENT_TARGET" "\$@"
+exec "$LLVM_BIN/clang" -target "$TARGET_TRIPLE" -isysroot "$SDKROOT" "$MIN_VERSION_FLAG=$IPHONEOS_DEPLOYMENT_TARGET" "\$@"
 EOF
 else
   cat > "$TOOLCHAIN_BIN/clang" <<EOF
@@ -127,7 +142,7 @@ export CONFIGURATION
 export ISH_LOG
 export ISH_LOGGER
 export ISH_KERNEL=linux
-PRODUCTS_DIR="$BUILD_ROOT/xcode/Build/Products/$CONFIGURATION-iphoneos"
+PRODUCTS_DIR="$BUILD_ROOT/xcode/Build/Products/$CONFIGURATION-$SDK_PLATFORM"
 MESON_ARCHIVES=(deps/liblinux.a libfakefs.a libish_emu.a)
 MESON_NINJA_TARGETS="${MESON_ARCHIVES[*]}"
 if [ "$BUILD_MODE" = "--xcode-only" ]; then
@@ -172,7 +187,7 @@ for target in libiSHLinux libiSHLinuxUser; do
     -project "$ISH_SOURCE/iSH.xcodeproj" \
     -target "$target" \
     -configuration "$CONFIGURATION" \
-    -sdk iphoneos \
+    -sdk "$SDK_PLATFORM" \
     ARCHS="$ARCHS" \
     ONLY_ACTIVE_ARCH=YES \
     CODE_SIGNING_ALLOWED=NO \

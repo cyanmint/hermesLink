@@ -618,14 +618,71 @@ jobs:
           GH_TOKEN="${{ github.token }}" gh release upload "$HERMES_RUNTIME_RELEASE_TAG" \
             "$RUNNER_TEMP/runtime-free-app/HermesLink.app.zip" --clobber
 
+  build-ish-simulator-runtime:
+    name: Build iSH Simulator runtime
+    needs: [decide]
+    if: inputs.run_tests == true
+    runs-on: macos-latest
+    permissions:
+      contents: read
+    steps:
+      - name: Check out HermesLink
+        uses: actions/checkout@v7
+
+      - name: Install LLVM, LLD, Meson, and Ninja
+        run: brew install llvm lld meson ninja
+
+      - name: Fetch pinned iSH source and Alpine rootfs
+        run: bash hermes/build/fetch-ish-source.sh "$RUNNER_TEMP/ish-simulator-source"
+
+      - name: Build iSH for iOS Simulator
+        env:
+          BUILD_ROOT: ${{ runner.temp }}/ish-simulator-build
+          ISH_SOURCE: ${{ runner.temp }}/ish-simulator-source/source
+          OUTPUT_DIR: ${{ runner.temp }}/ish-simulator-build/lib
+          IPHONEOS_DEPLOYMENT_TARGET: '16.1'
+        run: bash hermes/build/build-ish-static.sh --simulator
+
+      - name: Compile simulator iSH Mach-O section anchors
+        run: |
+          xcrun --sdk iphonesimulator clang \
+            -target arm64-apple-ios16.1-simulator \
+            -isysroot "$(xcrun --sdk iphonesimulator --show-sdk-path)" \
+            -c "$RUNNER_TEMP/ish-simulator-source/source/deps/linux/arch/ish/kernel/sections.S" \
+            -o "$RUNNER_TEMP/ish-simulator-build/lib/ish-sections.o"
+
+      - name: Package simulator iSH framework and rootfs
+        env:
+          SDK_NAME: iphonesimulator
+          IPHONEOS_DEPLOYMENT_TARGET: '16.1'
+        run: |
+          set -euo pipefail
+          mkdir -p "$RUNNER_TEMP/ish-simulator-runtime/Frameworks" "$RUNNER_TEMP/ish-simulator-runtime/Resources"
+          bash hermes/build/package-ish-framework.sh \
+            "$RUNNER_TEMP/ish-simulator-build/lib" \
+            "$RUNNER_TEMP/ish-simulator-runtime/Frameworks"
+          cp "$RUNNER_TEMP/ish-simulator-source/rootfs.tar.gz" \
+            "$RUNNER_TEMP/ish-simulator-runtime/Resources/ish-rootfs.tar.gz"
+          python3 hermes/build/verify-ish-source.py \
+            --rootfs "$RUNNER_TEMP/ish-simulator-runtime/Resources/ish-rootfs.tar.gz"
+
+      - name: Upload simulator iSH runtime
+        uses: actions/upload-artifact@v7
+        with:
+          name: ish-simulator-runtime
+          path: ${{ runner.temp }}/ish-simulator-runtime
+          if-no-files-found: error
+          retention-days: 1
+
   simulator-e2e:
     name: Simulator Copilot E2E
-    needs: [decide, prepare-release, build-runtime-zip, build-native-runtime, build-ish-runtime, build-app]
+    needs: [decide, prepare-release, build-runtime-zip, build-native-runtime, build-ish-runtime, build-ish-simulator-runtime, build-app]
     if: >-
       always() &&
       inputs.run_tests == true &&
       needs.prepare-release.result == 'success' &&
       needs.build-app.result == 'success' &&
+      needs.build-ish-simulator-runtime.result == 'success' &&
       (needs.build-runtime-zip.result == 'success' || needs.build-runtime-zip.result == 'skipped') &&
       (needs.build-native-runtime.result == 'success' || needs.build-native-runtime.result == 'skipped') &&
       (needs.build-ish-runtime.result == 'success' ||
@@ -656,6 +713,12 @@ jobs:
           cp "$RUNNER_TEMP/runtime-e2e/hermesrt.zip" hermes/hermesrt.zip
           bash install_hermes_runtime.sh hermes
 
+      - name: Download simulator iSH framework and rootfs
+        uses: actions/download-artifact@v7
+        with:
+          name: ish-simulator-runtime
+          path: ${{ runner.temp }}/ish-simulator-runtime
+
       - name: Cache framework builds
         id: cache
         uses: actions/cache@v6
@@ -673,15 +736,16 @@ jobs:
         if: steps.cache.outputs.cache-hit != 'true'
         run: bash get_resources.sh
 
-      - name: Fetch pinned iSH rootfs
+      - name: Install native iSH for simulator app
         run: |
           set -euo pipefail
-          bash hermes/build/fetch-ish-source.sh --rootfs-only \
-            "$RUNNER_TEMP/ish-assets/rootfs.tar.gz"
-          cp "$RUNNER_TEMP/ish-assets/rootfs.tar.gz" Resources/ish-rootfs.tar.gz
+          bash install_ish_runtime.sh "$RUNNER_TEMP/ish-simulator-runtime"
+          python3 hermes/build/verify-ish-source.py --rootfs Resources/ish-rootfs.tar.gz
 
       - name: Prepare Xcode configuration
-        run: cp template_setup.xcconfig developer_setup.xcconfig
+        run: |
+          cp template_setup.xcconfig developer_setup.xcconfig
+          printf '\nISH_NATIVE_AVAILABLE = YES\n' >> developer_setup.xcconfig
 
       - name: Set up Python
         uses: actions/setup-python@v7

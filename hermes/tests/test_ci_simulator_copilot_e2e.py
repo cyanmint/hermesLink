@@ -5,7 +5,11 @@ import unittest
 from unittest.mock import patch
 
 import ci_simulator_copilot_e2e as e2e
-from ci_simulator_copilot_e2e import has_successful_ls_tool_run, parse_sse_events
+from ci_simulator_copilot_e2e import (
+    has_successful_ls_tool_run,
+    has_successful_tool_run,
+    parse_sse_events,
+)
 
 
 class CopilotSimulatorE2ETests(unittest.TestCase):
@@ -58,6 +62,83 @@ class CopilotSimulatorE2ETests(unittest.TestCase):
         ]
 
         self.assertTrue(has_successful_ls_tool_run(events, "HermesLink-E2E-LS-PROOF.txt"))
+
+    def test_requires_terminal_to_run_the_native_ish_command(self):
+        command = "ish printf HermesLink-E2E-ISH-COMMAND-proof"
+        proof = "HermesLink-E2E-ISH-COMMAND-proof"
+        events = [
+            ("tool", {"name": "terminal", "args": {"command": command}, "tid": "call-1"}),
+            (
+                "tool_complete",
+                {
+                    "name": "terminal",
+                    "args": {"command": command},
+                    "tid": "call-1",
+                    "is_error": False,
+                    "preview": proof,
+                },
+            ),
+        ]
+
+        self.assertTrue(has_successful_tool_run(events, "terminal", command, proof))
+        self.assertFalse(has_successful_tool_run(events, "ish", "printf " + proof, proof))
+
+    def test_requires_ish_agent_tool_with_matching_successful_completion(self):
+        command = "printf HermesLink-E2E-ISH-TOOL-proof"
+        proof = "HermesLink-E2E-ISH-TOOL-proof"
+        events = [
+            ("tool", {"name": "ish", "args": {"command": command}, "tid": "call-1"}),
+            (
+                "tool_complete",
+                {
+                    "name": "ish",
+                    "args": {"command": command},
+                    "tid": "call-1",
+                    "is_error": False,
+                    "preview": proof,
+                },
+            ),
+        ]
+
+        self.assertTrue(has_successful_tool_run(events, "ish", command, proof))
+
+    def test_ish_agent_tool_rejects_wrong_command_or_missing_alpine_proof(self):
+        command = "printf HermesLink-E2E-ISH-TOOL-proof"
+        proof = "HermesLink-E2E-ISH-TOOL-proof"
+        events = [
+            ("tool", {"name": "ish", "args": {"command": "echo wrong"}, "tid": "call-1"}),
+            (
+                "tool_complete",
+                {
+                    "name": "ish",
+                    "args": {"command": "echo wrong"},
+                    "tid": "call-1",
+                    "is_error": False,
+                    "preview": proof,
+                },
+            ),
+        ]
+
+        self.assertFalse(has_successful_tool_run(events, "ish", command, proof))
+
+    def test_ish_agent_tool_rejects_completion_without_its_unique_proof(self):
+        command = "printf HermesLink-E2E-ISH-TOOL-proof"
+        proof = "HermesLink-E2E-ISH-TOOL-proof"
+        events = [
+            ("tool", {"name": "ish", "args": {"command": command}, "tid": "call-1"}),
+            (
+                "tool_complete",
+                {
+                    "name": "ish",
+                    "args": {"command": command},
+                    "tid": "call-1",
+                    "is_error": False,
+                    "preview": "not the Alpine output",
+                },
+            ),
+        ]
+
+        self.assertFalse(has_successful_tool_run(events, "ish", command, proof))
 
     def test_rejects_assistant_text_without_a_tool_call(self):
         events = [("token", {"text": "I ran ls and found HermesLink-E2E-LS-PROOF.txt"})]

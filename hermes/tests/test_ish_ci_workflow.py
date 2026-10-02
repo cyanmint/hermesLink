@@ -23,6 +23,7 @@ class IshRuntimeWorkflowTests(unittest.TestCase):
 
     def test_workflow_file_is_valid_yaml(self) -> None:
         self.assertIn("build-ish-runtime", self.workflow["jobs"])
+        self.assertIn("build-ish-simulator-runtime", self.workflow["jobs"])
         self.assertIn("build-ish-meson", self.workflow["jobs"])
 
     def test_app_build_failures_emit_raw_xcode_linker_diagnostics(self) -> None:
@@ -82,6 +83,24 @@ class IshRuntimeWorkflowTests(unittest.TestCase):
         self.assertNotIn("actions/download-artifact@v7", steps_text)
         self.assertIn("build-ish-static.sh --xcode-only", steps_text)
         self.assertNotIn("Adapt Linux Meson build metadata for macOS", steps_text)
+
+    def test_simulator_e2e_builds_and_installs_a_simulator_native_ish_runtime(self) -> None:
+        build_job = self.workflow["jobs"]["build-ish-simulator-runtime"]
+        self.assertEqual(build_job["runs-on"], "macos-latest")
+        build_steps = str(build_job["steps"])
+        self.assertIn("fetch-ish-source.sh", build_steps)
+        self.assertIn("build-ish-static.sh --simulator", build_steps)
+        self.assertIn("iphonesimulator", build_steps)
+        self.assertIn("Resources/ish-rootfs.tar.gz", build_steps)
+        self.assertIn("actions/upload-artifact@v7", build_steps)
+
+        simulator_job = self.workflow["jobs"]["simulator-e2e"]
+        self.assertIn("build-ish-simulator-runtime", simulator_job["needs"])
+        simulator_steps = str(simulator_job["steps"])
+        self.assertIn("actions/download-artifact@v7", simulator_steps)
+        self.assertIn("install_ish_runtime.sh", simulator_steps)
+        self.assertIn("ISH_NATIVE_AVAILABLE = YES", simulator_steps)
+        self.assertIn("ci_simulator_copilot_e2e.py", simulator_steps)
 
     def test_app_archive_and_ipa_wait_for_ish_runtime_when_it_must_be_built(self) -> None:
         self.assertIn("build-ish-runtime", self.workflow["jobs"]["build-app"]["needs"])

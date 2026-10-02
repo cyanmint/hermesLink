@@ -7,8 +7,26 @@ ROOT=$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)
 LIB_DIR=${1:?directory containing the built iSH archives and section anchors}
 OUTPUT_DIR=${2:?directory for the packaged Ish.framework}
 FRAMEWORK="$OUTPUT_DIR/Ish.framework"
-SDKROOT=$(xcrun --sdk iphoneos --show-sdk-path)
+SDK_NAME=${SDK_NAME:-iphoneos}
 DEPLOYMENT_TARGET=${IPHONEOS_DEPLOYMENT_TARGET:-16.1}
+case "$SDK_NAME" in
+  iphoneos)
+    SDKROOT=$(xcrun --sdk iphoneos --show-sdk-path)
+    TARGET=arm64-apple-ios"$DEPLOYMENT_TARGET"
+    MIN_VERSION_FLAG=-miphoneos-version-min
+    SUPPORTED_PLATFORM=iPhoneOS
+    ;;
+  iphonesimulator)
+    SDKROOT=$(xcrun --sdk iphonesimulator --show-sdk-path)
+    TARGET=arm64-apple-ios"$DEPLOYMENT_TARGET"-simulator
+    MIN_VERSION_FLAG=-mios-simulator-version-min
+    SUPPORTED_PLATFORM=iPhoneSimulator
+    ;;
+  *)
+    echo "unsupported iSH framework SDK: $SDK_NAME" >&2
+    exit 2
+    ;;
+esac
 BUILD_DIR=$(mktemp -d "${TMPDIR:-/tmp}/ish-framework.XXXXXX")
 trap 'rm -rf "$BUILD_DIR"' EXIT
 
@@ -25,21 +43,21 @@ done
 
 mkdir -p "$FRAMEWORK/Headers" "$FRAMEWORK/Modules"
 COMMON_FLAGS=(
-  -target arm64-apple-ios"$DEPLOYMENT_TARGET"
+  -target "$TARGET"
   -isysroot "$SDKROOT"
-  -miphoneos-version-min="$DEPLOYMENT_TARGET"
+  "$MIN_VERSION_FLAG=$DEPLOYMENT_TARGET"
   -D_DARWIN_C_SOURCE=1
   -I"$ROOT/ISHBridge"
 )
 
-xcrun --sdk iphoneos clang "${COMMON_FLAGS[@]}" -fobjc-arc -fblocks \
+xcrun --sdk "$SDK_NAME" clang "${COMMON_FLAGS[@]}" -fobjc-arc -fblocks \
   -I"$LIB_DIR" -c "$ROOT/ISHBridge/ish_kernel_bridge.m" -o "$BUILD_DIR/ish_kernel_bridge.o"
 for source in ish_rootfs ish_path_safety ish_exit_protocol; do
-  xcrun --sdk iphoneos clang "${COMMON_FLAGS[@]}" \
+  xcrun --sdk "$SDK_NAME" clang "${COMMON_FLAGS[@]}" \
     -c "$ROOT/ISHBridge/$source.c" -o "$BUILD_DIR/$source.o"
 done
 
-xcrun --sdk iphoneos clang "${COMMON_FLAGS[@]}" -dynamiclib \
+xcrun --sdk "$SDK_NAME" clang "${COMMON_FLAGS[@]}" -dynamiclib \
   "$LIB_DIR/ish-sections.o" \
   "$BUILD_DIR/ish_kernel_bridge.o" \
   "$BUILD_DIR/ish_rootfs.o" \
@@ -66,7 +84,7 @@ cat > "$FRAMEWORK/Info.plist" <<PLIST
 <key>CFBundleExecutable</key><string>Ish</string>
 <key>CFBundleIdentifier</key><string>com.cyan.hermeslink.ish</string>
 <key>CFBundlePackageType</key><string>FMWK</string>
-<key>CFBundleSupportedPlatforms</key><array><string>iPhoneOS</string></array>
+<key>CFBundleSupportedPlatforms</key><array><string>$SUPPORTED_PLATFORM</string></array>
 <key>CFBundleVersion</key><string>1</string>
 <key>MinimumOSVersion</key><string>$DEPLOYMENT_TARGET</string>
 </dict></plist>
