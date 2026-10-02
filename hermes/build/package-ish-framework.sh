@@ -28,6 +28,7 @@ COMMON_FLAGS=(
   -target arm64-apple-ios"$DEPLOYMENT_TARGET"
   -isysroot "$SDKROOT"
   -miphoneos-version-min="$DEPLOYMENT_TARGET"
+  -D_DARWIN_C_SOURCE=1
   -I"$ROOT/ISHBridge"
 )
 

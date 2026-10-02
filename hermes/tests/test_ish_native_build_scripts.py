@@ -77,6 +77,7 @@ class PackageIshFrameworkTests(unittest.TestCase):
     def test_script_links_static_kernel_inputs_into_a_dynamic_framework(self) -> None:
         source = PACKAGE_FRAMEWORK_SCRIPT.read_text(encoding="utf-8")
         self.assertIn("-dynamiclib", source)
+        self.assertIn("-D_DARWIN_C_SOURCE=1", source)
         self.assertIn("ish-sections.o", source)
         self.assertIn("-Wl,-force_load", source)
         self.assertIn("@rpath/Ish.framework/Ish", source)
