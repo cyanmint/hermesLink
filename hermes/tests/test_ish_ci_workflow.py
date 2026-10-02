@@ -209,14 +209,10 @@ class IshRuntimeWorkflowTests(unittest.TestCase):
         self.assertIn("find \"$app\"", steps_text)
         self.assertIn("*.framework", steps_text)
         self.assertIn("*.appex", steps_text)
-        self.assertIn("find \"$app\" -type f", steps_text)
-        self.assertIn(".ttf", steps_text)
-        self.assertIn(".otf", steps_text)
-        self.assertIn("chmod a-x {} +", steps_text)
-        self.assertIn('codesign --force --sign - --timestamp=none "$app"', steps_text)
+        self.assertIn('codesign --force --deep --sign - --timestamp=none "$app"', steps_text)
         self.assertNotIn('codesign --verify --verbose=2 "$app"', steps_text)
         self.assertEqual(steps_text.count("codesign --verify --strict --verbose=2"), 2)
-        self.assertNotIn("codesign --deep", steps_text)
+        self.assertNotIn("codesign --verify --deep", steps_text)
 
     def test_all_e2e_jobs_are_optional_and_start_only_after_ipa_assembly(self) -> None:
         jobs = self.workflow["jobs"]
