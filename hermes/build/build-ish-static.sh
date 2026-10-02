@@ -48,6 +48,9 @@ xcrun --sdk iphoneos --find clang >/dev/null 2>&1 || fail "requires an installed
 command -v meson >/dev/null 2>&1 || fail "requires Meson (https://mesonbuild.com); 'meson' not found on PATH"
 command -v ninja >/dev/null 2>&1 || fail "requires Ninja; 'ninja' not found on PATH"
 
+SDKROOT=$(xcrun --sdk iphoneos --show-sdk-path)
+export SDKROOT
+
 mkdir -p "$MESON_BUILD_DIR" "$OUTPUT_DIR"
 
 # app/xcode-meson.sh / app/xcode-ninja.sh are upstream's own Xcode

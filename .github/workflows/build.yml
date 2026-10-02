@@ -113,7 +113,7 @@ jobs:
                 ;;
             esac
             case "$path" in
-              Blink*/*|AppKitBridge/*|Common/*|DarkAppIcon/*|KB/*|SSH/*|SSHTests/*|Settings/*|Sessions/*|Resources/*|Media.xcassets/*|Frameworks/*|xcfs/*|*.xcodeproj/*|*.xcconfig|get_frameworks.sh|get_resources.sh|files_header.sh|header|ios_patches.h|ios_patches.m|main.m|template_setup.xcconfig|update_cacert.sh|install_hermes_runtime.sh)
+              Blink*/*|AppKitBridge/*|Common/*|DarkAppIcon/*|ISHBridge/*|KB/*|SSH/*|SSHTests/*|Settings/*|Sessions/*|Resources/*|Media.xcassets/*|Frameworks/*|xcfs/*|*.xcodeproj/*|*.xcconfig|hermes/build/ISHNative.xcconfig|install_ish_runtime.sh|get_frameworks.sh|get_resources.sh|files_header.sh|header|ios_patches.h|ios_patches.m|main.m|template_setup.xcconfig|update_cacert.sh|install_hermes_runtime.sh)
                 app_changed=true
                 ;;
             esac

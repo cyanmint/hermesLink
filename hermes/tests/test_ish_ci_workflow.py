@@ -70,6 +70,11 @@ class IshRuntimeWorkflowTests(unittest.TestCase):
             with self.subTest(marker=marker):
                 self.assertIn(marker, self.text)
 
+    def test_ish_bridge_changes_also_trigger_app_builds(self) -> None:
+        self.assertGreaterEqual(self.text.count("ISHBridge/*"), 2)
+        self.assertGreaterEqual(self.text.count("hermes/build/ISHNative.xcconfig"), 2)
+        self.assertGreaterEqual(self.text.count("install_ish_runtime.sh"), 2)
+
 
 if __name__ == "__main__":
     unittest.main()
