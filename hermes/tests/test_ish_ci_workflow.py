@@ -102,44 +102,27 @@ class IshRuntimeWorkflowTests(unittest.TestCase):
         self.assertIn("ISH_NATIVE_AVAILABLE = YES", simulator_steps)
         self.assertIn("ci_simulator_copilot_e2e.py", simulator_steps)
 
-    def test_four_component_build_pipelines_start_after_release_preparation(self) -> None:
-        jobs = self.workflow["jobs"]
-        for job_name in ("build-runtime-zip", "build-native-runtime", "build-ish-meson", "build-app"):
-            with self.subTest(job=job_name):
-                self.assertIn("decide", jobs[job_name]["needs"])
-                self.assertIn("prepare-release", jobs[job_name]["needs"])
-        self.assertNotIn("build-ish-runtime", jobs["build-app"]["needs"])
-        self.assertIn("build-ish-meson", jobs["build-ish-runtime"]["needs"])
-        self.assertNotRegex(
+    def test_app_archive_and_ipa_wait_for_ish_runtime_when_it_must_be_built(self) -> None:
+        self.assertIn("build-ish-runtime", self.workflow["jobs"]["build-app"]["needs"])
+        self.assertIn("build-ish-runtime", self.workflow["jobs"]["assemble-ipa"]["needs"])
+        app_condition = self.workflow["jobs"]["build-app"]["if"]
+        self.assertIn("needs.build-ish-runtime.result == 'success'", app_condition)
+        self.assertIn("needs.build-ish-runtime.result == 'skipped'", app_condition)
+        self.assertRegex(
             self.text,
-            r'if \[ "\$run_ish_runtime" = true \]; then\n\s+app_changed=true',
+            r'if \[ "\$run_ish_runtime" = true \]; then\n\s+app_changed=true\n\s+fi',
         )
 
-    def test_ipa_waits_for_all_component_stages_and_allows_only_intended_skips(self) -> None:
-        needs = self.workflow["jobs"]["assemble-ipa"]["needs"]
-        for job_name in (
-            "build-runtime-zip", "build-native-runtime", "build-ish-meson",
-            "build-ish-runtime", "build-app",
-        ):
-            self.assertIn(job_name, needs)
+    def test_requested_ish_build_cannot_be_treated_as_a_skipped_optional_stage(self) -> None:
+        app_condition = self.workflow["jobs"]["build-app"]["if"]
         ipa_condition = self.workflow["jobs"]["assemble-ipa"]["if"]
-        self.assertIn("always()", ipa_condition)
-        for job_name in (
-            "build-runtime-zip", "build-native-runtime", "build-ish-meson",
-            "build-ish-runtime", "build-app",
-        ):
-            self.assertIn(f"needs.{job_name}.result == 'success'", ipa_condition)
-            self.assertIn(f"needs.{job_name}.result == 'skipped'", ipa_condition)
+        self.assertIn("needs.decide.outputs.run_ish_runtime != 'true'", app_condition)
+        self.assertIn("needs.decide.outputs.run_ish_runtime != 'true'", ipa_condition)
+        self.assertIn("build-ish-meson", self.workflow["jobs"]["assemble-ipa"]["needs"])
 
-    def test_workflow_only_changes_do_not_force_app_rebuild(self) -> None:
-        decision_script = next(
-            step["run"] for step in self.workflow["jobs"]["decide"]["steps"]
-            if step.get("id") == "decision"
-        )
-        self.assertNotRegex(
-            decision_script,
-            r'if \[\[ "\$path" == \.github/workflows/build\.yml \]\]; then\n\s+app_changed=true',
-        )
+    def test_workflow_only_changes_do_not_force_runtime_rebuilds(self) -> None:
+        self.assertIn('if [[ "$path" == .github/workflows/build.yml ]]; then', self.text)
+        self.assertIn("app_changed=true", self.text)
         self.assertNotIn("ish_meson_changed=true\n              app_changed=true", self.text)
 
     def test_linux_stage_fetches_source_and_macos_builds_via_the_authored_scripts(self) -> None:
@@ -177,81 +160,24 @@ class IshRuntimeWorkflowTests(unittest.TestCase):
         self.assertGreaterEqual(self.text.count("hermes/build/ISHNative.xcconfig"), 1)
         self.assertGreaterEqual(self.text.count("install_ish_runtime.sh"), 1)
 
-    def test_app_component_links_ish_framework_using_removable_build_placeholders(self) -> None:
+    def test_app_links_real_ish_runtime_and_publishes_its_rootfs(self) -> None:
         job = self.workflow["jobs"]["build-app"]
         steps_text = str(job["steps"])
-        self.assertNotIn("ISHLinuxNative.zip", steps_text)
-        self.assertNotIn("install_ish_runtime.sh", steps_text)
-        self.assertIn("ISH_NATIVE_AVAILABLE = YES", steps_text)
-        self.assertIn("ish_framework_link_stub.c", steps_text)
-        self.assertIn("@rpath/Ish.framework/Ish", steps_text)
-        self.assertIn(": > Resources/ish-rootfs.tar.gz", steps_text)
-        self.assertIn("runtime-free app component", steps_text)
-        self.assertIn("app component unexpectedly contains iSH runtime assets", steps_text)
-        self.assertIn("app component unexpectedly contains Hermes runtime assets", steps_text)
-        self.assertIn('rm -rf "$app/Frameworks/Ish.framework"', steps_text)
-        self.assertIn('rm -f "$app/ish-rootfs.tar.gz"', steps_text)
-        self.assertIn("otool -L", steps_text)
-        self.assertIn("@rpath/Ish.framework/Ish", steps_text)
-
-    def test_ipa_preserves_real_ish_framework_and_rootfs_from_app_component(self) -> None:
-        job = self.workflow["jobs"]["assemble-ipa"]
-        steps_text = str(job["steps"])
-        packaging_text = next(
-            step["run"]
-            for step in job["steps"]
-            if step.get("name") == "Package unsigned IPA"
-        )
-        plumesign_download = next(
-            step["run"]
-            for step in job["steps"]
-            if step.get("name") == "Download PlumeSign 2.6.5"
-        )
-        plumesign_signing = next(
-            step["run"]
-            for step in job["steps"]
-            if step.get("name") == "Sign IPA with PlumeSign (ad-hoc)"
-        )
-        self.assertEqual(job["runs-on"], "ubuntu-latest")
         self.assertIn("ISHLinuxNative.zip", steps_text)
         self.assertIn("install_ish_runtime.sh", steps_text)
-        self.assertIn("BLINK_ROOT=", steps_text)
-        self.assertIn('mv "$RUNNER_TEMP/Payload/HermesLink.app/Resources/ish-rootfs.tar.gz"', steps_text)
-        self.assertIn('"$RUNNER_TEMP/Payload/HermesLink.app/ish-rootfs.tar.gz"', steps_text)
-        self.assertIn("Ish.framework/Ish", steps_text)
-        self.assertIn("strings", steps_text)
-        self.assertIn("@rpath/Ish.framework/Ish", steps_text)
-        self.assertIn("ish-rootfs.tar.gz", steps_text)
-        self.assertIn('locales_bundle="$RUNNER_TEMP/Payload/HermesLink.app/locales.bundle"', steps_text)
-        self.assertIn("CFBundlePackageType", steps_text)
-        self.assertIn("<string>BNDL</string>", steps_text)
-        self.assertIn("locales.bundle/Info.plist", packaging_text)
-        self.assertIn('base_lproj="$RUNNER_TEMP/Payload/HermesLink.app/Base.lproj"', steps_text)
-        self.assertIn("Base.lproj/Info.plist", packaging_text)
-        self.assertIn("verify-ish-source.py", steps_text)
-        self.assertIn("unzip -q", steps_text)
-        self.assertIn("cp -a", steps_text)
-        self.assertIn("zip -qryy -X HermesLink.ipa Payload", packaging_text)
-        self.assertIn("unzip -t", packaging_text)
-        self.assertNotIn("codesign", steps_text)
-        self.assertIn("github.com/claration/impactor/releases/download/v2.6.5/plumesign-linux-x86_64", plumesign_download)
-        self.assertIn("c076524c48074fb6a8d1acb4944078b52cffc70b3875970e66494e3655c67279", plumesign_download)
-        self.assertIn("plumesign 2.6.5", plumesign_download)
-        self.assertIn('"$RUNNER_TEMP/plumesign" sign', plumesign_signing)
-        self.assertIn("--package \"$RUNNER_TEMP/HermesLink.ipa\"", plumesign_signing)
-        self.assertIn("--output \"$RUNNER_TEMP/HermesLink-signed.ipa\"", plumesign_signing)
-        self.assertIn("HermesLink-signed.ipa", str(job["steps"]))
+        self.assertNotIn("ish_runtime_stub.c", steps_text)
+        self.assertIn("ISH_NATIVE_AVAILABLE = YES", steps_text)
+        self.assertIn("test -x Frameworks/Ish.framework/Ish", steps_text)
+        self.assertIn("verify-ish-source.py --rootfs Resources/ish-rootfs.tar.gz", steps_text)
+        self.assertIn('test -x "$app/Frameworks/Ish.framework/Ish"', steps_text)
+        self.assertIn('test -s "$app/ish-rootfs.tar.gz"', steps_text)
 
-    def test_all_e2e_jobs_are_optional_and_start_only_after_ipa_assembly(self) -> None:
-        jobs = self.workflow["jobs"]
-        for name in ("ios-tests", "build-ish-simulator-runtime", "simulator-e2e"):
-            with self.subTest(job=name):
-                self.assertIn("assemble-ipa", jobs[name]["needs"])
-                self.assertIn("inputs.run_tests == true", str(jobs[name]["if"]))
-        self.assertIn("assemble-ipa", jobs["simulator-e2e"]["needs"])
-        self.assertIn("build-ish-simulator-runtime", jobs["simulator-e2e"]["needs"])
-        self.assertNotIn("Run HermesLink simulator tests", str(jobs["build-app"]["steps"]))
-        self.assertNotIn("run_tests", str(jobs["build-app"]["steps"]))
+    def test_ipa_preserves_real_ish_framework_and_rootfs_from_app_component(self) -> None:
+        steps_text = str(self.workflow["jobs"]["assemble-ipa"]["steps"])
+        self.assertNotIn("ISHLinuxNative.zip", steps_text)
+        self.assertIn("Ish.framework/Ish", steps_text)
+        self.assertIn("ish-rootfs.tar.gz", steps_text)
+        self.assertIn("verify-ish-source.py", steps_text)
 
     def test_ish_release_contains_framework_and_pinned_rootfs(self) -> None:
         steps_text = str(self.workflow["jobs"]["build-ish-runtime"]["steps"])
