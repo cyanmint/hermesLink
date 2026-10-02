@@ -14,6 +14,8 @@ Under the project's stated attribution policy, AI-generated content has no copyr
 - `hermes/build/build-native-ios.sh`
 - `hermes/build/configure_native_modules.py`
 - `hermes/build/fetch-sources.sh`
+- `hermes/build/fetch-ish-source.sh`
+- `hermes/build/verify-ish-source.py`
 - `hermes/build/generate-native-module-registry.py`
 - `hermes/build/package-native-ios.sh`
 - `hermes/build/validate-runtime-zip.py`
@@ -33,6 +35,7 @@ Under the project's stated attribution policy, AI-generated content has no copyr
 - `hermes/tests/test_cpython_ios_system_patch.py`
 - `hermes/tests/test_ios_shell_registration.py`
 - `hermes/tests/test_ios_terminal_patch.py`
+- `hermes/tests/test_ish_source.py`
 - `hermes/tests/test_legacy_responses.py`
 - `hermes/tests/test_native_module_registry.py`
 - `hermes/tests/test_upgrade_runtime.py`

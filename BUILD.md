@@ -71,3 +71,14 @@ with XCode, follow the proper Apple Developer documentation in that case.
 4. If you would like to use HockeyApp, change the scheme to Blink Hockey, and add HockeyID with your AppID string to info.plist.
 
 Make sure "Blink" is the selected Scheme for compilation. As a standard XCode project, just run it with Cmd-R.
+
+## iSH integration status
+`bash hermes/build/fetch-ish-source.sh` fetches the pinned upstream iSH source
+and Alpine root filesystem into the ignored `hermes/build/external/ish`
+directory, then verifies their checksums. This is build-time input preparation
+only; HermesLink does not yet expose an `ish` shell command or Hermes Agent
+tool. The upstream Linux target still needs to be integrated with Blink's Xcode
+build, its fakefs root lifecycle adapted to HermesLink storage, and its PTY
+output and guest-process completion bridged into the current terminal stream.
+The fetched iSH source includes its GPLv3 and iOS additional-term notices;
+those licenses must be preserved in any eventual linked distribution.
