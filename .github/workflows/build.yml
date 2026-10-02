@@ -866,6 +866,7 @@ jobs:
       - name: Sign and package IPA
         run: |
           set -euo pipefail
+          set -x
           app="$RUNNER_TEMP/Payload/HermesLink.app"
           while IFS= read -r -d '' bundle; do
             if [ -f "$bundle/Info.plist" ] &&

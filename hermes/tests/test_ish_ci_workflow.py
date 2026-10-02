@@ -220,6 +220,7 @@ class IshRuntimeWorkflowTests(unittest.TestCase):
         self.assertIn('[ -f "$bundle/Info.plist" ]', signing_text)
         self.assertIn("Print :CFBundlePackageType", signing_text)
         self.assertIn("= BNDL ]; then", signing_text)
+        self.assertIn("set -x", signing_text)
         self.assertLess(signing_text.index(bundle_signing), signing_text.index(framework_signing))
         self.assertLess(signing_text.index(framework_signing), signing_text.index(extension_signing))
         self.assertIn('codesign --force --sign - --timestamp=none "$app"', signing_text)
