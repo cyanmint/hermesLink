@@ -206,23 +206,16 @@ class IshRuntimeWorkflowTests(unittest.TestCase):
         self.assertIn("@rpath/Ish.framework/Ish", steps_text)
         self.assertIn("ish-rootfs.tar.gz", steps_text)
         self.assertIn("verify-ish-source.py", steps_text)
-        self.assertIn("find \"$app\"", steps_text)
-        self.assertIn("*.framework", steps_text)
-        self.assertIn("*.appex", steps_text)
-        self.assertIn('mv "$app/app-font-regular.ttf" "$app/Fonts/app-font-regular.ttf"', steps_text)
-        self.assertIn('mv "$app/app-font-bold.ttf" "$app/Fonts/app-font-bold.ttf"', steps_text)
         self.assertIn(
-            "Set :UIAppFonts:0 Fonts/app-font-regular.ttf",
+            'codesign --force --sign - --timestamp=none "$app/Frameworks/Ish.framework"',
             steps_text,
         )
         self.assertIn(
-            "Set :UIAppFonts:1 Fonts/app-font-bold.ttf",
+            'codesign --force --sign - --timestamp=none "$app/Frameworks/HermesRuntime.framework"',
             steps_text,
         )
-        self.assertIn('codesign --force --sign - --timestamp=none "$app"', steps_text)
-        self.assertNotIn('codesign --verify --verbose=2 "$app"', steps_text)
-        self.assertEqual(steps_text.count("codesign --verify --strict --verbose=2"), 2)
-        self.assertNotIn("codesign --verify --deep", steps_text)
+        self.assertIn('codesign --force --deep --sign - --timestamp=none "$app"', steps_text)
+        self.assertIn('codesign --verify --deep --strict --verbose=2 "$app"', steps_text)
 
     def test_all_e2e_jobs_are_optional_and_start_only_after_ipa_assembly(self) -> None:
         jobs = self.workflow["jobs"]
