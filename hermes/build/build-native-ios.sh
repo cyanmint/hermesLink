@@ -59,6 +59,7 @@ fi
 
 if [ "$HOST_OS" = Darwin ]; then
   LINKER_FLAGS=""
+  NATIVE_NM=nm
   # Xcode ships Apple's cctools ar/ranlib for SDK builds.  Recent Xcode
   # versions do not expose llvm-ar/llvm-ranlib through the default toolchain.
   LLVM_AR=$(xcrun --sdk iphoneos --find ar)
@@ -67,6 +68,7 @@ else
   LINKER_FLAGS="-fuse-ld=lld"
   LLVM_AR=llvm-ar
   LLVM_RANLIB=llvm-ranlib
+  NATIVE_NM=llvm-nm
 fi
 cat > "$TOOLBIN/arm64-apple-ios-clang" <<EOF
 #!/bin/sh
@@ -245,7 +247,8 @@ PY
   printf '%s\n' Modules/_randommodule.o >> native-module-objects.filtered && \
   sort -u native-module-objects.filtered > native-module-objects.txt)
 python3 "$ROOT/build/generate-native-module-registry.py" \
-  "$TARGET_ROOT/native-module-objects.txt" "$TARGET_ROOT" "$BUILD_ROOT/native_modules.c"
+  "$TARGET_ROOT/native-module-objects.txt" "$TARGET_ROOT" "$BUILD_ROOT/native_modules.c" \
+  --nm "$NATIVE_NM"
 (cd "$TARGET_ROOT" && \
   "$TOOLBIN/arm64-apple-ios-clang" -I"$TARGET_ROOT" -I"$TARGET_ROOT/Include" \
     -c "$BUILD_ROOT/native_modules.c" -o native_modules.o && \
