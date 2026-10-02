@@ -134,7 +134,10 @@ class IshNativeXcconfigTests(unittest.TestCase):
     def test_xcconfig_links_the_upstream_kernel_and_interop_archives_when_enabled(self) -> None:
         source = XCCONFIG.read_text(encoding="utf-8")
         self.assertIn(
-            "ISH_LDFLAGS_YES = -llinux -liSHLinux -liSHLinuxUser -lfakefs -lish_emu",
+            "ISH_LDFLAGS_YES = $(PROJECT_DIR)/Frameworks/ISHLinux/ish-sections.o "
+            "-force_load $(PROJECT_DIR)/Frameworks/ISHLinux/liblinux.a "
+            "-force_load $(PROJECT_DIR)/Frameworks/ISHLinux/libiSHLinux.a "
+            "-liSHLinuxUser -lfakefs -lish_emu",
             source,
         )
 

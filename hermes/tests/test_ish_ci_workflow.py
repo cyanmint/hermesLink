@@ -146,6 +146,23 @@ class IshRuntimeWorkflowTests(unittest.TestCase):
         self.assertIn("install_ish_runtime.sh", steps_text)
         self.assertIn("ISH_NATIVE_AVAILABLE = YES", steps_text)
 
+    def test_macos_ish_build_compiles_upstream_section_anchors_for_app_link(self) -> None:
+        job = self.workflow["jobs"]["build-ish-runtime"]
+        steps = job["steps"]
+        compile_step = next(step for step in steps if step["name"] == "Compile iSH Mach-O section anchors")
+        self.assertIn("arch/ish/kernel/sections.S", compile_step["run"])
+        self.assertIn("ish-sections.o", compile_step["run"])
+        self.assertLess(
+            steps.index(compile_step),
+            next(i for i, step in enumerate(steps) if step["name"] == "Package iSH native build output"),
+        )
+
+    def test_ish_linker_configuration_changes_only_the_macos_ish_stage(self) -> None:
+        case = self.text.split('case "$path" in')[4].split("esac", 1)[0]
+        self.assertIn("hermes/build/ISHNative.xcconfig", case)
+        meson_case = self.text.split('case "$path" in')[3].split("esac", 1)[0]
+        self.assertNotIn("ISHNative.xcconfig", meson_case)
+
     def test_ish_native_build_is_not_best_effort(self) -> None:
         job = self.workflow["jobs"]["build-ish-runtime"]
         self.assertFalse(job.get("continue-on-error", False))

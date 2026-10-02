@@ -4,7 +4,8 @@
 // Controls whether the Blink target compiles the real iSH Linux-kernel
 // bridge (ISHBridge/ish_kernel_bridge.m) and links the prebuilt static
 // libraries hermes/build/build-ish-static.sh produces (installed by
-// install_ish_runtime.sh into Frameworks/ISHLinux/), or instead compiles
+// install_ish_runtime.sh into Frameworks/ISHLinux/) plus upstream's Darwin
+// section anchors, or instead compiles
 // the always-available stub (ISHBridge/ish_kernel_bridge_stub.m) that
 // keeps the `ish` native command and Hermes Agent tool registered and
 // working end to end, just reporting the guest kernel itself as
@@ -21,7 +22,7 @@ ISH_EXCLUDED_SOURCES_YES = ish_kernel_bridge_stub.m
 EXCLUDED_SOURCE_FILE_NAMES = $(inherited) $(ISH_EXCLUDED_SOURCES_$(ISH_NATIVE_AVAILABLE))
 
 ISH_LDFLAGS_NO =
-ISH_LDFLAGS_YES = -llinux -liSHLinux -liSHLinuxUser -lfakefs -lish_emu
+ISH_LDFLAGS_YES = $(PROJECT_DIR)/Frameworks/ISHLinux/ish-sections.o -force_load $(PROJECT_DIR)/Frameworks/ISHLinux/liblinux.a -force_load $(PROJECT_DIR)/Frameworks/ISHLinux/libiSHLinux.a -liSHLinuxUser -lfakefs -lish_emu
 OTHER_LDFLAGS = $(inherited) $(ISH_LDFLAGS_$(ISH_NATIVE_AVAILABLE))
 
 ISH_LIBRARY_SEARCH_PATHS_NO =

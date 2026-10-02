@@ -252,6 +252,7 @@ class InstallIshRuntimeScriptTests(unittest.TestCase):
         lib_dir.mkdir(parents=True)
         for index, name in enumerate(archive_names):
             (lib_dir / name).write_bytes(f"not a real archive, placeholder #{index}".encode())
+        (lib_dir / "ish-sections.o").write_bytes(b"Mach-O section anchors")
         header_source = PINNED_SOURCE / "app" / "LinuxInterop.h"
         if header_source.exists():
             (lib_dir / "LinuxInterop.h").write_text(header_source.read_text(encoding="utf-8"), encoding="utf-8")
@@ -276,6 +277,7 @@ class InstallIshRuntimeScriptTests(unittest.TestCase):
         self.assertTrue((blink_root / "Frameworks" / "ISHLinux" / "liblinux.a").is_file())
         self.assertTrue((blink_root / "Frameworks" / "ISHLinux" / "libfakefs.a").is_file())
         self.assertTrue((blink_root / "Frameworks" / "ISHLinux" / "libish_emu.a").is_file())
+        self.assertTrue((blink_root / "Frameworks" / "ISHLinux" / "ish-sections.o").is_file())
         self.assertTrue((blink_root / "Frameworks" / "ISHLinux" / "LinuxInterop.h").is_file())
         installed_rootfs = blink_root / "Resources" / "ish-rootfs.tar.gz"
         self.assertTrue(installed_rootfs.is_file())
@@ -301,6 +303,21 @@ class InstallIshRuntimeScriptTests(unittest.TestCase):
         )
         self.assertNotEqual(result.returncode, 0)
         self.assertIn("missing required iSH archive", result.stderr)
+        self.assertFalse((blink_root / "Frameworks" / "ISHLinux").exists())
+
+    @unittest.skipUnless(PINNED_ROOTFS.exists(), "pinned iSH rootfs has not been fetched")
+    def test_missing_macho_section_anchors_are_rejected(self) -> None:
+        input_root = self._fake_input_with(PINNED_ROOTFS)
+        (input_root / "lib" / "ish-sections.o").unlink()
+        blink_root = self.work_dir / "blink-root"
+        blink_root.mkdir()
+        result = subprocess.run(
+            ["bash", str(INSTALL_SCRIPT), str(input_root)],
+            capture_output=True, text=True,
+            env={"BLINK_ROOT": str(blink_root), "PATH": "/usr/bin:/bin"},
+        )
+        self.assertNotEqual(result.returncode, 0)
+        self.assertIn("missing required iSH Mach-O section anchors", result.stderr)
         self.assertFalse((blink_root / "Frameworks" / "ISHLinux").exists())
 
     def test_corrupt_rootfs_archive_is_rejected_by_integrity_verification(self) -> None:

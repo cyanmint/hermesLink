@@ -25,6 +25,7 @@ DEST_ROOTFS="$BLINK_ROOT/Resources/ish-rootfs.tar.gz"
 
 [ -d "$SOURCE_LIB_DIR" ] || { echo "missing iSH native build output directory: $SOURCE_LIB_DIR" >&2; exit 2; }
 [ -f "$SOURCE_LIB_DIR/LinuxInterop.h" ] || { echo "missing $SOURCE_LIB_DIR/LinuxInterop.h" >&2; exit 2; }
+[ -s "$SOURCE_LIB_DIR/ish-sections.o" ] || { echo "missing required iSH Mach-O section anchors: $SOURCE_LIB_DIR/ish-sections.o" >&2; exit 2; }
 
 for archive in libiSHLinux.a libiSHLinuxUser.a liblinux.a libfakefs.a libish_emu.a; do
   [ -s "$SOURCE_LIB_DIR/$archive" ] || {
@@ -40,6 +41,7 @@ mkdir -p "$(dirname "$DEST_LIB_DIR")" "$(dirname "$DEST_ROOTFS")"
 rm -rf "$DEST_LIB_DIR.tmp"
 mkdir -p "$DEST_LIB_DIR.tmp"
 cp "$SOURCE_LIB_DIR/LinuxInterop.h" "$DEST_LIB_DIR.tmp/LinuxInterop.h"
+cp "$SOURCE_LIB_DIR/ish-sections.o" "$DEST_LIB_DIR.tmp/"
 cp "$SOURCE_LIB_DIR/libiSHLinux.a" "$DEST_LIB_DIR.tmp/"
 cp "$SOURCE_LIB_DIR/libiSHLinuxUser.a" "$DEST_LIB_DIR.tmp/"
 cp "$SOURCE_LIB_DIR/liblinux.a" "$DEST_LIB_DIR.tmp/"

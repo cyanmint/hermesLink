@@ -115,7 +115,7 @@ jobs:
                 ;;
             esac
             case "$path" in
-              hermes/build/prepare-ish-xcode-project.py|hermes/build/repack-ish-meson-archives.py)
+              hermes/build/prepare-ish-xcode-project.py|hermes/build/repack-ish-meson-archives.py|hermes/build/ISHNative.xcconfig)
                 ish_xcode_changed=true
                 ;;
             esac
@@ -374,6 +374,14 @@ jobs:
           ISH_SOURCE: /tmp/hermeslink-ish/source
           IPHONEOS_DEPLOYMENT_TARGET: '16.1'
         run: bash hermes/build/build-ish-static.sh --xcode-only
+
+      - name: Compile iSH Mach-O section anchors
+        run: |
+          xcrun --sdk iphoneos clang \
+            -target arm64-apple-ios16.1 \
+            -isysroot "$(xcrun --sdk iphoneos --show-sdk-path)" \
+            -c /tmp/hermeslink-ish/source/deps/linux/arch/ish/kernel/sections.S \
+            -o hermes/build/external/ish/lib/ish-sections.o
 
       - name: Package iSH native build output
         run: |
