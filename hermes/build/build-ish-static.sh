@@ -39,7 +39,7 @@ command -v ninja >/dev/null 2>&1 || fail "requires Ninja; 'ninja' not found on P
 TOOLCHAIN_BIN="$BUILD_ROOT/ios-toolchain"
 mkdir -p "$TOOLCHAIN_BIN"
 HOST_OS=$(uname -s)
-if [ "$BUILD_MODE" = "--xcode-only" ]; then
+if [ "$BUILD_MODE" = "--xcode-only" ] && [ "$HOST_OS" != Darwin ]; then
   [ -x "$TOOLCHAIN_BIN/clang" ] && [ -x "$TOOLCHAIN_BIN/xcrun" ] || fail "missing Linux Meson toolchain artifact"
 elif [ "$HOST_OS" = Darwin ]; then
   command -v xcrun >/dev/null 2>&1 || fail "requires Xcode command line tools: 'xcrun' not found"

@@ -36,6 +36,7 @@ class BuildIshStaticScriptTests(unittest.TestCase):
         self.assertIn("BUILD_MODE=${1:-all}", source)
         self.assertIn('--meson-only', source)
         self.assertIn('--xcode-only', source)
+        self.assertIn('if [ "$BUILD_MODE" = "--xcode-only" ] && [ "$HOST_OS" != Darwin ]; then', source)
 
     def test_script_builds_upstream_kernel_and_host_interop_targets(self) -> None:
         source = BUILD_SCRIPT.read_text(encoding="utf-8")

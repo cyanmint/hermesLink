@@ -27,8 +27,20 @@ class IshRuntimeWorkflowTests(unittest.TestCase):
 
     def test_decide_job_exposes_a_run_ish_runtime_output(self) -> None:
         outputs = self.workflow["jobs"]["decide"]["outputs"]
+        self.assertIn("run_ish_meson", outputs)
         self.assertIn("run_ish_runtime", outputs)
         self.assertIn("has_asset ISHMesonBuild.tar.gz", self.text)
+
+    def test_unchanged_ish_assets_skip_both_native_build_stages(self) -> None:
+        outputs = self.workflow["jobs"]["decide"]["outputs"]
+        self.assertIn("run_ish_meson", outputs)
+        meson_job = self.workflow["jobs"]["build-ish-meson"]
+        xcode_job = self.workflow["jobs"]["build-ish-runtime"]
+        self.assertEqual(meson_job["if"], "needs.decide.outputs.run_ish_meson == 'true'")
+        self.assertIn("needs.decide.outputs.run_ish_runtime == 'true'", xcode_job["if"])
+        self.assertIn("needs.decide.outputs.run_ish_meson != 'true'", xcode_job["if"])
+        ish_case = self.text.split('case "$path" in')[3].split("esac", 1)[0]
+        self.assertNotIn("ISHBridge/*", ish_case)
 
     def test_ish_runtime_job_runs_on_macos_and_is_blocking(self) -> None:
         job = self.workflow["jobs"]["build-ish-runtime"]
@@ -70,6 +82,11 @@ class IshRuntimeWorkflowTests(unittest.TestCase):
         self.assertIn("needs.decide.outputs.run_ish_runtime != 'true'", ipa_condition)
         self.assertIn("build-ish-meson", self.workflow["jobs"]["assemble-ipa"]["needs"])
 
+    def test_workflow_only_changes_do_not_force_runtime_rebuilds(self) -> None:
+        self.assertIn('if [[ "$path" == .github/workflows/build.yml ]]; then', self.text)
+        self.assertIn("app_changed=true", self.text)
+        self.assertNotIn("ish_meson_changed=true\n              app_changed=true", self.text)
+
     def test_linux_stage_fetches_source_and_macos_builds_via_the_authored_scripts(self) -> None:
         linux_steps = str(self.workflow["jobs"]["build-ish-meson"]["steps"])
         self.assertIn("fetch-ish-source.sh", linux_steps)
@@ -96,9 +113,9 @@ class IshRuntimeWorkflowTests(unittest.TestCase):
                 self.assertIn(marker, self.text)
 
     def test_ish_bridge_changes_also_trigger_app_builds(self) -> None:
-        self.assertGreaterEqual(self.text.count("ISHBridge/*"), 2)
-        self.assertGreaterEqual(self.text.count("hermes/build/ISHNative.xcconfig"), 2)
-        self.assertGreaterEqual(self.text.count("install_ish_runtime.sh"), 2)
+        self.assertEqual(self.text.count("ISHBridge/*"), 1)
+        self.assertGreaterEqual(self.text.count("hermes/build/ISHNative.xcconfig"), 1)
+        self.assertGreaterEqual(self.text.count("install_ish_runtime.sh"), 1)
 
     def test_app_installs_native_ish_and_enables_the_real_bridge(self) -> None:
         job = self.workflow["jobs"]["build-app"]

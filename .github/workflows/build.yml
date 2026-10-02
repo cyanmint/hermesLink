@@ -54,6 +54,7 @@ jobs:
     outputs:
       run_python_runtime: ${{ steps.decision.outputs.run_python_runtime }}
       run_native_runtime: ${{ steps.decision.outputs.run_native_runtime }}
+      run_ish_meson: ${{ steps.decision.outputs.run_ish_meson }}
       run_ish_runtime: ${{ steps.decision.outputs.run_ish_runtime }}
       run_app: ${{ steps.decision.outputs.run_app }}
     steps:
@@ -93,7 +94,8 @@ jobs:
 
           python_runtime_changed=false
           native_runtime_changed=false
-          ish_runtime_changed=false
+          ish_meson_changed=false
+          ish_xcode_changed=false
           app_changed=false
           while IFS= read -r path; do
             [ -n "$path" ] || continue
@@ -108,8 +110,8 @@ jobs:
                 ;;
             esac
             case "$path" in
-              ISHBridge/*|hermes/build/build-ish-static.sh|hermes/build/fetch-ish-source.sh|hermes/build/verify-ish-source.py|hermes/build/ISHNative.xcconfig|install_ish_runtime.sh)
-                ish_runtime_changed=true
+              hermes/build/build-ish-static.sh|hermes/build/fetch-ish-source.sh|hermes/build/verify-ish-source.py)
+                ish_meson_changed=true
                 ;;
             esac
             case "$path" in
@@ -117,10 +119,7 @@ jobs:
                 app_changed=true
                 ;;
             esac
-            if [[ "$path" == .github/workflows/* ]]; then
-              python_runtime_changed=true
-              native_runtime_changed=true
-              ish_runtime_changed=true
+            if [[ "$path" == .github/workflows/build.yml ]]; then
               app_changed=true
             fi
           done <<< "$changed_files"
@@ -132,8 +131,8 @@ jobs:
           has_asset() { printf '%s\n' "$release_assets" | grep -Fxq "$1"; }
           has_asset hermesrt.zip || python_runtime_changed=true
           has_asset HermesRuntime.framework.zip || native_runtime_changed=true
-          has_asset ISHMesonBuild.tar.gz || ish_runtime_changed=true
-          has_asset ISHLinuxNative.zip || ish_runtime_changed=true
+          has_asset ISHMesonBuild.tar.gz || ish_meson_changed=true
+          has_asset ISHLinuxNative.zip || ish_xcode_changed=true
           has_asset HermesLink.app.zip || app_changed=true
 
           choose() {
@@ -146,16 +145,22 @@ jobs:
           }
           run_python_runtime="$(choose "$PYTHON_RUNTIME_OVERRIDE" "$python_runtime_changed")"
           run_native_runtime="$(choose "$NATIVE_RUNTIME_OVERRIDE" "$native_runtime_changed")"
-          run_ish_runtime="$(choose "$ISH_RUNTIME_OVERRIDE" "$ish_runtime_changed")"
+          run_ish_meson="$(choose "$ISH_RUNTIME_OVERRIDE" "$ish_meson_changed")"
+          ish_xcode_auto="$ish_xcode_changed"
+          if [ "$run_ish_meson" = true ]; then
+            ish_xcode_auto=true
+          fi
+          run_ish_runtime="$(choose "$ISH_RUNTIME_OVERRIDE" "$ish_xcode_auto")"
           run_app="$(choose "$APP_OVERRIDE" "$app_changed")"
-          printf 'python_runtime_changed=%s native_runtime_changed=%s ish_runtime_changed=%s app_changed=%s\n' \
-            "$python_runtime_changed" "$native_runtime_changed" "$ish_runtime_changed" "$app_changed"
+          printf 'python_runtime_changed=%s native_runtime_changed=%s ish_meson_changed=%s ish_xcode_changed=%s app_changed=%s\n' \
+            "$python_runtime_changed" "$native_runtime_changed" "$ish_meson_changed" "$ish_xcode_changed" "$app_changed"
           printf 'run_python_runtime=%s\n' "$run_python_runtime" >> "$GITHUB_OUTPUT"
           printf 'run_native_runtime=%s\n' "$run_native_runtime" >> "$GITHUB_OUTPUT"
+          printf 'run_ish_meson=%s\n' "$run_ish_meson" >> "$GITHUB_OUTPUT"
           printf 'run_ish_runtime=%s\n' "$run_ish_runtime" >> "$GITHUB_OUTPUT"
           printf 'run_app=%s\n' "$run_app" >> "$GITHUB_OUTPUT"
-          printf 'run_python_runtime=%s run_native_runtime=%s run_ish_runtime=%s run_app=%s\n' \
-            "$run_python_runtime" "$run_native_runtime" "$run_ish_runtime" "$run_app"
+          printf 'run_python_runtime=%s run_native_runtime=%s run_ish_meson=%s run_ish_runtime=%s run_app=%s\n' \
+            "$run_python_runtime" "$run_native_runtime" "$run_ish_meson" "$run_ish_runtime" "$run_app"
 
   prepare-release:
     name: Ensure runtime release exists
@@ -275,7 +280,7 @@ jobs:
   build-ish-meson:
     name: Cross-compile iSH Meson archives (Linux)
     needs: [decide, prepare-release]
-    if: needs.decide.outputs.run_ish_runtime == 'true'
+    if: needs.decide.outputs.run_ish_meson == 'true'
     runs-on: ubuntu-latest
     permissions:
       contents: write
@@ -325,7 +330,12 @@ jobs:
   build-ish-runtime:
     name: Build iSH native static libraries (macOS)
     needs: [decide, prepare-release, build-ish-meson]
-    if: needs.decide.outputs.run_ish_runtime == 'true'
+    if: >-
+      always() &&
+      needs.decide.outputs.run_ish_runtime == 'true' &&
+      needs.prepare-release.result == 'success' &&
+      (needs.build-ish-meson.result == 'success' ||
+       (needs.build-ish-meson.result == 'skipped' && needs.decide.outputs.run_ish_meson != 'true'))
     runs-on: macos-latest
     permissions:
       contents: write
@@ -650,7 +660,7 @@ jobs:
       (needs.build-runtime-zip.result == 'success' || needs.build-runtime-zip.result == 'skipped') &&
       (needs.build-native-runtime.result == 'success' || needs.build-native-runtime.result == 'skipped') &&
       (needs.build-ish-meson.result == 'success' ||
-       (needs.build-ish-meson.result == 'skipped' && needs.decide.outputs.run_ish_runtime != 'true')) &&
+       (needs.build-ish-meson.result == 'skipped' && needs.decide.outputs.run_ish_meson != 'true')) &&
       (needs.build-ish-runtime.result == 'success' ||
        (needs.build-ish-runtime.result == 'skipped' && needs.decide.outputs.run_ish_runtime != 'true')) &&
       (needs.build-app.result == 'success' ||
