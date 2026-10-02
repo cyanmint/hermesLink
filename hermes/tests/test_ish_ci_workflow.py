@@ -131,9 +131,15 @@ class IshRuntimeWorkflowTests(unittest.TestCase):
             self.assertIn(f"needs.{job_name}.result == 'success'", ipa_condition)
             self.assertIn(f"needs.{job_name}.result == 'skipped'", ipa_condition)
 
-    def test_workflow_only_changes_do_not_force_runtime_rebuilds(self) -> None:
-        self.assertIn('if [[ "$path" == .github/workflows/build.yml ]]; then', self.text)
-        self.assertIn("app_changed=true", self.text)
+    def test_workflow_only_changes_do_not_force_app_rebuild(self) -> None:
+        decision_script = next(
+            step["run"] for step in self.workflow["jobs"]["decide"]["steps"]
+            if step.get("id") == "decision"
+        )
+        self.assertNotRegex(
+            decision_script,
+            r'if \[\[ "\$path" == \.github/workflows/build\.yml \]\]; then\n\s+app_changed=true',
+        )
         self.assertNotIn("ish_meson_changed=true\n              app_changed=true", self.text)
 
     def test_linux_stage_fetches_source_and_macos_builds_via_the_authored_scripts(self) -> None:
@@ -204,7 +210,7 @@ class IshRuntimeWorkflowTests(unittest.TestCase):
         self.assertIn("*.framework", steps_text)
         self.assertIn("*.appex", steps_text)
         self.assertIn('codesign --force --sign - --timestamp=none "$app"', steps_text)
-        self.assertIn('codesign --verify --strict --verbose=2 "$app"', steps_text)
+        self.assertIn('codesign --verify --verbose=2 "$app"', steps_text)
         self.assertNotIn("codesign --deep", steps_text)
 
     def test_all_e2e_jobs_are_optional_and_start_only_after_ipa_assembly(self) -> None:
