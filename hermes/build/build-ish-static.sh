@@ -11,12 +11,11 @@
 # iSH's kernel build, so we stay byte-for-byte on upstream's own build
 # logic for the actual Linux kernel compile.
 #
-# Requirements (genuinely unavailable in this repository's Linux
-# dev/CI sandbox; see BUILD.md): Xcode command line tools (clang
-# targeting arm64-apple-ios, `xcrun`), Meson, and Ninja. This script
-# preflight-checks for all three and fails with a clear, actionable
-# message instead of attempting a partial/likely-broken build when any
-# are missing — it does not attempt the Linux-hosted clang
+# Requirements: Xcode command line tools (clang targeting arm64-apple-ios,
+# `xcrun`, `xcodebuild`), Homebrew LLVM/LLD, Meson, and Ninja. This script
+# preflight-checks for them and fails with a clear, actionable message
+# instead of attempting a partial/likely-broken build when any are missing —
+# it does not attempt the Linux-hosted clang
 # cross-compile fallback that hermes/build/build-native-ios.sh uses for
 # CPython, because iSH's kernel build (deps/linux via Meson custom
 # targets) is far more tightly coupled to Xcode's own build environment
@@ -44,13 +43,15 @@ python3 "$ROOT/build/verify-ish-source.py" --source "$ISH_SOURCE" || fail "pinne
 
 [ "$(uname -s)" = Darwin ] || fail "requires macOS + Xcode command line tools (arm64-apple-ios clang); this sandbox is $(uname -s), not Darwin"
 command -v xcrun >/dev/null 2>&1 || fail "requires Xcode command line tools: 'xcrun' not found"
+command -v xcodebuild >/dev/null 2>&1 || fail "requires Xcode command line tools: 'xcodebuild' not found"
 xcrun --sdk iphoneos --find clang >/dev/null 2>&1 || fail "requires an installed iphoneos SDK (xcrun --sdk iphoneos --find clang failed)"
 command -v meson >/dev/null 2>&1 || fail "requires Meson (https://mesonbuild.com); 'meson' not found on PATH"
 command -v ninja >/dev/null 2>&1 || fail "requires Ninja; 'ninja' not found on PATH"
 command -v brew >/dev/null 2>&1 || fail "requires Homebrew to locate LLVM/LLD"
 LLVM_BIN="$(brew --prefix llvm)/bin"
-[ -x "$LLVM_BIN/clang" ] && [ -x "$LLVM_BIN/ld.lld" ] || fail "requires Homebrew LLVM/LLD (brew install llvm)"
-export PATH="$LLVM_BIN:$PATH"
+LLD_BIN="$(brew --prefix lld)/bin"
+[ -x "$LLVM_BIN/clang" ] && [ -x "$LLD_BIN/ld.lld" ] || fail "requires Homebrew LLVM and LLD (brew install llvm lld)"
+export PATH="$LLVM_BIN:$LLD_BIN:$PATH"
 
 SDKROOT=$(xcrun --sdk iphoneos --show-sdk-path)
 export SDKROOT
@@ -77,24 +78,33 @@ bash "$ISH_SOURCE/app/xcode-meson.sh"
 echo "build-ish-static.sh: building (ninja) ..."
 (cd "$MESON_BUILD_DIR" && bash "$ISH_SOURCE/app/xcode-ninja.sh")
 
-# Discover whatever static libraries Meson/Ninja actually produced for the
-# 'linux' kernel option, rather than assuming one exact name: the pinned
-# meson.build's own `static_library('linux_modules', ...)` /
-# `static_library('linux_user', ...)` declarations (as of the pinned
-# commit) would normally produce liblinux_modules.a / liblinux_user.a, but
-# Xcode's own build phases reference libiSHLinux.a / libiSHLinuxUser.a
-# (likely via a per-target PRODUCT_NAME override this script cannot see
-# without actually running inside Xcode) — so this copies every top-level
-# .a Meson produced and lets the caller's link step (and
-# install_ish_runtime.sh) match by content rather than a guessed name.
-found_any=0
-while IFS= read -r archive; do
-  found_any=1
+# Build upstream's iOS host interop targets as well as its Meson kernel
+# archive. The host library contains LinuxInterop.c and the PTY/rootfs glue
+# referenced by ish_kernel_bridge.m; Meson alone does not produce it.
+for target in libiSHLinux libiSHLinuxUser; do
+  echo "build-ish-static.sh: building upstream Xcode target $target ..."
+  xcodebuild \
+    -project "$ISH_SOURCE/iSH.xcodeproj" \
+    -target "$target" \
+    -configuration "$CONFIGURATION" \
+    -sdk iphoneos \
+    -derivedDataPath "$BUILD_ROOT/xcode" \
+    ARCHS="$ARCHS" \
+    ONLY_ACTIVE_ARCH=YES \
+    CODE_SIGNING_ALLOWED=NO \
+    MESON_BUILD_DIR="$MESON_BUILD_DIR" \
+    ISH_KERNEL=linux
+done
+
+PRODUCTS_DIR="$BUILD_ROOT/xcode/Build/Products/$CONFIGURATION-iphoneos"
+for archive in \
+  "$PRODUCTS_DIR/libiSHLinux.a" \
+  "$PRODUCTS_DIR/libiSHLinuxUser.a" \
+  "$MESON_BUILD_DIR/deps/liblinux.a"; do
+  [ -s "$archive" ] || fail "required upstream iSH archive was not produced: $archive"
   cp "$archive" "$OUTPUT_DIR/"
   echo "build-ish-static.sh: collected $(basename "$archive")"
-done < <(find "$MESON_BUILD_DIR" -maxdepth 2 -name '*.a' -type f)
-
-[ "$found_any" = 1 ] || fail "ninja did not produce any static libraries under $MESON_BUILD_DIR"
+done
 
 cp "$ISH_SOURCE/app/LinuxInterop.h" "$OUTPUT_DIR/LinuxInterop.h"
 

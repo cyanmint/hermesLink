@@ -157,7 +157,7 @@ PY
     --build="$BUILD_TRIPLE" --with-build-python="$HOST_PYTHON" \
     --with-openssl="$OPENSSL_INSTALL" --with-openssl-rpath=no \
     --without-ensurepip --disable-test-modules --disable-ipv6 --with-lto=no \
-    --disable-framework)
+    --enable-framework)
 python3 - "$ROOT/build" "$TARGET_ROOT/Modules/Setup.stdlib" "$TARGET_ROOT/Modules/Setup.local" "$TARGET_ROOT/Makefile" <<'PY'
 import pathlib, sys
 sys.path.insert(0, sys.argv[1])

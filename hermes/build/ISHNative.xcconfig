@@ -10,14 +10,10 @@
 // working end to end, just reporting the guest kernel itself as
 // unavailable.
 //
-// Defaults to NO: a fresh checkout — and the existing CI `build-app` job —
-// must keep building successfully without first running
-// build-ish-static.sh (which needs Xcode + Meson + Ninja; unavailable in
-// this repository's Linux dev/CI sandbox, see BUILD.md) and
-// install_ish_runtime.sh. Flip to YES (for example by adding
-// `ISH_NATIVE_AVAILABLE = YES` to developer_setup.xcconfig, or an
-// `-xcconfig` override in a dedicated CI job) once those have been run and
-// Frameworks/ISHLinux/*.a are actually present.
+// Defaults to NO for a fresh checkout. Set to YES only after the pinned
+// upstream iSH Xcode targets have been built and install_ish_runtime.sh has
+// installed their archives and rootfs (the app CI job does this before
+// archiving).
 ISH_NATIVE_AVAILABLE = NO
 
 ISH_EXCLUDED_SOURCES_NO = ish_kernel_bridge.m
@@ -25,7 +21,7 @@ ISH_EXCLUDED_SOURCES_YES = ish_kernel_bridge_stub.m
 EXCLUDED_SOURCE_FILE_NAMES = $(inherited) $(ISH_EXCLUDED_SOURCES_$(ISH_NATIVE_AVAILABLE))
 
 ISH_LDFLAGS_NO =
-ISH_LDFLAGS_YES = -lISHLinuxKernel -lISHLinuxUser
+ISH_LDFLAGS_YES = -llinux -liSHLinux -liSHLinuxUser
 OTHER_LDFLAGS = $(inherited) $(ISH_LDFLAGS_$(ISH_NATIVE_AVAILABLE))
 
 ISH_LIBRARY_SEARCH_PATHS_NO =

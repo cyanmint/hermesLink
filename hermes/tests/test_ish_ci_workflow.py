@@ -1,9 +1,6 @@
 # HermesLink AI-generated glue code; created by cyanmint's coding agent.
 # AI-generated content has no copyright holder and is not subject to copyright.
-"""Validates the `build-ish-runtime` CI job added to .github/workflows/build.yml:
-present, decoupled from (does not block) the existing release pipeline, and
-internally consistent with hermes/build/build-ish-static.sh /
-hermes/build/fetch-ish-source.sh."""
+"""Validates the iSH runtime CI job and its integration into the app archive."""
 
 from __future__ import annotations
 
@@ -37,15 +34,11 @@ class IshRuntimeWorkflowTests(unittest.TestCase):
         self.assertTrue(job.get("continue-on-error"))
         self.assertIn("run_ish_runtime", str(job["if"]))
 
-    def test_ish_runtime_job_is_not_a_hard_dependency_of_the_release_pipeline(self) -> None:
-        # The static libraries it (attempts to) build are not linked into
-        # the app by default (hermes/build/ISHNative.xcconfig:
-        # ISH_NATIVE_AVAILABLE=NO), so build-app/simulator-e2e/assemble-ipa
-        # must keep succeeding whether or not this job even runs.
-        for job_name in ("build-app", "simulator-e2e", "assemble-ipa"):
+    def test_ish_runtime_job_is_required_for_app_archive_and_ipa(self) -> None:
+        for job_name in ("build-app", "assemble-ipa"):
             with self.subTest(job=job_name):
                 needs = self.workflow["jobs"][job_name].get("needs", [])
-                self.assertNotIn("build-ish-runtime", needs)
+                self.assertIn("build-ish-runtime", needs)
 
     def test_ish_runtime_job_fetches_and_builds_via_the_authored_scripts(self) -> None:
         job = self.workflow["jobs"]["build-ish-runtime"]
@@ -74,6 +67,17 @@ class IshRuntimeWorkflowTests(unittest.TestCase):
         self.assertGreaterEqual(self.text.count("ISHBridge/*"), 2)
         self.assertGreaterEqual(self.text.count("hermes/build/ISHNative.xcconfig"), 2)
         self.assertGreaterEqual(self.text.count("install_ish_runtime.sh"), 2)
+
+    def test_app_installs_native_ish_and_enables_the_real_bridge(self) -> None:
+        job = self.workflow["jobs"]["build-app"]
+        steps_text = str(job["steps"])
+        self.assertIn("ISHLinuxNative.zip", steps_text)
+        self.assertIn("install_ish_runtime.sh", steps_text)
+        self.assertIn("ISH_NATIVE_AVAILABLE = YES", steps_text)
+
+    def test_ish_native_build_is_not_best_effort(self) -> None:
+        job = self.workflow["jobs"]["build-ish-runtime"]
+        self.assertFalse(job.get("continue-on-error", False))
 
 
 if __name__ == "__main__":

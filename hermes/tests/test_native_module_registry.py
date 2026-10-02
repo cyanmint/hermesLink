@@ -26,13 +26,13 @@ class NativeModuleRegistryTests(unittest.TestCase):
         self.assertIn(("_hermesios", "_hermesiosmodule.c"), module_config.REQUIRED_STATIC_MODULES)
         self.assertIn("_hermesios", registry.REQUIRED_NATIVE_MODULES)
 
-    def test_native_build_archives_hacl_and_expat_without_linking_framework_target(self):
+    def test_native_build_archives_hacl_and_expat_for_native_runtime(self):
         build_script = (
             Path(__file__).resolve().parents[1] / "build" / "build-native-ios.sh"
         ).read_text(encoding="utf-8")
 
-        self.assertIn("--disable-framework", build_script)
-        self.assertNotIn("--enable-framework", build_script)
+        self.assertIn("--enable-framework", build_script)
+        self.assertNotIn("--disable-framework", build_script)
         self.assertIn("Modules/_hacl/Hacl_Hash_SHA2.o", build_script)
         self.assertIn('find Modules/expat -maxdepth 1 -type f -name \'*.c\'', build_script)
         self.assertIn('"$LLVM_AR" rcs Modules/expat/libexpat.a', build_script)

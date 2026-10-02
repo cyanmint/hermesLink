@@ -17,7 +17,7 @@ on:
         options: [auto, true, false]
         default: auto
       ish_runtime:
-        description: Build and publish iSH native static libraries (macOS, best-effort; see BUILD.md)
+        description: Build and publish iSH native static libraries (macOS)
         required: true
         type: choice
         options: [auto, true, false]
@@ -132,6 +132,7 @@ jobs:
           has_asset() { printf '%s\n' "$release_assets" | grep -Fxq "$1"; }
           has_asset hermesrt.zip || python_runtime_changed=true
           has_asset HermesRuntime.framework.zip || native_runtime_changed=true
+          has_asset ISHLinuxNative.zip || ish_runtime_changed=true
           has_asset HermesLink.app.zip || app_changed=true
 
           choose() {
@@ -267,27 +268,18 @@ jobs:
         run: gh release upload "$HERMES_RUNTIME_RELEASE_TAG" hermes/HermesRuntime.framework.zip --clobber
 
   build-ish-runtime:
-    name: Build iSH native static libraries (macOS, best-effort)
+    name: Build iSH native static libraries (macOS)
     needs: [decide, prepare-release]
     if: needs.decide.outputs.run_ish_runtime == 'true'
     runs-on: macos-latest
     permissions:
       contents: write
-    # This build is not wired into build-app/assemble-ipa yet (Blink links
-    # the iSH native bridge only when ISH_NATIVE_AVAILABLE=YES — see
-    # hermes/build/ISHNative.xcconfig, default NO): this repository's own
-    # Linux dev/CI sandbox has no Xcode/Meson/Ninja to validate that the
-    # real Linux-kernel-as-library build this job attempts actually
-    # succeeds end to end (see BUILD.md's iSH integration status). Keeping
-    # it non-blocking lets it be exercised and iterated on without risking
-    # the existing release pipeline.
-    continue-on-error: true
     steps:
       - name: Check out HermesLink
         uses: actions/checkout@v7
 
-      - name: Install Meson and Ninja
-        run: brew install llvm meson ninja
+      - name: Install LLVM, LLD, Meson, and Ninja
+        run: brew install llvm lld meson ninja
 
       - name: Fetch pinned iSH source and Alpine rootfs
         run: |
@@ -322,8 +314,12 @@ jobs:
 
   build-app:
     name: Build HermesLink app without hermesrt.zip & native HermesRuntime.framework (macOS)
-    needs: [decide, prepare-release]
-    if: needs.decide.outputs.run_app == 'true'
+    needs: [decide, prepare-release, build-ish-runtime]
+    if: >-
+      always() &&
+      needs.decide.outputs.run_app == 'true' &&
+      needs.prepare-release.result == 'success' &&
+      (needs.build-ish-runtime.result == 'success' || needs.build-ish-runtime.result == 'skipped')
     runs-on: macos-latest
     permissions:
       contents: write
@@ -369,7 +365,22 @@ jobs:
 
       - name: Set runtime-free app cache key
         id: runtime_hash
-        run: echo 'sha256=runtime-free' >> "$GITHUB_OUTPUT"
+        run: echo 'sha256=ish-native' >> "$GITHUB_OUTPUT"
+
+      - name: Install pinned iSH runtime and rootfs
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+          mkdir -p "$RUNNER_TEMP/ish-native-download" "$RUNNER_TEMP/ish-native-package"
+          gh release download "$HERMES_RUNTIME_RELEASE_TAG" \
+            --pattern ISHLinuxNative.zip \
+            --dir "$RUNNER_TEMP/ish-native-download"
+          unzip -q "$RUNNER_TEMP/ish-native-download/ISHLinuxNative.zip" \
+            -d "$RUNNER_TEMP/ish-native-package"
+          bash hermes/build/fetch-ish-source.sh --rootfs-only \
+            "$RUNNER_TEMP/ish-native-package/rootfs.tar.gz"
+          bash install_ish_runtime.sh "$RUNNER_TEMP/ish-native-package"
 
       - name: Cache unsigned app archive
         id: app_build_cache
@@ -397,15 +408,10 @@ jobs:
         if: steps.cache.outputs.cache-hit != 'true'
         run: bash get_resources.sh
 
-      - name: Fetch pinned iSH rootfs
-        run: |
-          set -euo pipefail
-          bash hermes/build/fetch-ish-source.sh --rootfs-only \
-            "$RUNNER_TEMP/ish-assets/rootfs.tar.gz"
-          cp "$RUNNER_TEMP/ish-assets/rootfs.tar.gz" Resources/ish-rootfs.tar.gz
-
       - name: Prepare Xcode configuration
-        run: cp template_setup.xcconfig developer_setup.xcconfig
+        run: |
+          cp template_setup.xcconfig developer_setup.xcconfig
+          printf '\nISH_NATIVE_AVAILABLE = YES\n' >> developer_setup.xcconfig
 
       - name: Run HermesLink tests
         if: ${{ inputs.run_tests == true }}
@@ -468,7 +474,7 @@ jobs:
 
   simulator-e2e:
     name: Simulator Copilot E2E
-    needs: [decide, prepare-release, build-runtime-zip, build-native-runtime, build-app]
+    needs: [decide, prepare-release, build-runtime-zip, build-native-runtime, build-ish-runtime, build-app]
     if: >-
       always() &&
       inputs.run_tests == true &&
@@ -575,13 +581,14 @@ jobs:
 
   assemble-ipa:
     name: Assemble HermesLink IPA
-    needs: [decide, prepare-release, build-runtime-zip, build-native-runtime, build-app]
+    needs: [decide, prepare-release, build-runtime-zip, build-native-runtime, build-ish-runtime, build-app]
     if: >-
       always() &&
       needs.decide.result == 'success' &&
       needs.prepare-release.result == 'success' &&
       (needs.build-runtime-zip.result == 'success' || needs.build-runtime-zip.result == 'skipped') &&
       (needs.build-native-runtime.result == 'success' || needs.build-native-runtime.result == 'skipped') &&
+      (needs.build-ish-runtime.result == 'success' || needs.build-ish-runtime.result == 'skipped') &&
       (needs.build-app.result == 'success' || needs.build-app.result == 'skipped')
     runs-on: macos-latest
     permissions:

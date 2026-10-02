@@ -34,14 +34,19 @@ class BuildIshStaticScriptTests(unittest.TestCase):
         self.assertIn("command -v ninja", source)
         self.assertIn("xcrun --sdk iphoneos --find clang", source)
 
-    def test_script_drives_upstreams_own_meson_and_ninja_build_phase_scripts(self) -> None:
+    def test_script_builds_upstream_kernel_and_host_interop_targets(self) -> None:
         source = BUILD_SCRIPT.read_text(encoding="utf-8")
         self.assertIn("app/xcode-meson.sh", source)
         self.assertIn("app/xcode-ninja.sh", source)
+        self.assertIn('xcodebuild \\', source)
+        self.assertIn('-target "$target"', source)
+        self.assertIn('libiSHLinux.a', source)
+        self.assertIn('deps/liblinux.a', source)
         self.assertIn("ISH_KERNEL=linux", source)
         self.assertIn("SDKROOT=$(xcrun --sdk iphoneos --show-sdk-path)", source)
-        self.assertIn('PATH="$LLVM_BIN:$PATH"', source)
+        self.assertIn('PATH="$LLVM_BIN:$LLD_BIN:$PATH"', source)
         self.assertIn("brew --prefix llvm", source)
+        self.assertIn("brew --prefix lld", source)
 
     def test_script_verifies_pinned_source_before_building(self) -> None:
         source = BUILD_SCRIPT.read_text(encoding="utf-8")
@@ -86,7 +91,11 @@ class InstallIshRuntimeScriptTests(unittest.TestCase):
         self.assertNotEqual(result.returncode, 0)
         self.assertIn("missing", result.stderr)
 
-    def _fake_input_with(self, rootfs_path: Path, archive_names=("libFakeKernel.a", "libFakeUser.a")) -> Path:
+    def _fake_input_with(
+        self,
+        rootfs_path: Path,
+        archive_names=("libiSHLinux.a", "libiSHLinuxUser.a", "liblinux.a"),
+    ) -> Path:
         input_root = self.work_dir / "input"
         lib_dir = input_root / "lib"
         lib_dir.mkdir(parents=True)
@@ -101,7 +110,7 @@ class InstallIshRuntimeScriptTests(unittest.TestCase):
         return input_root
 
     @unittest.skipUnless(PINNED_ROOTFS.exists(), "pinned iSH rootfs has not been fetched")
-    def test_valid_input_is_installed_under_the_fixed_canonical_library_names(self) -> None:
+    def test_valid_input_installs_the_upstream_kernel_and_interop_archives(self) -> None:
         input_root = self._fake_input_with(PINNED_ROOTFS)
         blink_root = self.work_dir / "blink-root"
         blink_root.mkdir()
@@ -111,19 +120,18 @@ class InstallIshRuntimeScriptTests(unittest.TestCase):
             env={"BLINK_ROOT": str(blink_root), "PATH": "/usr/bin:/bin"},
         )
         self.assertEqual(result.returncode, 0, result.stderr)
-        # hermes/build/ISHNative.xcconfig links -lISHLinuxKernel -lISHLinuxUser
-        # unconditionally once enabled, so these exact names matter.
-        self.assertTrue((blink_root / "Frameworks" / "ISHLinux" / "libISHLinuxKernel.a").is_file())
+        self.assertTrue((blink_root / "Frameworks" / "ISHLinux" / "libiSHLinux.a").is_file())
         self.assertTrue((blink_root / "Frameworks" / "ISHLinux" / "libISHLinuxUser.a").is_file())
+        self.assertTrue((blink_root / "Frameworks" / "ISHLinux" / "liblinux.a").is_file())
         self.assertTrue((blink_root / "Frameworks" / "ISHLinux" / "LinuxInterop.h").is_file())
         installed_rootfs = blink_root / "Resources" / "ish-rootfs.tar.gz"
         self.assertTrue(installed_rootfs.is_file())
         self.assertEqual(installed_rootfs.read_bytes(), PINNED_ROOTFS.read_bytes())
 
     @unittest.skipUnless(PINNED_ROOTFS.exists(), "pinned iSH rootfs has not been fetched")
-    def test_unexpected_archive_count_is_rejected_rather_than_guessed(self) -> None:
+    def test_missing_required_archive_is_rejected(self) -> None:
         input_root = self._fake_input_with(
-            PINNED_ROOTFS, archive_names=("libOne.a", "libTwo.a", "libThree.a"),
+            PINNED_ROOTFS, archive_names=("libiSHLinux.a", "libiSHLinuxUser.a"),
         )
         blink_root = self.work_dir / "blink-root"
         blink_root.mkdir()
@@ -133,7 +141,7 @@ class InstallIshRuntimeScriptTests(unittest.TestCase):
             env={"BLINK_ROOT": str(blink_root), "PATH": "/usr/bin:/bin"},
         )
         self.assertNotEqual(result.returncode, 0)
-        self.assertIn("refusing to guess", result.stderr)
+        self.assertIn("missing required iSH archive", result.stderr)
         self.assertFalse((blink_root / "Frameworks" / "ISHLinux").exists())
 
     def test_corrupt_rootfs_archive_is_rejected_by_integrity_verification(self) -> None:

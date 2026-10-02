@@ -126,32 +126,25 @@ registered alongside `terminal` in the standard Hermes bundles. The design:
   every standard Hermes bundle that already includes `terminal` —
   `hermes-cli`, `hermes-telegram`, the `coding` posture, etc. — picks up
   `ish` the same way.
-- **Native build** — `hermes/build/build-ish-static.sh` drives the pinned
-  source's *own* Xcode build-phase scripts (`app/xcode-meson.sh`,
-  `app/xcode-ninja.sh`) to build the upstream Linux-kernel-as-library target
-  into static libraries, and `install_ish_runtime.sh` installs them (under
-  fixed names `libISHLinuxKernel.a`/`libISHLinuxUser.a`) plus the pinned
-  rootfs archive into the Xcode build tree. **This requires Xcode command
-  line tools, Meson and Ninja, none of which are available in this
-  repository's Linux dev/CI sandbox** — `build-ish-static.sh` preflight-checks
-  for all three and fails with a clear, actionable message rather than
-  attempting a partial build; this is the one part of the integration that
-  has not been exercised end to end. A `build-ish-runtime` CI job
-  (`.github/workflows/build.yml`, macOS, best-effort/`continue-on-error`)
-  attempts it, publishing `ISHLinuxNative.zip` to the fixed release when it
-  succeeds.
+- **Native build** — `hermes/build/build-ish-static.sh` runs upstream's Meson
+  and Ninja build phases and builds its iOS host-interoperability Xcode
+  targets. `install_ish_runtime.sh` installs the resulting upstream
+  `libiSHLinux.a`, `libiSHLinuxUser.a`, and `liblinux.a` archives together with
+  the pinned rootfs. The macOS `build-ish-runtime` CI job publishes the
+  libraries as `ISHLinuxNative.zip`; the app job downloads and installs them,
+  enables `ISH_NATIVE_AVAILABLE=YES`, and archives the real kernel bridge.
+  The native kernel build is mandatory for app/IPA jobs. Its first successful
+  end-to-end CI run is still required to validate the exact Xcode/Meson output
+  and final app link.
 - **Switchable link, safe default** — `hermes/build/ISHNative.xcconfig`
   (included from `template_setup.xcconfig`) defaults
   `ISH_NATIVE_AVAILABLE` to `NO`, which compiles
   `ISHBridge/ish_kernel_bridge_stub.m` (keeps `ish` registered everywhere,
   reporting the guest kernel as unavailable) instead of
-  `ISHBridge/ish_kernel_bridge.m`, and does not link the (not yet verified)
-  static libraries. This keeps a fresh checkout — and the existing
-  `build-app`/`assemble-ipa` release pipeline — building successfully
-  without depending on the unverified native build above. Flip it to `YES`
-  once `build-ish-static.sh` + `install_ish_runtime.sh` have been run and
-  validated for real.
+  `ISHBridge/ish_kernel_bridge.m`, and does not link native libraries. A fresh
+  checkout therefore needs to run the pinned iSH build and installer before
+  selecting the real bridge; the CI app job performs these steps and fails
+  rather than silently shipping a stub IPA if they cannot complete.
 
 The fetched iSH source includes its GPLv3 and iOS additional-term notices;
 those licenses must be preserved in any eventual linked distribution.
-

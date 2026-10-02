@@ -131,9 +131,9 @@ class IshNativeXcconfigTests(unittest.TestCase):
         self.assertIn("ISH_EXCLUDED_SOURCES_YES = ish_kernel_bridge_stub.m", source)
         self.assertIn("EXCLUDED_SOURCE_FILE_NAMES", source)
 
-    def test_xcconfig_links_the_two_canonical_static_library_names_when_enabled(self) -> None:
+    def test_xcconfig_links_the_upstream_kernel_and_interop_archives_when_enabled(self) -> None:
         source = XCCONFIG.read_text(encoding="utf-8")
-        self.assertIn("ISH_LDFLAGS_YES = -lISHLinuxKernel -lISHLinuxUser", source)
+        self.assertIn("ISH_LDFLAGS_YES = -llinux -liSHLinux -liSHLinuxUser", source)
 
     def test_template_setup_includes_the_ish_native_xcconfig(self) -> None:
         source = TEMPLATE_XCCONFIG.read_text(encoding="utf-8")
