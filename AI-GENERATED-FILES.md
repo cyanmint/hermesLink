@@ -30,6 +30,7 @@ Under the project's stated attribution policy, AI-generated content has no copyr
 - `hermes/build/verify-ish-source.py`
 - `hermes/build/generate-native-module-registry.py`
 - `hermes/build/package-native-ios.sh`
+- `hermes/build/package-ish-framework.sh`
 - `hermes/build/prepare-ish-xcode-project.py`
 - `hermes/build/repack-ish-meson-archives.py`
 - `hermes/build/validate-runtime-zip.py`

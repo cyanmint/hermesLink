@@ -7,8 +7,8 @@
 extern "C" {
 #endif
 
-/* Public entry points consumed by Blink/Commands/ish.m (the native `ish`
- * shell command). This header intentionally has no Foundation/UIKit
+/* Public entry points exported by Ish.framework and consumed by
+ * Blink/Commands/ish.m. This header intentionally has no Foundation/UIKit
  * dependency so it can be included from plain C callers too.
  *
  * Design (see BUILD.md and ISHBridge/ish_kernel_bridge.m for the full
@@ -41,6 +41,13 @@ typedef enum {
    * ISHBridge/ish_exit_protocol.h. */
   ISH_RUN_ERR_NO_EXIT_SENTINEL = -5,
 } ish_run_status;
+
+typedef void (*ish_log_handler)(const char *message);
+
+/* Configures the persistent-storage parent and optional diagnostic callback.
+ * The framework stores its writable guest root under <base>/ish-root. Call
+ * before the first boot; repeated calls with the same values are harmless. */
+int ish_configure(const char *storage_base, ish_log_handler log_handler);
 
 /* Boots the shared guest kernel if it has not been booted yet in this app
  * process (idempotent and thread-safe; cheap to call before every `ish`

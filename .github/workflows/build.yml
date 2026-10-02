@@ -17,7 +17,7 @@ on:
         options: [auto, true, false]
         default: auto
       ish_runtime:
-        description: Build and publish iSH native static libraries (macOS)
+        description: Build and publish iSH native framework (macOS)
         required: true
         type: choice
         options: [auto, true, false]
@@ -115,7 +115,7 @@ jobs:
                 ;;
             esac
             case "$path" in
-              hermes/build/prepare-ish-xcode-project.py|hermes/build/repack-ish-meson-archives.py|hermes/build/ISHNative.xcconfig)
+              hermes/build/prepare-ish-xcode-project.py|hermes/build/repack-ish-meson-archives.py|hermes/build/package-ish-framework.sh|hermes/build/ISHNative.xcconfig|ISHBridge/*)
                 ish_xcode_changed=true
                 ;;
             esac
@@ -336,7 +336,7 @@ jobs:
         run: gh release upload "$HERMES_RUNTIME_RELEASE_TAG" "$RUNNER_TEMP/ISHMesonBuild.tar.gz" --clobber
 
   build-ish-runtime:
-    name: Build iSH native static libraries (macOS)
+    name: Build iSH native framework (macOS)
     needs: [decide, prepare-release, build-ish-meson]
     if: >-
       always() &&
@@ -383,12 +383,20 @@ jobs:
             -c /tmp/hermeslink-ish/source/deps/linux/arch/ish/kernel/sections.S \
             -o hermes/build/external/ish/lib/ish-sections.o
 
+      - name: Package iSH dynamic framework
+        env:
+          IPHONEOS_DEPLOYMENT_TARGET: '16.1'
+        run: |
+          set -euo pipefail
+          mkdir -p "$RUNNER_TEMP/ish-native-package/Frameworks"
+          bash hermes/build/package-ish-framework.sh \
+            hermes/build/external/ish/lib \
+            "$RUNNER_TEMP/ish-native-package/Frameworks"
+
       - name: Package iSH native build output
         run: |
           set -euo pipefail
-          mkdir -p "$RUNNER_TEMP/ish-native-package"
-          cp -a hermes/build/external/ish/lib "$RUNNER_TEMP/ish-native-package/lib"
-          (cd "$RUNNER_TEMP/ish-native-package" && zip -qry "$GITHUB_WORKSPACE/ISHLinuxNative.zip" lib)
+          (cd "$RUNNER_TEMP/ish-native-package" && zip -qry "$GITHUB_WORKSPACE/ISHLinuxNative.zip" Frameworks)
           unzip -t ISHLinuxNative.zip
 
       - name: Publish ISHLinuxNative.zip to fixed release
@@ -576,6 +584,7 @@ jobs:
           test -n "$app"
           test -f "$app/Info.plist"
           test -x "$app/HermesLink"
+          test -x "$app/Frameworks/Ish.framework/Ish"
           mkdir -p "$RUNNER_TEMP/runtime-free-app"
           /usr/bin/ditto -c -k --sequesterRsrc --keepParent "$app" \
             "$RUNNER_TEMP/runtime-free-app/HermesLink.app.zip"
@@ -747,6 +756,7 @@ jobs:
             "$RUNNER_TEMP/Payload/HermesLink.app/hermesrt.zip"
           test -f "$RUNNER_TEMP/Payload/HermesLink.app/Info.plist"
           test -x "$RUNNER_TEMP/Payload/HermesLink.app/HermesLink"
+          test -x "$RUNNER_TEMP/Payload/HermesLink.app/Frameworks/Ish.framework/Ish"
           test -x "$RUNNER_TEMP/Payload/HermesLink.app/Frameworks/HermesRuntime.framework/HermesRuntime"
           test -s "$RUNNER_TEMP/Payload/HermesLink.app/hermesrt.zip"
 
@@ -754,6 +764,7 @@ jobs:
         run: |
           set -euo pipefail
           app="$RUNNER_TEMP/Payload/HermesLink.app"
+          codesign --force --sign - --timestamp=none "$app/Frameworks/Ish.framework"
           codesign --force --sign - --timestamp=none "$app/Frameworks/HermesRuntime.framework"
           codesign --force --deep --sign - --timestamp=none "$app"
           codesign --verify --deep --strict --verbose=2 "$app"
@@ -763,6 +774,7 @@ jobs:
           unzip -Z1 "$RUNNER_TEMP/HermesLink.ipa" | grep -Fx 'Payload/HermesLink.app/HermesLink'
           unzip -Z1 "$RUNNER_TEMP/HermesLink.ipa" | grep -Fx 'Payload/HermesLink.app/hermesrt.zip'
           unzip -Z1 "$RUNNER_TEMP/HermesLink.ipa" | grep -Fx 'Payload/HermesLink.app/Frameworks/HermesRuntime.framework/HermesRuntime'
+          unzip -Z1 "$RUNNER_TEMP/HermesLink.ipa" | grep -Fx 'Payload/HermesLink.app/Frameworks/Ish.framework/Ish'
 
       - name: Upload universal HermesLink IPA
         uses: actions/upload-artifact@v7

@@ -471,10 +471,6 @@
 		F10000080000000000000001 /* HermesRuntime.framework in Embed Frameworks */ = {isa = PBXBuildFile; fileRef = F10000090000000000000001 /* HermesRuntime.framework */; settings = {ATTRIBUTES = (CodeSignOnCopy, RemoveHeadersOnCopy, ); }; };
 		F10000050000000000000001 /* hermesrt.zip in Resources */ = {isa = PBXBuildFile; fileRef = F10000060000000000000001 /* hermesrt.zip */; };
 		F1A1CE560000000000000001 /* ish.m in Sources */ = {isa = PBXBuildFile; fileRef = F1A1CE550000000000000001 /* ish.m */; };
-		B627A9AB5991A6E9C7E4957C /* ish_path_safety.c in Sources */ = {isa = PBXBuildFile; fileRef = 7D974064786F253981F25015 /* ish_path_safety.c */; };
-		9E4C33F5FF4AAEEACB68B1CC /* ish_rootfs.c in Sources */ = {isa = PBXBuildFile; fileRef = 34208DB0A0A73B1BACFEE7CE /* ish_rootfs.c */; };
-		977366A863D8DBF2B62C2DC6 /* ish_exit_protocol.c in Sources */ = {isa = PBXBuildFile; fileRef = 6B7C99FC5893913D822D64FD /* ish_exit_protocol.c */; };
-		66BE78D3C7A901F0E03E2938 /* ish_kernel_bridge.m in Sources */ = {isa = PBXBuildFile; fileRef = F8AA606AEC0B09E8279F79DF /* ish_kernel_bridge.m */; };
 		3EC2EABECFB079180991531B /* ish_kernel_bridge_stub.m in Sources */ = {isa = PBXBuildFile; fileRef = 1E3F68EDDDED7F8AAF6CD86C /* ish_kernel_bridge_stub.m */; };
 		DCA2F5F653C2C3F9662E8822 /* ish-rootfs.tar.gz in Resources */ = {isa = PBXBuildFile; fileRef = 314E2F04FE0F5B60CB0D4E61 /* ish-rootfs.tar.gz */; };
 		D2F330CA20A6CB840074ADD7 /* help.m in Sources */ = {isa = PBXBuildFile; fileRef = D2F330C920A6CB840074ADD7 /* help.m */; };
@@ -767,6 +763,26 @@
 			runOnlyForDeploymentPostprocessing = 0;
 		};
 /* End PBXCopyFilesBuildPhase section */
+
+/* Begin PBXShellScriptBuildPhase section */
+		F100000A0000000000000001 /* Embed Ish.framework when enabled */ = {
+			isa = PBXShellScriptBuildPhase;
+			alwaysOutOfDate = 1;
+			buildActionMask = 2147483647;
+			files = (
+			);
+			inputPaths = (
+				"$(PROJECT_DIR)/Frameworks/Ish.framework",
+			);
+			name = "Embed Ish.framework when enabled";
+			outputPaths = (
+				"$(TARGET_BUILD_DIR)/$(FRAMEWORKS_FOLDER_PATH)/Ish.framework/Ish",
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+			shellPath = /bin/sh;
+			shellScript = "set -e\nif [ \"${ISH_NATIVE_AVAILABLE:-NO}\" != YES ]; then\n  exit 0\nfi\nsource=\"$PROJECT_DIR/Frameworks/Ish.framework\"\ndestination=\"$TARGET_BUILD_DIR/$FRAMEWORKS_FOLDER_PATH/Ish.framework\"\nif [ ! -x \"$source/Ish\" ]; then\n  echo \"missing Ish.framework/Ish at $source\" >&2\n  exit 1\nfi\nmkdir -p \"$(dirname \"$destination\")\"\nrm -rf \"$destination\"\n/usr/bin/ditto \"$source\" \"$destination\"\nif [ \"${CODE_SIGNING_ALLOWED:-NO}\" = YES ]; then\n  /usr/bin/codesign --force --sign \"${EXPANDED_CODE_SIGN_IDENTITY:--}\" --timestamp=none \"$destination\"\nfi\n";
+		};
+/* End PBXShellScriptBuildPhase section */
 
 /* Begin PBXFileReference section */
 		0716B5291CFFAB9300268B5B /* AppDelegate.h */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.c.h; path = AppDelegate.h; sourceTree = "<group>"; };
@@ -2900,6 +2916,7 @@
 				EA0BA1871C0CC57B00719C1A /* Sources */,
 				EA0BA1881C0CC57B00719C1A /* Frameworks */,
 				EA0BA1891C0CC57B00719C1A /* Resources */,
+				F100000A0000000000000001 /* Embed Ish.framework when enabled */,
 				07A06D8C1D0618FC00ABEAFA /* Embed Frameworks */,
 				D218069F25CC27C100B98902 /* Embed PlugIns */,
 			);
@@ -3623,10 +3640,6 @@
 				D2F330CA20A6CB840074ADD7 /* help.m in Sources */,
 				F10000010000000000000001 /* hermes.m in Sources */,
 				F1A1CE560000000000000001 /* ish.m in Sources */,
-				B627A9AB5991A6E9C7E4957C /* ish_path_safety.c in Sources */,
-				9E4C33F5FF4AAEEACB68B1CC /* ish_rootfs.c in Sources */,
-				977366A863D8DBF2B62C2DC6 /* ish_exit_protocol.c in Sources */,
-				66BE78D3C7A901F0E03E2938 /* ish_kernel_bridge.m in Sources */,
 				3EC2EABECFB079180991531B /* ish_kernel_bridge_stub.m in Sources */,
 				D28C357626A56DDF00202C4D /* FileProviderDomain.swift in Sources */,
 				D241CBD223040734003D64A5 /* KBDevice.swift in Sources */,

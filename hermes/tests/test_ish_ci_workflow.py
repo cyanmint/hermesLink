@@ -129,13 +129,14 @@ class IshRuntimeWorkflowTests(unittest.TestCase):
             "hermes/build/fetch-ish-source.sh", "hermes/build/verify-ish-source.py",
             "hermes/build/prepare-ish-xcode-project.py",
             "hermes/build/repack-ish-meson-archives.py",
+            "hermes/build/package-ish-framework.sh",
             "hermes/build/ISHNative.xcconfig", "install_ish_runtime.sh",
         ):
             with self.subTest(marker=marker):
                 self.assertIn(marker, self.text)
 
     def test_ish_bridge_changes_also_trigger_app_builds(self) -> None:
-        self.assertEqual(self.text.count("ISHBridge/*"), 1)
+        self.assertEqual(self.text.count("ISHBridge/*"), 2)
         self.assertGreaterEqual(self.text.count("hermes/build/ISHNative.xcconfig"), 1)
         self.assertGreaterEqual(self.text.count("install_ish_runtime.sh"), 1)
 
@@ -156,6 +157,9 @@ class IshRuntimeWorkflowTests(unittest.TestCase):
             steps.index(compile_step),
             next(i for i, step in enumerate(steps) if step["name"] == "Package iSH native build output"),
         )
+        self.assertIn("package-ish-framework.sh", str(steps))
+        package_step = next(step for step in steps if step["name"] == "Package iSH dynamic framework")
+        self.assertIn("Frameworks", package_step["run"])
 
     def test_ish_linker_configuration_changes_only_the_macos_ish_stage(self) -> None:
         case = self.text.split('case "$path" in')[4].split("esac", 1)[0]

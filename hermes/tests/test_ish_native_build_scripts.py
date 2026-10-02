@@ -18,6 +18,7 @@ from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[2]
 BUILD_SCRIPT = ROOT / "hermes" / "build" / "build-ish-static.sh"
+PACKAGE_FRAMEWORK_SCRIPT = ROOT / "hermes" / "build" / "package-ish-framework.sh"
 PREPARE_XCODE_PROJECT = ROOT / "hermes" / "build" / "prepare-ish-xcode-project.py"
 REPACK_MESON_ARCHIVES = ROOT / "hermes" / "build" / "repack-ish-meson-archives.py"
 INSTALL_SCRIPT = ROOT / "install_ish_runtime.sh"
@@ -66,6 +67,21 @@ class BuildIshStaticScriptTests(unittest.TestCase):
         self.assertIn("prepare-ish-xcode-project.py", source)
         self.assertIn("brew --prefix llvm", source)
         self.assertIn("brew --prefix lld", source)
+
+
+class PackageIshFrameworkTests(unittest.TestCase):
+    def test_script_has_valid_bash_syntax(self) -> None:
+        result = subprocess.run(["bash", "-n", str(PACKAGE_FRAMEWORK_SCRIPT)], capture_output=True, text=True)
+        self.assertEqual(result.returncode, 0, result.stderr)
+
+    def test_script_links_static_kernel_inputs_into_a_dynamic_framework(self) -> None:
+        source = PACKAGE_FRAMEWORK_SCRIPT.read_text(encoding="utf-8")
+        self.assertIn("-dynamiclib", source)
+        self.assertIn("ish-sections.o", source)
+        self.assertIn("-Wl,-force_load", source)
+        self.assertIn("@rpath/Ish.framework/Ish", source)
+        self.assertIn("_ish_run_command", source)
+        self.assertIn("ish_kernel_bridge.m", source)
 
     def test_script_verifies_pinned_source_before_building(self) -> None:
         source = BUILD_SCRIPT.read_text(encoding="utf-8")
@@ -236,33 +252,19 @@ class InstallIshRuntimeScriptTests(unittest.TestCase):
         self.assertNotEqual(result.returncode, 0)
         self.assertIn("missing", result.stderr)
 
-    def _fake_input_with(
-        self,
-        rootfs_path: Path,
-        archive_names=(
-            "libiSHLinux.a",
-            "libiSHLinuxUser.a",
-            "liblinux.a",
-            "libfakefs.a",
-            "libish_emu.a",
-        ),
-    ) -> Path:
+    def _fake_input_with(self, rootfs_path: Path) -> Path:
         input_root = self.work_dir / "input"
-        lib_dir = input_root / "lib"
-        lib_dir.mkdir(parents=True)
-        for index, name in enumerate(archive_names):
-            (lib_dir / name).write_bytes(f"not a real archive, placeholder #{index}".encode())
-        (lib_dir / "ish-sections.o").write_bytes(b"Mach-O section anchors")
-        header_source = PINNED_SOURCE / "app" / "LinuxInterop.h"
-        if header_source.exists():
-            (lib_dir / "LinuxInterop.h").write_text(header_source.read_text(encoding="utf-8"), encoding="utf-8")
-        else:
-            (lib_dir / "LinuxInterop.h").write_text("/* placeholder */\n", encoding="utf-8")
+        framework = input_root / "Frameworks" / "Ish.framework"
+        (framework / "Headers").mkdir(parents=True)
+        (framework / "Ish").write_bytes(b"Mach-O Ish framework executable")
+        (framework / "Ish").chmod(0o755)
+        (framework / "Info.plist").write_text("<plist/>", encoding="utf-8")
+        (framework / "Headers" / "ish_kernel_bridge.h").write_text("/* placeholder */\n", encoding="utf-8")
         (input_root / "rootfs.tar.gz").write_bytes(rootfs_path.read_bytes())
         return input_root
 
     @unittest.skipUnless(PINNED_ROOTFS.exists(), "pinned iSH rootfs has not been fetched")
-    def test_valid_input_installs_the_upstream_kernel_and_interop_archives(self) -> None:
+    def test_valid_input_installs_the_framework_and_rootfs(self) -> None:
         input_root = self._fake_input_with(PINNED_ROOTFS)
         blink_root = self.work_dir / "blink-root"
         blink_root.mkdir()
@@ -272,43 +274,16 @@ class InstallIshRuntimeScriptTests(unittest.TestCase):
             env={"BLINK_ROOT": str(blink_root), "PATH": "/usr/bin:/bin"},
         )
         self.assertEqual(result.returncode, 0, result.stderr)
-        self.assertTrue((blink_root / "Frameworks" / "ISHLinux" / "libiSHLinux.a").is_file())
-        self.assertTrue((blink_root / "Frameworks" / "ISHLinux" / "libiSHLinuxUser.a").is_file())
-        self.assertTrue((blink_root / "Frameworks" / "ISHLinux" / "liblinux.a").is_file())
-        self.assertTrue((blink_root / "Frameworks" / "ISHLinux" / "libfakefs.a").is_file())
-        self.assertTrue((blink_root / "Frameworks" / "ISHLinux" / "libish_emu.a").is_file())
-        self.assertTrue((blink_root / "Frameworks" / "ISHLinux" / "ish-sections.o").is_file())
-        self.assertTrue((blink_root / "Frameworks" / "ISHLinux" / "LinuxInterop.h").is_file())
+        self.assertTrue((blink_root / "Frameworks" / "Ish.framework" / "Ish").is_file())
+        self.assertTrue((blink_root / "Frameworks" / "Ish.framework" / "Headers" / "ish_kernel_bridge.h").is_file())
         installed_rootfs = blink_root / "Resources" / "ish-rootfs.tar.gz"
         self.assertTrue(installed_rootfs.is_file())
         self.assertEqual(installed_rootfs.read_bytes(), PINNED_ROOTFS.read_bytes())
 
     @unittest.skipUnless(PINNED_ROOTFS.exists(), "pinned iSH rootfs has not been fetched")
-    def test_missing_required_archive_is_rejected(self) -> None:
-        input_root = self._fake_input_with(
-            PINNED_ROOTFS,
-            archive_names=(
-                "libiSHLinux.a",
-                "libiSHLinuxUser.a",
-                "liblinux.a",
-                "libfakefs.a",
-            ),
-        )
-        blink_root = self.work_dir / "blink-root"
-        blink_root.mkdir()
-        result = subprocess.run(
-            ["bash", str(INSTALL_SCRIPT), str(input_root)],
-            capture_output=True, text=True,
-            env={"BLINK_ROOT": str(blink_root), "PATH": "/usr/bin:/bin"},
-        )
-        self.assertNotEqual(result.returncode, 0)
-        self.assertIn("missing required iSH archive", result.stderr)
-        self.assertFalse((blink_root / "Frameworks" / "ISHLinux").exists())
-
-    @unittest.skipUnless(PINNED_ROOTFS.exists(), "pinned iSH rootfs has not been fetched")
-    def test_missing_macho_section_anchors_are_rejected(self) -> None:
+    def test_missing_framework_executable_is_rejected(self) -> None:
         input_root = self._fake_input_with(PINNED_ROOTFS)
-        (input_root / "lib" / "ish-sections.o").unlink()
+        (input_root / "Frameworks" / "Ish.framework" / "Ish").unlink()
         blink_root = self.work_dir / "blink-root"
         blink_root.mkdir()
         result = subprocess.run(
@@ -317,8 +292,8 @@ class InstallIshRuntimeScriptTests(unittest.TestCase):
             env={"BLINK_ROOT": str(blink_root), "PATH": "/usr/bin:/bin"},
         )
         self.assertNotEqual(result.returncode, 0)
-        self.assertIn("missing required iSH Mach-O section anchors", result.stderr)
-        self.assertFalse((blink_root / "Frameworks" / "ISHLinux").exists())
+        self.assertIn("missing iSH framework executable", result.stderr)
+        self.assertFalse((blink_root / "Frameworks" / "Ish.framework").exists())
 
     def test_corrupt_rootfs_archive_is_rejected_by_integrity_verification(self) -> None:
         corrupt_rootfs = self.work_dir / "corrupt.tar.gz"

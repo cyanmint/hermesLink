@@ -1,6 +1,7 @@
 /* HermesLink AI-generated glue code; created by cyanmint's coding agent.
  * AI-generated content has no copyright holder and is not subject to copyright. */
 #import <Foundation/Foundation.h>
+#import <BlinkConfig/BlinkPaths.h>
 
 #include <stdio.h>
 #include <stdlib.h>
@@ -26,6 +27,11 @@ extern void HermesLinkAppendLog(const char *message);
  * the normal ios_system signal/EOF path on thread_stdin). */
 __attribute__((visibility("default")))
 int ish_main(int argc, char *argv[]) {
+  if (ish_configure([BlinkPaths blink].fileSystemRepresentation, HermesLinkAppendLog) != ISH_RUN_OK) {
+    fprintf(thread_stderr, "ish: failed to configure the native guest runtime\n");
+    return 70;
+  }
+
   NSMutableString *command = [NSMutableString new];
   if (argc < 2) {
     [command appendString:@"/bin/sh"];

@@ -29,6 +29,7 @@ NEW_FILES_FROM_THIS_CHANGE = [
     "ISHBridge/ish_rootfs.h",
     "hermes/build/ISHNative.xcconfig",
     "hermes/build/build-ish-static.sh",
+    "hermes/build/package-ish-framework.sh",
     "hermes/overlay/hermes/tools/ish_tool.py",
     "hermes/overlay/patches/patch-ish-tool.py",
     "hermes/tests/ish_bridge/ish_bridge_test_main.c",

@@ -1,11 +1,10 @@
 # HermesLink AI-generated glue code; created by cyanmint's coding agent.
 # AI-generated content has no copyright holder and is not subject to copyright.
 """Validates the Xcode project wiring for the iSH integration:
-- every new ISHBridge/* and Blink/Commands/ish.m source file is registered
-  in Blink.xcodeproj/project.pbxproj (file reference + correct build phase
-  membership), without disturbing any pre-existing entry;
-- hermes/build/ISHNative.xcconfig's switchable-by-default-off design is
-  present and included from template_setup.xcconfig;
+- ISHBridge sources are registered in the project, with only the command and
+  disabled-build stub compiled directly into the Blink app;
+- Ish.framework is conditionally linked and embedded by the app target;
+- hermes/build/ISHNative.xcconfig defaults to the safe stub mode;
 - Resources/blinkCommandsDictionary.plist registers the native `ish`
   command as `ish_main` (not an `ish container` subcommand).
 
@@ -69,13 +68,12 @@ class PbxprojWiringTests(unittest.TestCase):
         self.assertIn("path = ish.m;", self.source)
         self.assertIn('path = "ish-rootfs.tar.gz";', self.source)
 
-    def test_compiled_sources_are_in_the_sources_build_phase(self) -> None:
-        for name in (
-            "ish.m", "ish_path_safety.c", "ish_rootfs.c",
-            "ish_exit_protocol.c", "ish_kernel_bridge.m", "ish_kernel_bridge_stub.m",
-        ):
+    def test_only_command_and_stub_are_compiled_into_the_app_target(self) -> None:
+        self.assertIn("ish.m in Sources */,", self.source)
+        self.assertIn("ish_kernel_bridge_stub.m in Sources */,", self.source)
+        for name in ("ish_path_safety.c", "ish_rootfs.c", "ish_exit_protocol.c", "ish_kernel_bridge.m"):
             with self.subTest(name=name):
-                self.assertIn(f"{name} in Sources */,", self.source)
+                self.assertNotIn(f"{name} in Sources */,", self.source)
 
     def test_headers_are_not_attached_to_any_build_phase(self) -> None:
         # Headers should be plain, visible file references only: none of
@@ -125,31 +123,27 @@ class IshNativeXcconfigTests(unittest.TestCase):
         source = XCCONFIG.read_text(encoding="utf-8")
         self.assertIn("ISH_NATIVE_AVAILABLE = NO", source)
 
-    def test_xcconfig_excludes_exactly_one_of_the_two_kernel_bridge_implementations(self) -> None:
+    def test_xcconfig_selects_the_framework_or_default_app_stub(self) -> None:
         source = XCCONFIG.read_text(encoding="utf-8")
-        self.assertIn("ISH_EXCLUDED_SOURCES_NO = ish_kernel_bridge.m", source)
+        self.assertIn("ISH_EXCLUDED_SOURCES_NO =", source)
         self.assertIn("ISH_EXCLUDED_SOURCES_YES = ish_kernel_bridge_stub.m", source)
         self.assertIn("EXCLUDED_SOURCE_FILE_NAMES", source)
 
-    def test_xcconfig_links_the_upstream_kernel_and_interop_archives_when_enabled(self) -> None:
+    def test_xcconfig_links_the_ish_framework_only_when_enabled(self) -> None:
         source = XCCONFIG.read_text(encoding="utf-8")
-        self.assertIn(
-            "ISH_LDFLAGS_YES = $(PROJECT_DIR)/Frameworks/ISHLinux/ish-sections.o "
-            "-force_load $(PROJECT_DIR)/Frameworks/ISHLinux/liblinux.a "
-            "-force_load $(PROJECT_DIR)/Frameworks/ISHLinux/libiSHLinux.a "
-            "-liSHLinuxUser -lfakefs -lish_emu -lsqlite3",
-            source,
-        )
+        self.assertIn("ISH_LDFLAGS_YES = -framework Ish", source)
         self.assertIn(
             "BLINK_OTHER_LDFLAGS = $(inherited) $(ISH_LDFLAGS_$(ISH_NATIVE_AVAILABLE))",
             source,
         )
         self.assertFalse(any(line.startswith("OTHER_LDFLAGS =") for line in source.splitlines()))
 
-    def test_real_bridge_provides_upstream_rootfs_initialization_hook(self) -> None:
+    def test_real_bridge_provides_framework_configuration_api(self) -> None:
         source = (ISH_DIR / "ish_kernel_bridge.m").read_text(encoding="utf-8")
         self.assertIn("void FsInitialize(void)", source)
-        self.assertIn("HermesLink owns rootfs provisioning", source)
+        self.assertIn("int ish_configure(const char *storage_base, ish_log_handler log_handler)", source)
+        self.assertNotIn("#import <BlinkConfig/BlinkPaths.h>", source)
+        self.assertNotIn("extern void HermesLinkAppendLog", source)
 
     def test_real_bridge_passes_capturable_argument_pointers_to_session_block(self) -> None:
         source = (ISH_DIR / "ish_kernel_bridge.m").read_text(encoding="utf-8")
@@ -169,11 +163,17 @@ class IshNativeXcconfigTests(unittest.TestCase):
     def test_stub_implements_the_same_public_entry_points_as_the_real_bridge(self) -> None:
         header = (ISH_DIR / "ish_kernel_bridge.h").read_text(encoding="utf-8")
         stub = (ISH_DIR / "ish_kernel_bridge_stub.m").read_text(encoding="utf-8")
-        for symbol in ("ish_kernel_ensure_booted", "ish_run_command"):
+        for symbol in ("ish_configure", "ish_kernel_ensure_booted", "ish_run_command"):
             with self.subTest(symbol=symbol):
                 self.assertIn(symbol, header)
                 self.assertIn(symbol, stub)
         self.assertIn("ISH_RUN_ERR_NOT_AVAILABLE", stub)
+
+    def test_app_conditionally_embeds_the_dynamic_ish_framework(self) -> None:
+        project = PBXPROJ.read_text(encoding="utf-8")
+        self.assertIn("Embed Ish.framework when enabled", project)
+        self.assertIn('ISH_NATIVE_AVAILABLE:-NO', project)
+        self.assertIn('@rpath/Ish.framework/Ish', (ROOT / "hermes" / "build" / "package-ish-framework.sh").read_text())
 
 
 if __name__ == "__main__":

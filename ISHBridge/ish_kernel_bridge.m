@@ -1,7 +1,6 @@
 /* HermesLink AI-generated glue code; created by cyanmint's coding agent.
  * AI-generated content has no copyright holder and is not subject to copyright. */
 #import <Foundation/Foundation.h>
-#import <BlinkConfig/BlinkPaths.h>
 
 /* Pulled from the pinned, unmodified upstream iSH source checkout (see
  * hermes/build/fetch-ish-source.sh / hermes/build/build-ish-static.sh); the
@@ -22,10 +21,37 @@
 #include <string.h>
 #include <unistd.h>
 
-/* Blink/Commands/hermes.m exports this shared diagnostics logger; reusing
- * it keeps iSH's own boot/panic/console noise in the same log a user (or
- * us, during a bug report) already knows to look at. */
-extern void HermesLinkAppendLog(const char *message);
+static pthread_mutex_t g_configuration_lock = PTHREAD_MUTEX_INITIALIZER;
+static char g_storage_base[1024];
+static ish_log_handler g_log_handler;
+static int g_boot_started;
+
+static void ISHLog(const char *message) {
+  pthread_mutex_lock(&g_configuration_lock);
+  ish_log_handler handler = g_log_handler;
+  pthread_mutex_unlock(&g_configuration_lock);
+  if (handler != NULL) {
+    handler(message);
+  } else {
+    NSLog(@"%s", message != NULL ? message : "ish: (empty diagnostic)");
+  }
+}
+
+int ish_configure(const char *storage_base, ish_log_handler log_handler) {
+  if (storage_base == NULL || storage_base[0] == '\0' || strlen(storage_base) >= sizeof(g_storage_base)) {
+    return ISH_RUN_ERR_INVALID_ARGUMENT;
+  }
+  pthread_mutex_lock(&g_configuration_lock);
+  if (g_boot_started &&
+      (strcmp(g_storage_base, storage_base) != 0 || g_log_handler != log_handler)) {
+    pthread_mutex_unlock(&g_configuration_lock);
+    return ISH_RUN_ERR_INVALID_ARGUMENT;
+  }
+  strlcpy(g_storage_base, storage_base, sizeof(g_storage_base));
+  g_log_handler = log_handler;
+  pthread_mutex_unlock(&g_configuration_lock);
+  return ISH_RUN_OK;
+}
 
 #pragma mark - sync_do_in_workqueue
 
@@ -68,14 +94,14 @@ void async_do_in_ios(void (^block)(void)) {
 void ReportPanic(const char *message) {
   char buffer[256];
   snprintf(buffer, sizeof(buffer), "ish: guest kernel panic: %s", message != NULL ? message : "(no message)");
-  HermesLinkAppendLog(buffer);
+  ISHLog(buffer);
 }
 
 void ConsoleLog(const char *data, unsigned len) {
   unsigned bounded = len > 200 ? 200 : len;
   char buffer[256];
   snprintf(buffer, sizeof(buffer), "ish: console: %.*s", (int) bounded, data != NULL ? data : "");
-  HermesLinkAppendLog(buffer);
+  ISHLog(buffer);
 }
 
 #pragma mark - Clipboard bridge (intentionally unimplemented)
@@ -280,7 +306,15 @@ void FsInitialize(void) {
 }
 
 static NSString *ISHRootfsStorageDirectory(void) {
-  NSString *base = [[BlinkPaths blink] stringByAppendingPathComponent:@"ish-root"];
+  pthread_mutex_lock(&g_configuration_lock);
+  NSString *base = g_storage_base[0] != '\0'
+      ? [NSString stringWithUTF8String:g_storage_base]
+      : NSSearchPathForDirectoriesInDomains(NSApplicationSupportDirectory, NSUserDomainMask, YES).firstObject;
+  pthread_mutex_unlock(&g_configuration_lock);
+  if (base == nil) {
+    base = NSHomeDirectory();
+  }
+  base = [base stringByAppendingPathComponent:@"ish-root"];
   [[NSFileManager defaultManager] createDirectoryAtPath:base withIntermediateDirectories:YES attributes:nil error:nil];
   return base;
 }
@@ -305,7 +339,7 @@ static int ISHPrepareRootfsIfNeeded(void) {
   }
   NSString *archivePath = [[NSBundle mainBundle] pathForResource:@"ish-rootfs" ofType:@"tar.gz"];
   if (archivePath == nil) {
-    HermesLinkAppendLog("ish: bundled rootfs archive (ish-rootfs.tar.gz) is missing from the app bundle");
+    ISHLog("ish: bundled rootfs archive (ish-rootfs.tar.gz) is missing from the app bundle");
     return ISH_RUN_ERR_ROOTFS_EXTRACT_FAILED;
   }
   int status = ish_rootfs_extract(archivePath.fileSystemRepresentation, root.fileSystemRepresentation);
@@ -313,7 +347,7 @@ static int ISHPrepareRootfsIfNeeded(void) {
     char message[192];
     snprintf(message, sizeof(message), "ish: rootfs extraction into %s failed (status %d)",
              root.fileSystemRepresentation, status);
-    HermesLinkAppendLog(message);
+    ISHLog(message);
     return ISH_RUN_ERR_ROOTFS_EXTRACT_FAILED;
   }
   return ISH_RUN_OK;
@@ -333,6 +367,9 @@ static void *ish_boot_thread_entry(void *context) {
 }
 
 static void ish_boot_once_body(void) {
+  pthread_mutex_lock(&g_configuration_lock);
+  g_boot_started = 1;
+  pthread_mutex_unlock(&g_configuration_lock);
   int status = ISHPrepareRootfsIfNeeded();
   if (status != ISH_RUN_OK) {
     atomic_store(&g_boot_result, status);
@@ -345,11 +382,11 @@ static void ish_boot_once_body(void) {
   int created = pthread_create(&thread, &attr, ish_boot_thread_entry, NULL);
   pthread_attr_destroy(&attr);
   if (created != 0) {
-    HermesLinkAppendLog("ish: failed to start the guest kernel boot thread");
+    ISHLog("ish: failed to start the guest kernel boot thread");
     atomic_store(&g_boot_result, ISH_RUN_ERR_SESSION_START_FAILED);
     return;
   }
-  HermesLinkAppendLog("ish: guest Linux kernel boot thread started");
+  ISHLog("ish: guest Linux kernel boot thread started");
   atomic_store(&g_boot_result, ISH_RUN_OK);
 }
 
@@ -392,7 +429,7 @@ static int ish_wait_for_kernel_ready(void) {
   dispatch_time_t deadline = dispatch_time(DISPATCH_TIME_NOW, (int64_t) ISH_BOOT_READY_TIMEOUT_SECONDS * NSEC_PER_SEC);
   long timed_out = dispatch_semaphore_wait(probe_done, deadline);
   if (timed_out != 0) {
-    HermesLinkAppendLog("ish: guest kernel was not ready to start a session within the boot timeout");
+    ISHLog("ish: guest kernel was not ready to start a session within the boot timeout");
     return ISH_RUN_ERR_BOOT_TIMEOUT;
   }
   pthread_mutex_lock(&g_ready_lock);

@@ -4,25 +4,23 @@
 
 #include <stdio.h>
 
-/* Default implementation compiled into the Blink target (see
- * hermes/build/ISHNative.xcconfig: ISH_NATIVE_AVAILABLE defaults to NO).
- *
- * The real guest-kernel bridge (ish_kernel_bridge.m) requires linking the
- * prebuilt static libraries hermes/build/build-ish-static.sh produces from
- * the pinned upstream iSH Linux-kernel-as-library target — artifacts that
- * do not exist in a plain checkout and that this sandbox's CI cannot
- * build or verify (no Xcode/Meson; see BUILD.md). Rather than make the
+/* Default implementation compiled into the Blink target when the
+ * prebuilt Ish.framework is unavailable (ISH_NATIVE_AVAILABLE defaults to
+ * NO). Rather than make the
  * whole app fail to link without them, this stub keeps the `ish` native
  * command (Blink/Commands/ish.m) and Hermes Agent tool
  * (hermes/overlay/hermes/tools/ish_tool.py) registered and working end to
  * end everywhere else, reporting a clear "not available in this build"
  * status instead of silently doing nothing or crashing.
  *
- * Exactly one of this file or ish_kernel_bridge.m is ever compiled, never
- * both (see EXCLUDED_SOURCE_FILE_NAMES in hermes/build/ISHNative.xcconfig),
- * so this file does not implement the terminal or root-path ABI.
- * at all — nothing in this build configuration calls into the pinned
- * kernel sources that declare it. */
+ * This stub provides the same API as Ish.framework so the native command
+ * can remain registered in builds that do not have the iSH runtime. */
+
+int ish_configure(const char *storage_base, ish_log_handler log_handler) {
+  (void) storage_base;
+  (void) log_handler;
+  return ISH_RUN_OK;
+}
 
 int ish_kernel_ensure_booted(void) {
   return ISH_RUN_ERR_NOT_AVAILABLE;
