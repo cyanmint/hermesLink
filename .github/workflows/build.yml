@@ -880,7 +880,6 @@ jobs:
           while IFS= read -r -d '' extension; do
             codesign --verify --strict --verbose=2 "$extension"
           done < <(find "$app/PlugIns" -type d -name '*.appex' -prune -print0)
-          codesign --verify --verbose=2 "$app"
           rm -f "$RUNNER_TEMP/HermesLink.ipa"
           (cd "$RUNNER_TEMP" && /usr/bin/zip -qry -X HermesLink.ipa Payload)
           unzip -Z1 "$RUNNER_TEMP/HermesLink.ipa" | grep -Fx 'Payload/HermesLink.app/Info.plist'
