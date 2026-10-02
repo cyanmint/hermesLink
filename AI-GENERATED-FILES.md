@@ -10,7 +10,19 @@ Under the project's stated attribution policy, AI-generated content has no copyr
 
 - `.github/workflows/build.yml`
 - `Blink/Commands/hermes.m`
+- `Blink/Commands/ish.m`
+- `ISHBridge/ish_exit_protocol.c`
+- `ISHBridge/ish_exit_protocol.h`
+- `ISHBridge/ish_kernel_bridge.h`
+- `ISHBridge/ish_kernel_bridge.m`
+- `ISHBridge/ish_kernel_bridge_stub.m`
+- `ISHBridge/ish_path_safety.c`
+- `ISHBridge/ish_path_safety.h`
+- `ISHBridge/ish_rootfs.c`
+- `ISHBridge/ish_rootfs.h`
+- `hermes/build/ISHNative.xcconfig`
 - `hermes/build/build-hermesrt-zip.sh`
+- `hermes/build/build-ish-static.sh`
 - `hermes/build/build-native-ios.sh`
 - `hermes/build/configure_native_modules.py`
 - `hermes/build/fetch-sources.sh`
@@ -25,23 +37,33 @@ Under the project's stated attribution policy, AI-generated content has no copyr
 - `hermes/overlay/hermes/agent/legacy_responses.py`
 - `hermes/overlay/hermes/hermes_cli/doctor_state.py`
 - `hermes/overlay/hermes/hermes_cli/upgrade.py`
+- `hermes/overlay/hermes/tools/ish_tool.py`
 - `hermes/overlay/patches/patch-agent-sdk-compat.py`
 - `hermes/overlay/patches/patch-cpython-ios-system.py`
 - `hermes/overlay/patches/patch-ios-stability.py`
+- `hermes/overlay/patches/patch-ish-tool.py`
 - `hermes/overlay/patches/patch-webui-zip.py`
 - `hermes/overlay/python/sitecustomize.py`
 - `hermes/tests/ci_simulator_copilot_e2e.py`
+- `hermes/tests/ish_bridge/ish_bridge_test_main.c`
 - `hermes/tests/test_ci_simulator_copilot_e2e.py`
 - `hermes/tests/test_cpython_ios_system_patch.py`
 - `hermes/tests/test_ios_shell_registration.py`
 - `hermes/tests/test_ios_terminal_patch.py`
+- `hermes/tests/test_ish_bridge_c.py`
+- `hermes/tests/test_ish_ci_workflow.py`
+- `hermes/tests/test_ish_ai_generated_files_inventory.py`
+- `hermes/tests/test_ish_native_build_scripts.py`
 - `hermes/tests/test_ish_source.py`
+- `hermes/tests/test_ish_tool_registration.py`
+- `hermes/tests/test_ish_xcode_project_wiring.py`
 - `hermes/tests/test_legacy_responses.py`
 - `hermes/tests/test_native_module_registry.py`
 - `hermes/tests/test_upgrade_runtime.py`
 - `hermes/tests/test_user_visible_paths.py`
 - `hermes/tests/test_validate_runtime_zip.py`
 - `install_hermes_runtime.sh`
+- `install_ish_runtime.sh`
 
 ## Project license
 

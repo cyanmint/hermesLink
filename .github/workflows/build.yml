@@ -16,6 +16,12 @@ on:
         type: choice
         options: [auto, true, false]
         default: auto
+      ish_runtime:
+        description: Build and publish iSH native static libraries (macOS, best-effort; see BUILD.md)
+        required: true
+        type: choice
+        options: [auto, true, false]
+        default: auto
       app:
         description: Build HermesLink.app without runtime assets (macOS)
         required: true
@@ -48,6 +54,7 @@ jobs:
     outputs:
       run_python_runtime: ${{ steps.decision.outputs.run_python_runtime }}
       run_native_runtime: ${{ steps.decision.outputs.run_native_runtime }}
+      run_ish_runtime: ${{ steps.decision.outputs.run_ish_runtime }}
       run_app: ${{ steps.decision.outputs.run_app }}
     steps:
       - name: Check out HermesLink
@@ -64,6 +71,7 @@ jobs:
           CURRENT_SHA: ${{ github.sha }}
           PYTHON_RUNTIME_OVERRIDE: ${{ inputs.python_runtime || 'auto' }}
           NATIVE_RUNTIME_OVERRIDE: ${{ inputs.native_runtime || 'auto' }}
+          ISH_RUNTIME_OVERRIDE: ${{ inputs.ish_runtime || 'auto' }}
           APP_OVERRIDE: ${{ inputs.app || 'auto' }}
           GH_TOKEN: ${{ github.token }}
         run: |
@@ -85,6 +93,7 @@ jobs:
 
           python_runtime_changed=false
           native_runtime_changed=false
+          ish_runtime_changed=false
           app_changed=false
           while IFS= read -r path; do
             [ -n "$path" ] || continue
@@ -99,6 +108,11 @@ jobs:
                 ;;
             esac
             case "$path" in
+              ISHBridge/*|hermes/build/build-ish-static.sh|hermes/build/fetch-ish-source.sh|hermes/build/verify-ish-source.py|hermes/build/ISHNative.xcconfig|install_ish_runtime.sh)
+                ish_runtime_changed=true
+                ;;
+            esac
+            case "$path" in
               Blink*/*|AppKitBridge/*|Common/*|DarkAppIcon/*|KB/*|SSH/*|SSHTests/*|Settings/*|Sessions/*|Resources/*|Media.xcassets/*|Frameworks/*|xcfs/*|*.xcodeproj/*|*.xcconfig|get_frameworks.sh|get_resources.sh|files_header.sh|header|ios_patches.h|ios_patches.m|main.m|template_setup.xcconfig|update_cacert.sh|install_hermes_runtime.sh)
                 app_changed=true
                 ;;
@@ -106,6 +120,7 @@ jobs:
             if [[ "$path" == .github/workflows/* ]]; then
               python_runtime_changed=true
               native_runtime_changed=true
+              ish_runtime_changed=true
               app_changed=true
             fi
           done <<< "$changed_files"
@@ -129,13 +144,16 @@ jobs:
           }
           run_python_runtime="$(choose "$PYTHON_RUNTIME_OVERRIDE" "$python_runtime_changed")"
           run_native_runtime="$(choose "$NATIVE_RUNTIME_OVERRIDE" "$native_runtime_changed")"
+          run_ish_runtime="$(choose "$ISH_RUNTIME_OVERRIDE" "$ish_runtime_changed")"
           run_app="$(choose "$APP_OVERRIDE" "$app_changed")"
-          printf 'python_runtime_changed=%s native_runtime_changed=%s app_changed=%s\n' \
-            "$python_runtime_changed" "$native_runtime_changed" "$app_changed"
+          printf 'python_runtime_changed=%s native_runtime_changed=%s ish_runtime_changed=%s app_changed=%s\n' \
+            "$python_runtime_changed" "$native_runtime_changed" "$ish_runtime_changed" "$app_changed"
           printf 'run_python_runtime=%s\n' "$run_python_runtime" >> "$GITHUB_OUTPUT"
           printf 'run_native_runtime=%s\n' "$run_native_runtime" >> "$GITHUB_OUTPUT"
+          printf 'run_ish_runtime=%s\n' "$run_ish_runtime" >> "$GITHUB_OUTPUT"
           printf 'run_app=%s\n' "$run_app" >> "$GITHUB_OUTPUT"
-          printf 'run_python_runtime=%s run_native_runtime=%s run_app=%s\n' "$run_python_runtime" "$run_native_runtime" "$run_app"
+          printf 'run_python_runtime=%s run_native_runtime=%s run_ish_runtime=%s run_app=%s\n' \
+            "$run_python_runtime" "$run_native_runtime" "$run_ish_runtime" "$run_app"
 
   prepare-release:
     name: Ensure runtime release exists
@@ -247,6 +265,60 @@ jobs:
         env:
           GH_TOKEN: ${{ github.token }}
         run: gh release upload "$HERMES_RUNTIME_RELEASE_TAG" hermes/HermesRuntime.framework.zip --clobber
+
+  build-ish-runtime:
+    name: Build iSH native static libraries (macOS, best-effort)
+    needs: [decide, prepare-release]
+    if: needs.decide.outputs.run_ish_runtime == 'true'
+    runs-on: macos-latest
+    permissions:
+      contents: write
+    # This build is not wired into build-app/assemble-ipa yet (Blink links
+    # the iSH native bridge only when ISH_NATIVE_AVAILABLE=YES — see
+    # hermes/build/ISHNative.xcconfig, default NO): this repository's own
+    # Linux dev/CI sandbox has no Xcode/Meson/Ninja to validate that the
+    # real Linux-kernel-as-library build this job attempts actually
+    # succeeds end to end (see BUILD.md's iSH integration status). Keeping
+    # it non-blocking lets it be exercised and iterated on without risking
+    # the existing release pipeline.
+    continue-on-error: true
+    steps:
+      - name: Check out HermesLink
+        uses: actions/checkout@v7
+
+      - name: Install Meson and Ninja
+        run: brew install meson ninja
+
+      - name: Fetch pinned iSH source and Alpine rootfs
+        run: |
+          set -euo pipefail
+          chmod +x hermes/build/*.sh
+          bash hermes/build/fetch-ish-source.sh
+
+      - name: Cache iSH Meson build
+        uses: actions/cache@v6
+        with:
+          path: ${{ runner.temp }}/hermes-build/ish-native
+          key: ${{ runner.os }}-hermes-ish-${{ hashFiles('hermes/build/build-ish-static.sh', 'hermes/build/external/SOURCES') }}
+
+      - name: Build iSH static libraries
+        env:
+          BUILD_ROOT: ${{ runner.temp }}/hermes-build/ish-native
+          IPHONEOS_DEPLOYMENT_TARGET: '16.1'
+        run: bash hermes/build/build-ish-static.sh
+
+      - name: Package iSH native build output
+        run: |
+          set -euo pipefail
+          mkdir -p "$RUNNER_TEMP/ish-native-package"
+          cp -a hermes/build/external/ish/lib "$RUNNER_TEMP/ish-native-package/lib"
+          (cd "$RUNNER_TEMP/ish-native-package" && zip -qry "$GITHUB_WORKSPACE/ISHLinuxNative.zip" lib)
+          unzip -t ISHLinuxNative.zip
+
+      - name: Publish ISHLinuxNative.zip to fixed release
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: gh release upload "$HERMES_RUNTIME_RELEASE_TAG" ISHLinuxNative.zip --clobber
 
   build-app:
     name: Build HermesLink app without hermesrt.zip & native HermesRuntime.framework (macOS)

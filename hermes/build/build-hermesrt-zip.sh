@@ -64,6 +64,7 @@ cp -a "$ROOT/overlay/hermes/." "$STAGE/hermes/"
 "$HOST_PYTHON" "$ROOT/overlay/patches/patch-ios-stability.py" "$STAGE/hermes"
 "$HOST_PYTHON" "$ROOT/overlay/patches/patch-agent-sdk-compat.py" "$STAGE/hermes/agent/agent_init.py"
 cp "$ROOT/overlay/hermes/agent/legacy_responses.py" "$STAGE/hermes/agent/legacy_responses.py"
+"$HOST_PYTHON" "$ROOT/overlay/patches/patch-ish-tool.py" "$STAGE/hermes/toolsets.py"
 
 if [ -d "$VENDOR_ROOT" ]; then
   cp -a "$VENDOR_ROOT/." "$STAGE/python/site-packages/"

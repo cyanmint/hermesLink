@@ -75,10 +75,83 @@ Make sure "Blink" is the selected Scheme for compilation. As a standard XCode pr
 ## iSH integration status
 `bash hermes/build/fetch-ish-source.sh` fetches the pinned upstream iSH source
 and Alpine root filesystem into the ignored `hermes/build/external/ish`
-directory, then verifies their checksums. This is build-time input preparation
-only; HermesLink does not yet expose an `ish` shell command or Hermes Agent
-tool. The upstream Linux target still needs to be integrated with Blink's Xcode
-build, its fakefs root lifecycle adapted to HermesLink storage, and its PTY
-output and guest-process completion bridged into the current terminal stream.
+directory, then verifies their checksums. HermesLink boots this iSH Linux
+kernel once per app process and exposes it as a native `ish <command>` shell
+command (not an `ish container` subcommand) and as an `ish` Hermes Agent tool
+registered alongside `terminal` in the standard Hermes bundles. The design:
+
+- **Native command** — `Blink/Commands/ish.m` (`ish_main`), registered in
+  `Resources/blinkCommandsDictionary.plist`. It joins its arguments into one
+  shell command, bridges the guest's pty to the calling ios_system command's
+  own `thread_stdin`/`thread_stdout`, and returns the guest command's real
+  exit status.
+- **Kernel bridge** — `ISHBridge/ish_kernel_bridge.m` boots the pinned
+  upstream kernel exactly once (`actuate_kernel()`'s `run_kernel()` never
+  returns, so it runs on its own dedicated background thread) and implements
+  the "call into iOS from the kernel" side of `LinuxInterop.h`
+  (`Terminal_*`, `DefaultRootPath`, `ReportPanic`, `ConsoleLog`,
+  `objc_get`/`objc_put`, `async_do_in_ios`) from scratch — it does not reuse
+  upstream's own (UIKit/WebKit-backed) `Terminal.m`. Each `ish <command>`
+  invocation reuses the already-booted guest via upstream's
+  `linux_start_session()`, matching how upstream's own
+  `TerminalViewController.m` starts an interactive session.
+- **Exit status** — upstream's `linux_start_session()` only reports that a
+  guest process *started*, not how it exited, and upstream's own GUI never
+  needed that (interactive sessions end when the user closes them, or the
+  pty simply hangs up). `ISHBridge/ish_exit_protocol.{h,c}` is original
+  protocol/implementation that wraps every guest command in a `trap ... EXIT`
+  trailer (so it still fires even if the command calls `exit` itself) that
+  emits a short binary sentinel carrying the real exit status, and a
+  streaming scanner that strips it back out of the guest's pty output before
+  it reaches the user. The one case this cannot recover a status for is the
+  command replacing the shell via `exec(2)` — an inherent limitation of any
+  wrapper-script approach, documented and handled as its own error case.
+- **Guest root / fakefs** — `ISHBridge/ish_rootfs.{h,c}` is an original,
+  from-scratch gzip+ustar extractor (zlib + a minimal ustar parser; no
+  upstream code reused) that unpacks the pinned, build-time-bundled Alpine
+  rootfs archive into writable, persistent app storage on first use,
+  validating every entry with `ISHBridge/ish_path_safety.{h,c}` (rejects
+  absolute paths and `..` components, and refuses to traverse through an
+  existing non-directory/symlink path component) before touching the
+  filesystem. The persistent, on-disk result is what makes the guest
+  *persistent*: packages/files a user's commands create survive app
+  relaunches, even though in-memory kernel/process state does not.
+- **Hermes Agent tool** — `hermes/overlay/hermes/tools/ish_tool.py` registers
+  an `ish` tool that reuses the exact same native `_hermesios` async-process
+  bridge the `terminal` tool's iOS backend uses, just pointed at the native
+  `ish` command instead of `sh -c`.
+  `hermes/overlay/patches/patch-ish-tool.py` adds `"ish"` to the shared
+  `_HERMES_CORE_TOOLS` list in hermes-agent's `toolsets.py` (applied to a
+  *staged copy* at build time, never the ignored upstream checkout), so
+  every standard Hermes bundle that already includes `terminal` —
+  `hermes-cli`, `hermes-telegram`, the `coding` posture, etc. — picks up
+  `ish` the same way.
+- **Native build** — `hermes/build/build-ish-static.sh` drives the pinned
+  source's *own* Xcode build-phase scripts (`app/xcode-meson.sh`,
+  `app/xcode-ninja.sh`) to build the upstream Linux-kernel-as-library target
+  into static libraries, and `install_ish_runtime.sh` installs them (under
+  fixed names `libISHLinuxKernel.a`/`libISHLinuxUser.a`) plus the pinned
+  rootfs archive into the Xcode build tree. **This requires Xcode command
+  line tools, Meson and Ninja, none of which are available in this
+  repository's Linux dev/CI sandbox** — `build-ish-static.sh` preflight-checks
+  for all three and fails with a clear, actionable message rather than
+  attempting a partial build; this is the one part of the integration that
+  has not been exercised end to end. A `build-ish-runtime` CI job
+  (`.github/workflows/build.yml`, macOS, best-effort/`continue-on-error`)
+  attempts it, publishing `ISHLinuxNative.zip` to the fixed release when it
+  succeeds.
+- **Switchable link, safe default** — `hermes/build/ISHNative.xcconfig`
+  (included from `template_setup.xcconfig`) defaults
+  `ISH_NATIVE_AVAILABLE` to `NO`, which compiles
+  `ISHBridge/ish_kernel_bridge_stub.m` (keeps `ish` registered everywhere,
+  reporting the guest kernel as unavailable) instead of
+  `ISHBridge/ish_kernel_bridge.m`, and does not link the (not yet verified)
+  static libraries. This keeps a fresh checkout — and the existing
+  `build-app`/`assemble-ipa` release pipeline — building successfully
+  without depending on the unverified native build above. Flip it to `YES`
+  once `build-ish-static.sh` + `install_ish_runtime.sh` have been run and
+  validated for real.
+
 The fetched iSH source includes its GPLv3 and iOS additional-term notices;
 those licenses must be preserved in any eventual linked distribution.
+

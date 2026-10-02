@@ -1,0 +1,41 @@
+// HermesLink AI-generated glue code; created by cyanmint's coding agent.
+// AI-generated content has no copyright holder and is not subject to copyright.
+//
+// Controls whether the Blink target compiles the real iSH Linux-kernel
+// bridge (ISHBridge/ish_kernel_bridge.m) and links the prebuilt static
+// libraries hermes/build/build-ish-static.sh produces (installed by
+// install_ish_runtime.sh into Frameworks/ISHLinux/), or instead compiles
+// the always-available stub (ISHBridge/ish_kernel_bridge_stub.m) that
+// keeps the `ish` native command and Hermes Agent tool registered and
+// working end to end, just reporting the guest kernel itself as
+// unavailable.
+//
+// Defaults to NO: a fresh checkout — and the existing CI `build-app` job —
+// must keep building successfully without first running
+// build-ish-static.sh (which needs Xcode + Meson + Ninja; unavailable in
+// this repository's Linux dev/CI sandbox, see BUILD.md) and
+// install_ish_runtime.sh. Flip to YES (for example by adding
+// `ISH_NATIVE_AVAILABLE = YES` to developer_setup.xcconfig, or an
+// `-xcconfig` override in a dedicated CI job) once those have been run and
+// Frameworks/ISHLinux/*.a are actually present.
+ISH_NATIVE_AVAILABLE = NO
+
+ISH_EXCLUDED_SOURCES_NO = ish_kernel_bridge.m
+ISH_EXCLUDED_SOURCES_YES = ish_kernel_bridge_stub.m
+EXCLUDED_SOURCE_FILE_NAMES = $(inherited) $(ISH_EXCLUDED_SOURCES_$(ISH_NATIVE_AVAILABLE))
+
+ISH_LDFLAGS_NO =
+ISH_LDFLAGS_YES = -lISHLinuxKernel -lISHLinuxUser
+OTHER_LDFLAGS = $(inherited) $(ISH_LDFLAGS_$(ISH_NATIVE_AVAILABLE))
+
+ISH_LIBRARY_SEARCH_PATHS_NO =
+ISH_LIBRARY_SEARCH_PATHS_YES = $(PROJECT_DIR)/Frameworks/ISHLinux
+LIBRARY_SEARCH_PATHS = $(inherited) $(ISH_LIBRARY_SEARCH_PATHS_$(ISH_NATIVE_AVAILABLE))
+
+// The vendored LinuxInterop.h is only ever #included by
+// ish_kernel_bridge.m (excluded above when ISH_NATIVE_AVAILABLE=NO), so
+// Frameworks/ISHLinux can stay on the search list unconditionally without
+// requiring it to exist in the NO configuration. ISHBridge itself is
+// added so Blink/Commands/ish.m (a different directory) can
+// #include "ish_kernel_bridge.h".
+HEADER_SEARCH_PATHS = $(inherited) $(PROJECT_DIR)/Frameworks/ISHLinux $(PROJECT_DIR)/ISHBridge

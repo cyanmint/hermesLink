@@ -470,6 +470,13 @@
 		F10000070000000000000001 /* HermesRuntime.framework in Frameworks */ = {isa = PBXBuildFile; fileRef = F10000090000000000000001 /* HermesRuntime.framework */; };
 		F10000080000000000000001 /* HermesRuntime.framework in Embed Frameworks */ = {isa = PBXBuildFile; fileRef = F10000090000000000000001 /* HermesRuntime.framework */; settings = {ATTRIBUTES = (CodeSignOnCopy, RemoveHeadersOnCopy, ); }; };
 		F10000050000000000000001 /* hermesrt.zip in Resources */ = {isa = PBXBuildFile; fileRef = F10000060000000000000001 /* hermesrt.zip */; };
+		F1A1CE560000000000000001 /* ish.m in Sources */ = {isa = PBXBuildFile; fileRef = F1A1CE550000000000000001 /* ish.m */; };
+		B627A9AB5991A6E9C7E4957C /* ish_path_safety.c in Sources */ = {isa = PBXBuildFile; fileRef = 7D974064786F253981F25015 /* ish_path_safety.c */; };
+		9E4C33F5FF4AAEEACB68B1CC /* ish_rootfs.c in Sources */ = {isa = PBXBuildFile; fileRef = 34208DB0A0A73B1BACFEE7CE /* ish_rootfs.c */; };
+		977366A863D8DBF2B62C2DC6 /* ish_exit_protocol.c in Sources */ = {isa = PBXBuildFile; fileRef = 6B7C99FC5893913D822D64FD /* ish_exit_protocol.c */; };
+		66BE78D3C7A901F0E03E2938 /* ish_kernel_bridge.m in Sources */ = {isa = PBXBuildFile; fileRef = F8AA606AEC0B09E8279F79DF /* ish_kernel_bridge.m */; };
+		3EC2EABECFB079180991531B /* ish_kernel_bridge_stub.m in Sources */ = {isa = PBXBuildFile; fileRef = 1E3F68EDDDED7F8AAF6CD86C /* ish_kernel_bridge_stub.m */; };
+		DCA2F5F653C2C3F9662E8822 /* ish-rootfs.tar.gz in Resources */ = {isa = PBXBuildFile; fileRef = 314E2F04FE0F5B60CB0D4E61 /* ish-rootfs.tar.gz */; };
 		D2F330CA20A6CB840074ADD7 /* help.m in Sources */ = {isa = PBXBuildFile; fileRef = D2F330C920A6CB840074ADD7 /* help.m */; };
 		D2F330CC20A6D98C0074ADD7 /* config.m in Sources */ = {isa = PBXBuildFile; fileRef = D2F330CB20A6D98C0074ADD7 /* config.m */; };
 		D2F330D220A6EF030074ADD7 /* showkey.m in Sources */ = {isa = PBXBuildFile; fileRef = D2F330D120A6EF020074ADD7 /* showkey.m */; };
@@ -1226,6 +1233,17 @@
 		F10000020000000000000001 /* hermes.m */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.objc; path = hermes.m; sourceTree = "<group>"; };
 		F10000090000000000000001 /* HermesRuntime.framework */ = {isa = PBXFileReference; lastKnownFileType = wrapper.framework; path = HermesRuntime.framework; sourceTree = "<group>"; };
 		F10000060000000000000001 /* hermesrt.zip */ = {isa = PBXFileReference; lastKnownFileType = archive.zip; path = hermesrt.zip; sourceTree = "<group>"; };
+		F1A1CE550000000000000001 /* ish.m */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.objc; path = ish.m; sourceTree = "<group>"; };
+		314E2F04FE0F5B60CB0D4E61 /* ish-rootfs.tar.gz */ = {isa = PBXFileReference; lastKnownFileType = archive.gzip; path = "ish-rootfs.tar.gz"; sourceTree = "<group>"; };
+		165BD920B521DB9E8903D82D /* ish_path_safety.h */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.h; path = ish_path_safety.h; sourceTree = "<group>"; };
+		7D974064786F253981F25015 /* ish_path_safety.c */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.c; path = ish_path_safety.c; sourceTree = "<group>"; };
+		79DE6581D7BAC48AAD1ECC0B /* ish_rootfs.h */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.h; path = ish_rootfs.h; sourceTree = "<group>"; };
+		34208DB0A0A73B1BACFEE7CE /* ish_rootfs.c */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.c; path = ish_rootfs.c; sourceTree = "<group>"; };
+		191ABC14FEED1E0274186220 /* ish_exit_protocol.h */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.h; path = ish_exit_protocol.h; sourceTree = "<group>"; };
+		6B7C99FC5893913D822D64FD /* ish_exit_protocol.c */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.c; path = ish_exit_protocol.c; sourceTree = "<group>"; };
+		2E4F976EA6332326BB0C5C05 /* ish_kernel_bridge.h */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.h; path = ish_kernel_bridge.h; sourceTree = "<group>"; };
+		F8AA606AEC0B09E8279F79DF /* ish_kernel_bridge.m */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.objc; path = ish_kernel_bridge.m; sourceTree = "<group>"; };
+		1E3F68EDDDED7F8AAF6CD86C /* ish_kernel_bridge_stub.m */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.objc; path = ish_kernel_bridge_stub.m; sourceTree = "<group>"; };
 		D2F330C920A6CB840074ADD7 /* help.m */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.objc; path = help.m; sourceTree = "<group>"; };
 		D2F330CB20A6D98C0074ADD7 /* config.m */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.objc; path = config.m; sourceTree = "<group>"; };
 		D2F330D120A6EF020074ADD7 /* showkey.m */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.objc; path = showkey.m; sourceTree = "<group>"; };
@@ -1543,6 +1561,7 @@
 				C944375F1D831CD30096F84E /* Themes */,
 				0732F04A1D062B9A00AB5438 /* locales.bundle */,
 				F10000060000000000000001 /* hermesrt.zip */,
+				314E2F04FE0F5B60CB0D4E61 /* ish-rootfs.tar.gz */,
 			);
 			path = Resources;
 			sourceTree = "<group>";
@@ -2395,6 +2414,7 @@
 				D2F330D320A6F1DF0074ADD7 /* clear.m */,
 				D2F330CB20A6D98C0074ADD7 /* config.m */,
 				F10000020000000000000001 /* hermes.m */,
+				F1A1CE550000000000000001 /* ish.m */,
 				D264D2B528F84724002B1B14 /* whatsnew.m */,
 				D2F330C920A6CB840074ADD7 /* help.m */,
 				D263A7672AA9AFE7001C6CFC /* device_info.m */,
@@ -2452,11 +2472,28 @@
 				07F670621D05EEE200C0A53C /* Sessions */,
 				0716B5231CFFAB9300268B5B /* Blink */,
 				BDEC856B2E8397520096BF4C /* Common */,
+				F027E8B0C7B7ACEAE2E693F1 /* ISHBridge */,
 				EA0BA18C1C0CC57B00719C1A /* Products */,
 			);
 			indentWidth = 2;
 			sourceTree = "<group>";
 			tabWidth = 2;
+		};
+		F027E8B0C7B7ACEAE2E693F1 /* ISHBridge */ = {
+			isa = PBXGroup;
+			children = (
+				165BD920B521DB9E8903D82D /* ish_path_safety.h */,
+				7D974064786F253981F25015 /* ish_path_safety.c */,
+				79DE6581D7BAC48AAD1ECC0B /* ish_rootfs.h */,
+				34208DB0A0A73B1BACFEE7CE /* ish_rootfs.c */,
+				191ABC14FEED1E0274186220 /* ish_exit_protocol.h */,
+				6B7C99FC5893913D822D64FD /* ish_exit_protocol.c */,
+				2E4F976EA6332326BB0C5C05 /* ish_kernel_bridge.h */,
+				F8AA606AEC0B09E8279F79DF /* ish_kernel_bridge.m */,
+				1E3F68EDDDED7F8AAF6CD86C /* ish_kernel_bridge_stub.m */,
+			);
+			path = ISHBridge;
+			sourceTree = "<group>";
 		};
 		EA0BA18C1C0CC57B00719C1A /* Products */ = {
 			isa = PBXGroup;
@@ -3242,6 +3279,7 @@
 				D21A3FE721943BE200269705 /* dark-app-ipad-76pt@2x.png in Resources */,
 				BDE84C3C2BAE335100457391 /* vim in Resources */,
 				F10000050000000000000001 /* hermesrt.zip in Resources */,
+				DCA2F5F653C2C3F9662E8822 /* ish-rootfs.tar.gz in Resources */,
 				C9B2E02F1D6B612400B89F69 /* Settings.storyboard in Resources */,
 				D2496F3F20038B3300E75FE9 /* hterm_all.min.js in Resources */,
 				D21A3FDB21943BE200269705 /* dark-settings-ipad-29pt@2x.png in Resources */,
@@ -3584,6 +3622,12 @@
 				D2BF5F7F265BA0A80070F839 /* UserDefaults.swift in Sources */,
 				D2F330CA20A6CB840074ADD7 /* help.m in Sources */,
 				F10000010000000000000001 /* hermes.m in Sources */,
+				F1A1CE560000000000000001 /* ish.m in Sources */,
+				B627A9AB5991A6E9C7E4957C /* ish_path_safety.c in Sources */,
+				9E4C33F5FF4AAEEACB68B1CC /* ish_rootfs.c in Sources */,
+				977366A863D8DBF2B62C2DC6 /* ish_exit_protocol.c in Sources */,
+				66BE78D3C7A901F0E03E2938 /* ish_kernel_bridge.m in Sources */,
+				3EC2EABECFB079180991531B /* ish_kernel_bridge_stub.m in Sources */,
 				D28C357626A56DDF00202C4D /* FileProviderDomain.swift in Sources */,
 				D241CBD223040734003D64A5 /* KBDevice.swift in Sources */,
 				D23B4C6E2A6FCAC2002E689B /* SearchTextInput.swift in Sources */,

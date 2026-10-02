@@ -58,6 +58,13 @@
 		<string></string>
 		<string>no</string>
 	</array>
+	<key>ish</key>
+	<array>
+		<string>MAIN</string>
+		<string>ish_main</string>
+		<string></string>
+		<string>no</string>
+	</array>
 	<key>python</key>
 	<array>
 		<string>MAIN</string>

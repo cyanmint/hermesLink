@@ -66,6 +66,7 @@ int help_main(int argc, char *argv[]) {
     @"  config: Setup ssh keys, hosts, keyboard, etc.",
     @"  hermes model: Sign in to your model provider.",
     @"  hermes webui: Start the Hermes WebUI at 127.0.0.1:8787.",
+    @"  ish <command>: Run a command in the persistent Alpine Linux guest.",
     @"  code: code editor. (don't forget install blink-fs extension)",
     @"  help: Prints this.",
     @"  whatsnew: Discover new features.",
