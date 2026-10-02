@@ -160,6 +160,12 @@ class IshRuntimeWorkflowTests(unittest.TestCase):
         steps_text = str(self.workflow["jobs"]["build-ish-runtime"]["steps"])
         self.assertIn("Resources/ish-rootfs.tar.gz", steps_text)
         self.assertIn("Frameworks Resources", steps_text)
+        decision_script = next(
+            step["run"] for step in self.workflow["jobs"]["decide"]["steps"]
+            if step.get("id") == "decision"
+        )
+        self.assertIn("ish-release-check/ISHLinuxNative.zip", decision_script)
+        self.assertIn("grep -Fxq Resources/ish-rootfs.tar.gz", decision_script)
 
     def test_macos_ish_build_compiles_upstream_section_anchors_for_app_link(self) -> None:
         job = self.workflow["jobs"]["build-ish-runtime"]

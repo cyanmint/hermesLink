@@ -138,6 +138,19 @@ jobs:
           has_asset HermesRuntime.framework.zip || native_runtime_changed=true
           has_asset ISHMesonBuild.tar.gz || ish_meson_changed=true
           has_asset ISHLinuxNative.zip || ish_xcode_changed=true
+          if has_asset ISHLinuxNative.zip; then
+            mkdir -p "$RUNNER_TEMP/ish-release-check"
+            if gh release download "$HERMES_RUNTIME_RELEASE_TAG" \
+              --pattern ISHLinuxNative.zip \
+              --dir "$RUNNER_TEMP/ish-release-check"; then
+              if ! unzip -Z1 "$RUNNER_TEMP/ish-release-check/ISHLinuxNative.zip" |
+                grep -Fxq Resources/ish-rootfs.tar.gz; then
+                ish_xcode_changed=true
+              fi
+            else
+              ish_xcode_changed=true
+            fi
+          fi
           has_asset HermesLink.app.zip || app_changed=true
 
           choose() {
