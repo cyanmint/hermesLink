@@ -1,16 +1,13 @@
 // HermesLink AI-generated glue code; created by cyanmint's coding agent.
 // AI-generated content has no copyright holder and is not subject to copyright.
 //
-// Controls whether Blink links and embeds the real Ish.framework installed
-// by install_ish_runtime.sh, or instead compiles the
-// always-available stub (ISHBridge/ish_kernel_bridge_stub.m) that
-// keeps the `ish` native command and Hermes Agent tool registered and
-// working end to end, just reporting the guest kernel itself as
-// unavailable.
+// Controls whether Blink links and embeds Ish.framework or instead compiles
+// the always-available stub (ISHBridge/ish_kernel_bridge_stub.m). The CI app
+// component is linked against a temporary Ish.framework placeholder and the
+// IPA assembly stage replaces it with the real framework.
 //
-// Defaults to NO for a fresh checkout. Set to YES only after the pinned
-// upstream iSH libraries have been linked into Ish.framework and the
-// framework/rootfs installed (the app CI job does this before archiving).
+// Defaults to NO for a fresh checkout. Set to YES for builds that provide an
+// Ish.framework with the bridge entry points and package the matching rootfs.
 ISH_NATIVE_AVAILABLE = NO
 
 ISH_EXCLUDED_SOURCES_NO =
