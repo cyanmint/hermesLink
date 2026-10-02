@@ -870,10 +870,20 @@ jobs:
         run: |
           set -euo pipefail
           app="$RUNNER_TEMP/Payload/HermesLink.app"
-          codesign --force --sign - --timestamp=none "$app/Frameworks/Ish.framework"
-          codesign --force --sign - --timestamp=none "$app/Frameworks/HermesRuntime.framework"
-          codesign --force --deep --sign - --timestamp=none "$app"
-          codesign --verify --deep --strict --verbose=2 "$app"
+          while IFS= read -r -d '' code_bundle; do
+            codesign --force --sign - --timestamp=none "$code_bundle"
+          done < <(find "$app" -type d -name '*.framework' -prune -print0)
+          while IFS= read -r -d '' extension; do
+            codesign --force --sign - --timestamp=none "$extension"
+          done < <(find "$app/PlugIns" -type d -name '*.appex' -prune -print0)
+          codesign --force --sign - --timestamp=none "$app"
+          while IFS= read -r -d '' code_bundle; do
+            codesign --verify --strict --verbose=2 "$code_bundle"
+          done < <(find "$app" -type d -name '*.framework' -prune -print0)
+          while IFS= read -r -d '' extension; do
+            codesign --verify --strict --verbose=2 "$extension"
+          done < <(find "$app/PlugIns" -type d -name '*.appex' -prune -print0)
+          codesign --verify --strict --verbose=2 "$app"
           rm -f "$RUNNER_TEMP/HermesLink.ipa"
           (cd "$RUNNER_TEMP" && /usr/bin/zip -qry -X HermesLink.ipa Payload)
           unzip -Z1 "$RUNNER_TEMP/HermesLink.ipa" | grep -Fx 'Payload/HermesLink.app/Info.plist'
