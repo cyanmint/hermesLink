@@ -10,7 +10,13 @@ ROOT=$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)
 BLINK_ROOT=${BLINK_ROOT:-$ROOT}
 INPUT_ROOT=${1:-${ISH_NATIVE_BUILD_ROOT:-$ROOT/hermes/build/external/ish}}
 SOURCE_FRAMEWORK=${ISH_FRAMEWORK:-$INPUT_ROOT/Frameworks/Ish.framework}
-SOURCE_ROOTFS=${ISH_ROOTFS_ARCHIVE:-$INPUT_ROOT/rootfs.tar.gz}
+if [ -n "${ISH_ROOTFS_ARCHIVE:-}" ]; then
+  SOURCE_ROOTFS=$ISH_ROOTFS_ARCHIVE
+elif [ -f "$INPUT_ROOT/Resources/ish-rootfs.tar.gz" ]; then
+  SOURCE_ROOTFS="$INPUT_ROOT/Resources/ish-rootfs.tar.gz"
+else
+  SOURCE_ROOTFS="$INPUT_ROOT/rootfs.tar.gz"
+fi
 DEST_FRAMEWORK="$BLINK_ROOT/Frameworks/Ish.framework"
 DEST_ROOTFS="$BLINK_ROOT/Resources/ish-rootfs.tar.gz"
 

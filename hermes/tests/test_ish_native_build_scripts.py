@@ -253,7 +253,7 @@ class InstallIshRuntimeScriptTests(unittest.TestCase):
         self.assertNotEqual(result.returncode, 0)
         self.assertIn("missing", result.stderr)
 
-    def _fake_input_with(self, rootfs_path: Path) -> Path:
+    def _fake_input_with(self, rootfs_path: Path, *, nested_rootfs: bool = False) -> Path:
         input_root = self.work_dir / "input"
         framework = input_root / "Frameworks" / "Ish.framework"
         (framework / "Headers").mkdir(parents=True)
@@ -261,7 +261,12 @@ class InstallIshRuntimeScriptTests(unittest.TestCase):
         (framework / "Ish").chmod(0o755)
         (framework / "Info.plist").write_text("<plist/>", encoding="utf-8")
         (framework / "Headers" / "ish_kernel_bridge.h").write_text("/* placeholder */\n", encoding="utf-8")
-        (input_root / "rootfs.tar.gz").write_bytes(rootfs_path.read_bytes())
+        if nested_rootfs:
+            destination = input_root / "Resources" / "ish-rootfs.tar.gz"
+            destination.parent.mkdir(parents=True)
+        else:
+            destination = input_root / "rootfs.tar.gz"
+        destination.write_bytes(rootfs_path.read_bytes())
         return input_root
 
     @unittest.skipUnless(PINNED_ROOTFS.exists(), "pinned iSH rootfs has not been fetched")
@@ -279,6 +284,20 @@ class InstallIshRuntimeScriptTests(unittest.TestCase):
         self.assertTrue((blink_root / "Frameworks" / "Ish.framework" / "Headers" / "ish_kernel_bridge.h").is_file())
         installed_rootfs = blink_root / "Resources" / "ish-rootfs.tar.gz"
         self.assertTrue(installed_rootfs.is_file())
+        self.assertEqual(installed_rootfs.read_bytes(), PINNED_ROOTFS.read_bytes())
+
+    @unittest.skipUnless(PINNED_ROOTFS.exists(), "pinned iSH rootfs has not been fetched")
+    def test_runtime_release_layout_installs_nested_rootfs_resource(self) -> None:
+        input_root = self._fake_input_with(PINNED_ROOTFS, nested_rootfs=True)
+        blink_root = self.work_dir / "blink-root"
+        blink_root.mkdir()
+        result = subprocess.run(
+            ["bash", str(INSTALL_SCRIPT), str(input_root)],
+            capture_output=True, text=True,
+            env={"BLINK_ROOT": str(blink_root), "PATH": "/usr/bin:/bin"},
+        )
+        self.assertEqual(result.returncode, 0, result.stderr)
+        installed_rootfs = blink_root / "Resources" / "ish-rootfs.tar.gz"
         self.assertEqual(installed_rootfs.read_bytes(), PINNED_ROOTFS.read_bytes())
 
     @unittest.skipUnless(PINNED_ROOTFS.exists(), "pinned iSH rootfs has not been fetched")
