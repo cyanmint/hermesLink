@@ -66,11 +66,16 @@ class NativeModuleRegistryTests(unittest.TestCase):
             Path(__file__).resolve().parents[2] / ".github" / "workflows" / "build.yml"
         ).read_text(encoding="utf-8")
 
-        for job in ("build-runtime-zip", "build-native-runtime", "build-app"):
+        for job in ("build-runtime-zip", "build-native-runtime"):
             self.assertIn(
                 f"needs.{job}.result == 'success' || needs.{job}.result == 'skipped'",
                 workflow,
             )
+        self.assertIn("needs.build-app.result == 'success'", workflow)
+        self.assertIn(
+            "needs.build-app.result == 'skipped' && needs.decide.outputs.run_app != 'true'",
+            workflow,
+        )
 
     def test_native_runtime_cross_compiles_on_linux_and_uses_portable_zip(self):
         workflow_path = (
