@@ -47,6 +47,10 @@ command -v xcrun >/dev/null 2>&1 || fail "requires Xcode command line tools: 'xc
 xcrun --sdk iphoneos --find clang >/dev/null 2>&1 || fail "requires an installed iphoneos SDK (xcrun --sdk iphoneos --find clang failed)"
 command -v meson >/dev/null 2>&1 || fail "requires Meson (https://mesonbuild.com); 'meson' not found on PATH"
 command -v ninja >/dev/null 2>&1 || fail "requires Ninja; 'ninja' not found on PATH"
+command -v brew >/dev/null 2>&1 || fail "requires Homebrew to locate LLVM/LLD"
+LLVM_BIN="$(brew --prefix llvm)/bin"
+[ -x "$LLVM_BIN/clang" ] && [ -x "$LLVM_BIN/ld.lld" ] || fail "requires Homebrew LLVM/LLD (brew install llvm)"
+export PATH="$LLVM_BIN:$PATH"
 
 SDKROOT=$(xcrun --sdk iphoneos --show-sdk-path)
 export SDKROOT

@@ -287,7 +287,7 @@ jobs:
         uses: actions/checkout@v7
 
       - name: Install Meson and Ninja
-        run: brew install meson ninja
+        run: brew install llvm meson ninja
 
       - name: Fetch pinned iSH source and Alpine rootfs
         run: |

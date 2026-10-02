@@ -40,6 +40,8 @@ class BuildIshStaticScriptTests(unittest.TestCase):
         self.assertIn("app/xcode-ninja.sh", source)
         self.assertIn("ISH_KERNEL=linux", source)
         self.assertIn("SDKROOT=$(xcrun --sdk iphoneos --show-sdk-path)", source)
+        self.assertIn('PATH="$LLVM_BIN:$PATH"', source)
+        self.assertIn("brew --prefix llvm", source)
 
     def test_script_verifies_pinned_source_before_building(self) -> None:
         source = BUILD_SCRIPT.read_text(encoding="utf-8")
