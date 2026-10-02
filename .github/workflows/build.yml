@@ -276,6 +276,8 @@ jobs:
     needs: [decide, prepare-release]
     if: needs.decide.outputs.run_ish_runtime == 'true'
     runs-on: ubuntu-latest
+    permissions:
+      contents: write
     steps:
       - name: Check out HermesLink
         uses: actions/checkout@v7
@@ -306,16 +308,18 @@ jobs:
           IPHONEOS_DEPLOYMENT_TARGET: '16.1'
         run: bash hermes/build/build-ish-static.sh --meson-only
 
-      - name: Upload iSH Meson build for Xcode stage
-        uses: actions/upload-artifact@v7
-        with:
-          name: ish-meson-build
-          path: |
-            /tmp/hermeslink-ish/build/meson
-            /tmp/hermeslink-ish/build/ios-toolchain
-            /tmp/hermeslink-ish/build/sdks/iPhoneOS16.5.sdk
-          include-hidden-files: true
-          if-no-files-found: error
+      - name: Package Linux iSH build for the macOS stage
+        run: |
+          set -euo pipefail
+          tar -czf "$RUNNER_TEMP/ISHMesonBuild.tar.gz" \
+            -C /tmp/hermeslink-ish \
+            build/meson build/ios-toolchain build/sdks source
+          tar -tzf "$RUNNER_TEMP/ISHMesonBuild.tar.gz" >/dev/null
+
+      - name: Publish Linux iSH build to fixed release
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: gh release upload "$HERMES_RUNTIME_RELEASE_TAG" "$RUNNER_TEMP/ISHMesonBuild.tar.gz" --clobber
 
   build-ish-runtime:
     name: Build iSH native static libraries (macOS)
@@ -331,17 +335,18 @@ jobs:
       - name: Install LLVM, LLD, Meson, and Ninja
         run: brew install llvm lld meson ninja
 
-      - name: Fetch pinned iSH source and Alpine rootfs
+      - name: Download Linux iSH build from fixed release
+        env:
+          GH_TOKEN: ${{ github.token }}
         run: |
           set -euo pipefail
-          chmod +x hermes/build/*.sh
-          bash hermes/build/fetch-ish-source.sh /tmp/hermeslink-ish
-
-      - name: Download Linux iSH Meson build
-        uses: actions/download-artifact@v7
-        with:
-          name: ish-meson-build
-          path: /tmp/hermeslink-ish/build
+          mkdir -p /tmp/hermeslink-ish
+          gh release download "$HERMES_RUNTIME_RELEASE_TAG" \
+            --pattern ISHMesonBuild.tar.gz \
+            --dir "$RUNNER_TEMP"
+          tar -xzf "$RUNNER_TEMP/ISHMesonBuild.tar.gz" -C /tmp/hermeslink-ish
+          test -x /tmp/hermeslink-ish/build/ios-toolchain/clang
+          test -d /tmp/hermeslink-ish/source/.git
 
       - name: Build iSH Xcode host-interop libraries
         env:
@@ -371,7 +376,8 @@ jobs:
       always() &&
       needs.decide.outputs.run_app == 'true' &&
       needs.prepare-release.result == 'success' &&
-      (needs.build-ish-runtime.result == 'success' || needs.build-ish-runtime.result == 'skipped')
+      (needs.build-ish-runtime.result == 'success' ||
+       (needs.build-ish-runtime.result == 'skipped' && needs.decide.outputs.run_ish_runtime != 'true'))
     runs-on: macos-latest
     permissions:
       contents: write
@@ -533,7 +539,9 @@ jobs:
       needs.prepare-release.result == 'success' &&
       needs.build-app.result == 'success' &&
       (needs.build-runtime-zip.result == 'success' || needs.build-runtime-zip.result == 'skipped') &&
-      (needs.build-native-runtime.result == 'success' || needs.build-native-runtime.result == 'skipped')
+      (needs.build-native-runtime.result == 'success' || needs.build-native-runtime.result == 'skipped') &&
+      (needs.build-ish-runtime.result == 'success' ||
+       (needs.build-ish-runtime.result == 'skipped' && needs.decide.outputs.run_ish_runtime != 'true'))
     runs-on: macos-latest
     permissions:
       contents: read
@@ -633,15 +641,19 @@ jobs:
 
   assemble-ipa:
     name: Assemble HermesLink IPA
-    needs: [decide, prepare-release, build-runtime-zip, build-native-runtime, build-ish-runtime, build-app]
+    needs: [decide, prepare-release, build-runtime-zip, build-native-runtime, build-ish-meson, build-ish-runtime, build-app]
     if: >-
       always() &&
       needs.decide.result == 'success' &&
       needs.prepare-release.result == 'success' &&
       (needs.build-runtime-zip.result == 'success' || needs.build-runtime-zip.result == 'skipped') &&
       (needs.build-native-runtime.result == 'success' || needs.build-native-runtime.result == 'skipped') &&
-      (needs.build-ish-runtime.result == 'success' || needs.build-ish-runtime.result == 'skipped') &&
-      (needs.build-app.result == 'success' || needs.build-app.result == 'skipped')
+      (needs.build-ish-meson.result == 'success' ||
+       (needs.build-ish-meson.result == 'skipped' && needs.decide.outputs.run_ish_runtime != 'true')) &&
+      (needs.build-ish-runtime.result == 'success' ||
+       (needs.build-ish-runtime.result == 'skipped' && needs.decide.outputs.run_ish_runtime != 'true')) &&
+      (needs.build-app.result == 'success' ||
+       (needs.build-app.result == 'skipped' && needs.decide.outputs.run_app != 'true'))
     runs-on: macos-latest
     permissions:
       contents: read
