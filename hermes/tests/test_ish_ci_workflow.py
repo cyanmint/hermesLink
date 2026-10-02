@@ -68,8 +68,7 @@ class IshRuntimeWorkflowTests(unittest.TestCase):
         self.assertIn("tar -xzf", steps_text)
         self.assertNotIn("actions/download-artifact@v7", steps_text)
         self.assertIn("build-ish-static.sh --xcode-only", steps_text)
-        self.assertIn("Adapt Linux Meson build metadata for macOS", steps_text)
-        self.assertIn('contents.replace("/usr/bin/meson", sys.argv[2])', steps_text)
+        self.assertNotIn("Adapt Linux Meson build metadata for macOS", steps_text)
 
     def test_ish_runtime_job_is_required_for_app_archive_and_ipa(self) -> None:
         for job_name in ("build-app", "assemble-ipa"):
@@ -109,6 +108,7 @@ class IshRuntimeWorkflowTests(unittest.TestCase):
         for marker in (
             "ISHBridge/*", "hermes/build/build-ish-static.sh",
             "hermes/build/fetch-ish-source.sh", "hermes/build/verify-ish-source.py",
+            "hermes/build/prepare-ish-xcode-project.py",
             "hermes/build/ISHNative.xcconfig", "install_ish_runtime.sh",
         ):
             with self.subTest(marker=marker):

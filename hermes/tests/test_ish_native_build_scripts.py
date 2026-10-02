@@ -17,6 +17,7 @@ from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[2]
 BUILD_SCRIPT = ROOT / "hermes" / "build" / "build-ish-static.sh"
+PREPARE_XCODE_PROJECT = ROOT / "hermes" / "build" / "prepare-ish-xcode-project.py"
 INSTALL_SCRIPT = ROOT / "install_ish_runtime.sh"
 PINNED_ROOTFS = ROOT / "hermes" / "build" / "external" / "ish" / "rootfs.tar.gz"
 PINNED_SOURCE = ROOT / "hermes" / "build" / "external" / "ish" / "source"
@@ -60,6 +61,7 @@ class BuildIshStaticScriptTests(unittest.TestCase):
         self.assertIn("--target=arm64-apple-ios${IPHONEOS_DEPLOYMENT_TARGET}", source)
         self.assertIn('llvm-ranlib "$MESON_BUILD_DIR/$archive"', source)
         self.assertIn('NINJA_TARGETS="$NINJA_TARGETS"', source)
+        self.assertIn("prepare-ish-xcode-project.py", source)
         self.assertIn("brew --prefix llvm", source)
         self.assertIn("brew --prefix lld", source)
 
@@ -82,6 +84,80 @@ class BuildIshStaticScriptTests(unittest.TestCase):
             any(keyword in combined for keyword in ("Darwin", "macOS", "meson", "Xcode")),
             combined,
         )
+
+
+class PrepareIshXcodeProjectTests(unittest.TestCase):
+    def test_removes_only_the_mesongenerated_linux_dependencies(self) -> None:
+        project = (
+            "/* Begin PBXNativeTarget section */\n"
+            "\t\tA /* libiSHLinux */ = {\n"
+            "\t\t\tdependencies = (\n"
+            "\t\t\t\tBBECF3BE2691417C00DEC937 /* PBXTargetDependency */,\n"
+            "\t\t\t);\n"
+            "\t\t};\n"
+            "\t\tB /* libiSHLinuxUser */ = {\n"
+            "\t\t\tdependencies = (\n"
+            "\t\t\t\tBBBDDF812CE00F6A0071F1F3 /* PBXTargetDependency */,\n"
+            "\t\t\t);\n"
+            "\t\t};\n"
+            "\t\tC /* liblinux */ = {\n"
+            "\t\t\tdependencies = (\n"
+            "\t\t\t\tBBECF3B0269136E100DEC937 /* PBXTargetDependency */,\n"
+            "\t\t\t);\n"
+            "\t\t};\n"
+            "/* End PBXNativeTarget section */\n"
+            "/* Begin PBXTargetDependency section */\n"
+            "\t\tBBECF3BE2691417C00DEC937 /* PBXTargetDependency */ = {\n"
+            "\t\t\ttarget = BBECF3AF269136E100DEC937 /* liblinux */;\n"
+            "\t\t};\n"
+            "\t\tBBBDDF812CE00F6A0071F1F3 /* PBXTargetDependency */ = {\n"
+            "\t\t\ttarget = BBECF3AF269136E100DEC937 /* liblinux */;\n"
+            "\t\t};\n"
+            "/* End PBXTargetDependency section */\n"
+        )
+        with tempfile.TemporaryDirectory() as temp_dir:
+            project_path = Path(temp_dir) / "project.pbxproj"
+            project_path.write_text(project, encoding="utf-8")
+            result = subprocess.run(
+                ["python3", str(PREPARE_XCODE_PROJECT), str(project_path)],
+                capture_output=True,
+                text=True,
+            )
+            self.assertEqual(result.returncode, 0, result.stderr)
+            patched = project_path.read_text(encoding="utf-8")
+            rerun = subprocess.run(
+                ["python3", str(PREPARE_XCODE_PROJECT), str(project_path)],
+                capture_output=True,
+                text=True,
+            )
+
+        self.assertIn("A /* libiSHLinux */ = {\n\t\t\tdependencies = (\n\t\t\t);", patched)
+        self.assertIn("B /* libiSHLinuxUser */ = {\n\t\t\tdependencies = (\n\t\t\t);", patched)
+        self.assertIn("C /* liblinux */ = {\n\t\t\tdependencies = (\n\t\t\t\tBBECF3B0269136E100DEC937", patched)
+        self.assertEqual(rerun.returncode, 0, rerun.stderr)
+
+    def test_rejects_unexpected_upstream_dependency_layout(self) -> None:
+        project = (
+            "\t\tA /* libiSHLinux */ = {\n"
+            "\t\t\tdependencies = (\n"
+            "\t\t\t\tBBECF3BE2691417C00DEC937 /* PBXTargetDependency */,\n"
+            "\t\t\t\tOTHER /* PBXTargetDependency */,\n"
+            "\t\t\t);\n"
+            "\t\t};\n"
+            "\t\tBBECF3BE2691417C00DEC937 /* PBXTargetDependency */ = {\n"
+            "\t\t\ttarget = BBECF3AF269136E100DEC937 /* liblinux */;\n"
+            "\t\t};\n"
+        )
+        with tempfile.TemporaryDirectory() as temp_dir:
+            project_path = Path(temp_dir) / "project.pbxproj"
+            project_path.write_text(project, encoding="utf-8")
+            result = subprocess.run(
+                ["python3", str(PREPARE_XCODE_PROJECT), str(project_path)],
+                capture_output=True,
+                text=True,
+            )
+        self.assertNotEqual(result.returncode, 0)
+        self.assertIn("unexpected dependency list", result.stderr)
 
 
 class InstallIshRuntimeScriptTests(unittest.TestCase):

@@ -162,6 +162,9 @@ fi
 # Build upstream's iOS host interop targets as well as its Meson kernel
 # archive. The host library contains LinuxInterop.c and the PTY/rootfs glue
 # referenced by ish_kernel_bridge.m; Meson alone does not produce it.
+# The host targets depend on liblinux in Xcode, which would rerun Ninja and
+# reconfigure the Linux cross-build tree with macOS compilers.
+python3 "$ROOT/build/prepare-ish-xcode-project.py" "$ISH_SOURCE/iSH.xcodeproj/project.pbxproj"
 for target in libiSHLinux libiSHLinuxUser; do
   echo "build-ish-static.sh: building upstream Xcode target $target ..."
   xcodebuild \
