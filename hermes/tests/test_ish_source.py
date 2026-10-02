@@ -43,6 +43,8 @@ class IshSourceTests(unittest.TestCase):
         self.assertIn(verify.ROOTFS_URL, script)
         self.assertIn("submodule update --init --recursive", script)
         self.assertIn('python3 "$VERIFY" --source "$SOURCE" --rootfs "$ROOTFS"', script)
+        self.assertIn('MODE=rootfs-only', script)
+        self.assertIn('if [ "$MODE" = all ]; then', script)
         self.assertIn("build-time inputs only", script)
 
     def test_rootfs_marker_set_matches_the_pinned_alpine_layout(self):

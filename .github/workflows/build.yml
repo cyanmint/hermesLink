@@ -397,6 +397,13 @@ jobs:
         if: steps.cache.outputs.cache-hit != 'true'
         run: bash get_resources.sh
 
+      - name: Fetch pinned iSH rootfs
+        run: |
+          set -euo pipefail
+          bash hermes/build/fetch-ish-source.sh --rootfs-only \
+            "$RUNNER_TEMP/ish-assets/rootfs.tar.gz"
+          cp "$RUNNER_TEMP/ish-assets/rootfs.tar.gz" Resources/ish-rootfs.tar.gz
+
       - name: Prepare Xcode configuration
         run: cp template_setup.xcconfig developer_setup.xcconfig
 
@@ -511,6 +518,13 @@ jobs:
       - name: Get resources
         if: steps.cache.outputs.cache-hit != 'true'
         run: bash get_resources.sh
+
+      - name: Fetch pinned iSH rootfs
+        run: |
+          set -euo pipefail
+          bash hermes/build/fetch-ish-source.sh --rootfs-only \
+            "$RUNNER_TEMP/ish-assets/rootfs.tar.gz"
+          cp "$RUNNER_TEMP/ish-assets/rootfs.tar.gz" Resources/ish-rootfs.tar.gz
 
       - name: Prepare Xcode configuration
         run: cp template_setup.xcconfig developer_setup.xcconfig

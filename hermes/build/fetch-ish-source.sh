@@ -4,9 +4,16 @@
 set -euo pipefail
 
 ROOT=$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)
-DEST=${1:-"$ROOT/build/external/ish"}
+MODE=all
+if [ "${1:-}" = "--rootfs-only" ]; then
+  MODE=rootfs-only
+  ROOTFS=${2:-"$ROOT/build/external/ish/rootfs.tar.gz"}
+  DEST=$(dirname "$ROOTFS")
+else
+  DEST=${1:-"$ROOT/build/external/ish"}
+  ROOTFS="$DEST/rootfs.tar.gz"
+fi
 SOURCE="$DEST/source"
-ROOTFS="$DEST/rootfs.tar.gz"
 ROOTFS_PARTIAL="$ROOTFS.partial"
 VERIFY="$ROOT/build/verify-ish-source.py"
 ISH_COMMIT=83348361fe65311f6e87ad2e1cbb0ac38d123f69
@@ -14,21 +21,23 @@ ROOTFS_URL=https://github.com/ish-app/roots/releases/download/g00712ff0a54b2839c
 trap 'rm -f "$ROOTFS_PARTIAL"' EXIT
 
 mkdir -p "$DEST"
-if [ ! -d "$SOURCE/.git" ]; then
-  if [ -e "$SOURCE" ]; then
-    echo "refusing to replace non-git iSH source path: $SOURCE" >&2
-    exit 2
+if [ "$MODE" = all ]; then
+  if [ ! -d "$SOURCE/.git" ]; then
+    if [ -e "$SOURCE" ]; then
+      echo "refusing to replace non-git iSH source path: $SOURCE" >&2
+      exit 2
+    fi
+    git clone --filter=blob:none --no-checkout https://github.com/ish-app/ish.git "$SOURCE"
   fi
-  git clone --filter=blob:none --no-checkout https://github.com/ish-app/ish.git "$SOURCE"
-fi
 
-git -C "$SOURCE" fetch --depth=1 origin "$ISH_COMMIT"
-git -C "$SOURCE" checkout --detach "$ISH_COMMIT"
-git -C "$SOURCE" submodule sync --recursive
-git -C "$SOURCE" submodule update --init --recursive
-# The upstream .gitmodules intentionally sets update=none for its Linux fork.
-git -C "$SOURCE" submodule update --init --recursive --checkout -- deps/linux
-python3 "$VERIFY" --source "$SOURCE"
+  git -C "$SOURCE" fetch --depth=1 origin "$ISH_COMMIT"
+  git -C "$SOURCE" checkout --detach "$ISH_COMMIT"
+  git -C "$SOURCE" submodule sync --recursive
+  git -C "$SOURCE" submodule update --init --recursive
+  # The upstream .gitmodules intentionally sets update=none for its Linux fork.
+  git -C "$SOURCE" submodule update --init --recursive --checkout -- deps/linux
+  python3 "$VERIFY" --source "$SOURCE"
+fi
 
 if [ ! -f "$ROOTFS" ] || ! python3 "$VERIFY" --rootfs "$ROOTFS"; then
   rm -f "$ROOTFS_PARTIAL"
@@ -38,6 +47,10 @@ if [ ! -f "$ROOTFS" ] || ! python3 "$VERIFY" --rootfs "$ROOTFS"; then
   mv "$ROOTFS_PARTIAL" "$ROOTFS"
 fi
 
-python3 "$VERIFY" --source "$SOURCE" --rootfs "$ROOTFS"
+if [ "$MODE" = all ]; then
+  python3 "$VERIFY" --source "$SOURCE" --rootfs "$ROOTFS"
+else
+  python3 "$VERIFY" --rootfs "$ROOTFS"
+fi
 echo "Pinned iSH source and Alpine rootfs verified in $DEST."
 echo "These are build-time inputs only; HermesLink does not yet embed or launch iSH."

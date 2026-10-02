@@ -86,7 +86,9 @@ def verify_source(source: Path) -> None:
     except (OSError, subprocess.CalledProcessError) as error:
         raise ValueError(f"could not inspect pinned iSH submodules: {source}") from error
     if changes.strip():
-        raise ValueError(f"iSH source or submodules have local modifications: {source}")
+        raise ValueError(
+            f"iSH source or submodules have local modifications: {source}\n{changes}"
+        )
     if any(line and line[0] != " " for line in status.splitlines()):
         raise ValueError("iSH submodules are uninitialized or differ from pinned revisions")
 
