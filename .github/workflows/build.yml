@@ -871,6 +871,24 @@ jobs:
           EOF
           fi
           test -f "$locales_bundle/Info.plist"
+          base_lproj="$RUNNER_TEMP/Payload/HermesLink.app/Base.lproj"
+          if [ -d "$base_lproj" ] && [ ! -f "$base_lproj/Info.plist" ]; then
+            cat > "$base_lproj/Info.plist" <<'EOF'
+          <?xml version="1.0" encoding="UTF-8"?>
+          <!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+          <plist version="1.0">
+          <dict>
+            <key>CFBundleIdentifier</key>
+            <string>com.cyan.hermeslink.base-lproj</string>
+            <key>CFBundleName</key>
+            <string>Base</string>
+            <key>CFBundlePackageType</key>
+            <string>BNDL</string>
+          </dict>
+          </plist>
+          EOF
+          fi
+          test -f "$base_lproj/Info.plist"
           test -f "$RUNNER_TEMP/Payload/HermesLink.app/Info.plist"
           test -x "$RUNNER_TEMP/Payload/HermesLink.app/HermesLink"
           test -x "$RUNNER_TEMP/Payload/HermesLink.app/Frameworks/Ish.framework/Ish"
@@ -892,14 +910,36 @@ jobs:
           unzip -Z1 "$RUNNER_TEMP/HermesLink.ipa" | grep -Fx 'Payload/HermesLink.app/hermesrt.zip'
           unzip -Z1 "$RUNNER_TEMP/HermesLink.ipa" | grep -Fx 'Payload/HermesLink.app/ish-rootfs.tar.gz'
           unzip -Z1 "$RUNNER_TEMP/HermesLink.ipa" | grep -Fx 'Payload/HermesLink.app/locales.bundle/Info.plist'
+          unzip -Z1 "$RUNNER_TEMP/HermesLink.ipa" | grep -Fx 'Payload/HermesLink.app/Base.lproj/Info.plist'
           unzip -Z1 "$RUNNER_TEMP/HermesLink.ipa" | grep -Fx 'Payload/HermesLink.app/Frameworks/HermesRuntime.framework/HermesRuntime'
           unzip -Z1 "$RUNNER_TEMP/HermesLink.ipa" | grep -Fx 'Payload/HermesLink.app/Frameworks/Ish.framework/Ish'
+
+      - name: Download PlumeSign 2.6.5
+        run: |
+          set -euo pipefail
+          plumesign="$RUNNER_TEMP/plumesign"
+          curl --fail --location --retry 3 --retry-all-errors \
+            --output "$plumesign" \
+            https://github.com/claration/impactor/releases/download/v2.6.5/plumesign-linux-x86_64
+          echo 'c076524c48074fb6a8d1acb4944078b52cffc70b3875970e66494e3655c67279  '"$plumesign" |
+            sha256sum --check
+          chmod +x "$plumesign"
+          "$plumesign" --version | grep -Fx 'plumesign 2.6.5'
+
+      - name: Sign IPA with PlumeSign (ad-hoc)
+        run: |
+          set -euo pipefail
+          RUST_LOG=warn "$RUNNER_TEMP/plumesign" sign \
+            --package "$RUNNER_TEMP/HermesLink.ipa" \
+            --output "$RUNNER_TEMP/HermesLink-signed.ipa"
+          test -s "$RUNNER_TEMP/HermesLink-signed.ipa"
+          unzip -t "$RUNNER_TEMP/HermesLink-signed.ipa"
 
       - name: Upload universal HermesLink IPA
         uses: actions/upload-artifact@v7
         with:
           name: hermeslink-ipa
-          path: ${{ runner.temp }}/HermesLink.ipa
+          path: ${{ runner.temp }}/HermesLink-signed.ipa
           if-no-files-found: error
           retention-days: 14
 

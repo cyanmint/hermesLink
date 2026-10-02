@@ -202,6 +202,16 @@ class IshRuntimeWorkflowTests(unittest.TestCase):
             for step in job["steps"]
             if step.get("name") == "Package unsigned IPA"
         )
+        plumesign_download = next(
+            step["run"]
+            for step in job["steps"]
+            if step.get("name") == "Download PlumeSign 2.6.5"
+        )
+        plumesign_signing = next(
+            step["run"]
+            for step in job["steps"]
+            if step.get("name") == "Sign IPA with PlumeSign (ad-hoc)"
+        )
         self.assertEqual(job["runs-on"], "ubuntu-latest")
         self.assertIn("ISHLinuxNative.zip", steps_text)
         self.assertIn("install_ish_runtime.sh", steps_text)
@@ -216,12 +226,21 @@ class IshRuntimeWorkflowTests(unittest.TestCase):
         self.assertIn("CFBundlePackageType", steps_text)
         self.assertIn("<string>BNDL</string>", steps_text)
         self.assertIn("locales.bundle/Info.plist", packaging_text)
+        self.assertIn('base_lproj="$RUNNER_TEMP/Payload/HermesLink.app/Base.lproj"', steps_text)
+        self.assertIn("Base.lproj/Info.plist", packaging_text)
         self.assertIn("verify-ish-source.py", steps_text)
         self.assertIn("unzip -q", steps_text)
         self.assertIn("cp -a", steps_text)
         self.assertIn("zip -qryy -X HermesLink.ipa Payload", packaging_text)
         self.assertIn("unzip -t", packaging_text)
         self.assertNotIn("codesign", steps_text)
+        self.assertIn("github.com/claration/impactor/releases/download/v2.6.5/plumesign-linux-x86_64", plumesign_download)
+        self.assertIn("c076524c48074fb6a8d1acb4944078b52cffc70b3875970e66494e3655c67279", plumesign_download)
+        self.assertIn("plumesign 2.6.5", plumesign_download)
+        self.assertIn('"$RUNNER_TEMP/plumesign" sign', plumesign_signing)
+        self.assertIn("--package \"$RUNNER_TEMP/HermesLink.ipa\"", plumesign_signing)
+        self.assertIn("--output \"$RUNNER_TEMP/HermesLink-signed.ipa\"", plumesign_signing)
+        self.assertIn("HermesLink-signed.ipa", str(job["steps"]))
 
     def test_all_e2e_jobs_are_optional_and_start_only_after_ipa_assembly(self) -> None:
         jobs = self.workflow["jobs"]
