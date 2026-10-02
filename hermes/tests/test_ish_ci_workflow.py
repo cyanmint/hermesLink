@@ -183,6 +183,7 @@ class IshRuntimeWorkflowTests(unittest.TestCase):
         self.assertIn("ish_runtime_stub.c", steps_text)
         self.assertIn("ISH_NATIVE_AVAILABLE = YES", steps_text)
         self.assertIn("Resources/ish-rootfs.tar.gz", steps_text)
+        self.assertIn('"$app/ish-rootfs.tar.gz"', steps_text)
         self.assertIn('test ! -e "$app/Frameworks/Ish.framework"', steps_text)
         self.assertIn('test ! -e "$app/ish-rootfs.tar.gz"', steps_text)
         self.assertIn("rm -f Resources/ish-rootfs.tar.gz Resources/hermesrt.zip", steps_text)

@@ -609,7 +609,8 @@ jobs:
           set -euo pipefail
           app="$(find "$RUNNER_TEMP/HermesLink.xcarchive/Products/Applications" -maxdepth 1 -type d -name '*.app' -print -quit)"
           test -n "$app"
-          rm -rf "$app/Frameworks/HermesRuntime.framework" "$app/Frameworks/Ish.framework" "$app/hermesrt.zip"
+          rm -rf "$app/Frameworks/HermesRuntime.framework" "$app/Frameworks/Ish.framework" \
+            "$app/hermesrt.zip" "$app/ish-rootfs.tar.gz"
           test ! -e "$app/Frameworks/HermesRuntime.framework"
           test ! -e "$app/Frameworks/Ish.framework"
           test ! -e "$app/hermesrt.zip"
