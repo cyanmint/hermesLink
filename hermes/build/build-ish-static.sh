@@ -56,6 +56,19 @@ export PATH="$LLVM_BIN:$LLD_BIN:$PATH"
 SDKROOT=$(xcrun --sdk iphoneos --show-sdk-path)
 export SDKROOT
 
+# Upstream's cross file selects `clang` from PATH but only places `-arch` in
+# c_args; wrap the Homebrew compiler to force iOS headers/libraries into its
+# probes and compile commands. The VDSO target selects LLVM by absolute path
+# and therefore keeps its required i386-linux toolchain unchanged.
+TOOLCHAIN_BIN="$BUILD_ROOT/ios-toolchain"
+mkdir -p "$TOOLCHAIN_BIN"
+cat > "$TOOLCHAIN_BIN/clang" <<EOF
+#!/bin/sh
+exec "$LLVM_BIN/clang" -isysroot "$SDKROOT" -miphoneos-version-min="$IPHONEOS_DEPLOYMENT_TARGET" "\$@"
+EOF
+chmod +x "$TOOLCHAIN_BIN/clang"
+export PATH="$TOOLCHAIN_BIN:$PATH"
+
 mkdir -p "$MESON_BUILD_DIR" "$OUTPUT_DIR"
 
 # app/xcode-meson.sh / app/xcode-ninja.sh are upstream's own Xcode
@@ -73,7 +86,6 @@ export ISH_LOGGER
 export ISH_KERNEL=linux
 
 echo "build-ish-static.sh: configuring (meson) ..."
-export CFLAGS="${CFLAGS:+$CFLAGS }-isysroot $SDKROOT -miphoneos-version-min=$IPHONEOS_DEPLOYMENT_TARGET"
 bash "$ISH_SOURCE/app/xcode-meson.sh"
 
 echo "build-ish-static.sh: building (ninja) ..."

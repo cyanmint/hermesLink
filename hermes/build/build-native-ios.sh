@@ -182,7 +182,8 @@ objects = sorted(set(objects))
 pathlib.Path(pathlib.Path(makefile).parent / "native-module-objects.txt").write_text("\n".join(objects) + "\n")
 PY
 (cd "$TARGET_ROOT" && \
-  PATH="$TOOLBIN:/usr/bin:/bin" make -n -o Makefile libpython3.13.a > native-libpython-dryrun.txt)
+  PATH="$TOOLBIN:/usr/bin:/bin" \
+    make -n -o Makefile -o Python.framework/Python libpython3.13.a > native-libpython-dryrun.txt)
 python3 - "$ROOT/build" "$TARGET_ROOT/native-libpython-dryrun.txt" "$TARGET_ROOT/native-module-objects.txt" <<'PY'
 from pathlib import Path
 import shlex, sys
