@@ -26,6 +26,16 @@ class NativeModuleRegistryTests(unittest.TestCase):
         self.assertIn(("_hermesios", "_hermesiosmodule.c"), module_config.REQUIRED_STATIC_MODULES)
         self.assertIn("_hermesios", registry.REQUIRED_NATIVE_MODULES)
 
+    def test_native_build_archives_hacl_and_expat_without_linking_framework_target(self):
+        build_script = (
+            Path(__file__).resolve().parents[1] / "build" / "build-native-ios.sh"
+        ).read_text(encoding="utf-8")
+
+        self.assertIn("Modules/_hacl/Hacl_Hash_SHA2.o", build_script)
+        self.assertIn('find Modules/expat -maxdepth 1 -type f -name \'*.c\'', build_script)
+        self.assertIn('"$LLVM_AR" rcs Modules/expat/libexpat.a', build_script)
+        self.assertNotIn("Modules/_hacl/libHacl_Hash_SHA2.a Modules/expat/libexpat.a)", build_script)
+
     def test_native_build_keeps_setup_objects_missing_from_make_dry_run(self):
         configured = ["Modules/_hermesiosmodule.o", "Modules/_ssl.o"]
         discovered = ["Modules/getpath.o", "Modules/_ssl.o"]

@@ -228,8 +228,16 @@ PY
   PATH="$TOOLBIN:/usr/bin:/bin" make -o Makefile -o Modules/config.c -o Modules/config.h -j"${JOBS:-16}" \
     $(cat native-module-objects.txt) Modules/_posixsubprocess.o Modules/binascii.o Modules/_struct.o Modules/socketmodule.o Modules/selectmodule.o Modules/mathmodule.o Modules/cmathmodule.o Modules/_contextvarsmodule.o Modules/arraymodule.o Modules/_randommodule.o)
 (cd "$TARGET_ROOT" && \
+  EXPAT_OBJECTS=() && \
+  while IFS= read -r source; do EXPAT_OBJECTS+=("${source%.c}.o"); done \
+    < <(find Modules/expat -maxdepth 1 -type f -name '*.c' | sort) && \
+  [ "${#EXPAT_OBJECTS[@]}" -gt 0 ] && \
   PATH="$TOOLBIN:/usr/bin:/bin" make -o Makefile -j"${JOBS:-16}" \
-    Modules/_hacl/libHacl_Hash_SHA2.a Modules/expat/libexpat.a)
+    Modules/_hacl/Hacl_Hash_SHA2.o "${EXPAT_OBJECTS[@]}" && \
+  "$LLVM_AR" rcs Modules/_hacl/libHacl_Hash_SHA2.a Modules/_hacl/Hacl_Hash_SHA2.o && \
+  "$LLVM_RANLIB" Modules/_hacl/libHacl_Hash_SHA2.a && \
+  "$LLVM_AR" rcs Modules/expat/libexpat.a "${EXPAT_OBJECTS[@]}" && \
+  "$LLVM_RANLIB" Modules/expat/libexpat.a)
 (cd "$TARGET_ROOT" && \
   find Modules -type f -name '*.o' -print >> native-module-objects.txt && \
   sort -u native-module-objects.txt | \
