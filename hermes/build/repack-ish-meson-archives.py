@@ -28,19 +28,23 @@ def repack_archive(archive: Path, llvm_ar: str, libtool: str) -> None:
 
     with tempfile.TemporaryDirectory(prefix=".ish-archive-", dir=archive.parent) as temp_dir:
         temp_path = Path(temp_dir)
-        subprocess.run(
-            [llvm_ar, "x", str(archive)],
-            check=True,
-            cwd=temp_path,
-            capture_output=True,
-            text=True,
-        )
-        objects = sorted(path for path in temp_path.iterdir() if path.is_file())
-        if len(objects) != len(members):
-            raise ValueError(
-                f"could not extract every member from Linux iSH archive {archive}: "
-                f"listed {len(members)}, extracted {len(objects)}"
+        occurrences: dict[str, int] = {}
+        objects = []
+        for index, member in enumerate(members):
+            occurrences[member] = occurrences.get(member, 0) + 1
+            subprocess.run(
+                [llvm_ar, "xN", str(occurrences[member]), str(archive), member],
+                check=True,
+                cwd=temp_path,
+                capture_output=True,
+                text=True,
             )
+            extracted = temp_path / Path(member).name
+            if not extracted.is_file():
+                raise ValueError(f"llvm-ar did not extract {member} from {archive}")
+            unique_object = temp_path / f"{index:08d}-{Path(member).name}"
+            os.replace(extracted, unique_object)
+            objects.append(unique_object)
 
         repacked = temp_path / archive.name
         subprocess.run(

@@ -163,7 +163,7 @@ class PrepareIshXcodeProjectTests(unittest.TestCase):
 
 
 class RepackIshMesonArchivesTests(unittest.TestCase):
-    def test_repackages_all_linux_archives_using_apple_libtool(self) -> None:
+    def test_repackages_duplicate_linux_archive_members_using_apple_libtool(self) -> None:
         with tempfile.TemporaryDirectory() as temp_dir:
             root = Path(temp_dir)
             build_dir = root / "meson"
@@ -179,10 +179,10 @@ class RepackIshMesonArchivesTests(unittest.TestCase):
                 "import sys\n"
                 "from pathlib import Path\n"
                 "if sys.argv[1] == 't':\n"
-                "    print('first.o\\nsecond.o')\n"
-                "elif sys.argv[1] == 'x':\n"
-                "    Path('first.o').write_bytes(b'first object')\n"
-                "    Path('second.o').write_bytes(b'second object')\n",
+                "    print('duplicate.o\\nduplicate.o\\nunique.o')\n"
+                "elif sys.argv[1] == 'xN':\n"
+                "    count, archive, member = sys.argv[2:5]\n"
+                "    Path(member).write_bytes(f'{member}-{count}'.encode())\n",
                 encoding="utf-8",
             )
             llvm_ar.chmod(0o755)
@@ -193,7 +193,8 @@ class RepackIshMesonArchivesTests(unittest.TestCase):
                 "import sys\n"
                 "from pathlib import Path\n"
                 "output = Path(sys.argv[sys.argv.index('-o') + 1])\n"
-                "output.write_bytes(b'Apple static archive')\n",
+                "objects = [Path(arg).read_bytes() for arg in sys.argv[sys.argv.index('-o') + 2:]]\n"
+                "output.write_bytes(b'|'.join(objects))\n",
                 encoding="utf-8",
             )
             libtool.chmod(0o755)
@@ -207,7 +208,10 @@ class RepackIshMesonArchivesTests(unittest.TestCase):
 
             self.assertEqual(result.returncode, 0, result.stderr)
             for archive in ("deps/liblinux.a", "libfakefs.a", "libish_emu.a"):
-                self.assertEqual((build_dir / archive).read_bytes(), b"Apple static archive")
+                self.assertEqual(
+                    (build_dir / archive).read_bytes(),
+                    b"duplicate.o-1|duplicate.o-2|unique.o-1",
+                )
 
 
 class InstallIshRuntimeScriptTests(unittest.TestCase):
