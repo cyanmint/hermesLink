@@ -509,6 +509,7 @@ jobs:
           test -x Frameworks/Ish.framework/Ish
           printf 'runtime omitted from app component\n' > "$RUNNER_TEMP/runtime-stub.txt"
           (cd "$RUNNER_TEMP" && zip -q "$GITHUB_WORKSPACE/Resources/hermesrt.zip" runtime-stub.txt)
+          printf 'runtime omitted from app component\n' > Resources/ish-rootfs.tar.gz
 
       - name: Set runtime-free app cache key
         id: runtime_hash
@@ -544,6 +545,12 @@ jobs:
         run: |
           cp template_setup.xcconfig developer_setup.xcconfig
           printf '\nISH_NATIVE_AVAILABLE = YES\n' >> developer_setup.xcconfig
+
+      - name: Validate app archive resource placeholders
+        run: |
+          set -euo pipefail
+          test -s Resources/ish-rootfs.tar.gz
+          test -s Resources/hermesrt.zip
 
       - name: Build unsigned device archive
         if: steps.app_build_cache.outputs.cache-hit != 'true'
@@ -607,6 +614,7 @@ jobs:
           test ! -e "$app/Frameworks/Ish.framework"
           test ! -e "$app/hermesrt.zip"
           test ! -e "$app/ish-rootfs.tar.gz"
+          rm -f Resources/ish-rootfs.tar.gz Resources/hermesrt.zip
 
       - name: Package app without runtime frameworks
         run: |
