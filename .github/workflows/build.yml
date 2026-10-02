@@ -867,6 +867,7 @@ jobs:
         run: |
           set -euo pipefail
           app="$RUNNER_TEMP/Payload/HermesLink.app"
+          find "$app" -type f \( -name '*.ttf' -o -name '*.otf' \) -exec chmod a-x {} +
           while IFS= read -r -d '' code_bundle; do
             codesign --force --sign - --timestamp=none "$code_bundle"
           done < <(find "$app" -type d -name '*.framework' -prune -print0)
