@@ -78,6 +78,7 @@ class BuildIshStaticScriptTests(unittest.TestCase):
             )
             interop_path.write_text(patcher.SESSION_TTY + "\n", encoding="utf-8")
             root_path.write_text(
+                patcher.ROOT_DOCUMENTS_DECLARATION + "\n"
                 "static __init int ish_rootfs(void) {\n"
                 "    init_chroot(\".\");\n\n"
                 "    FsInitialize();\n" +
