@@ -8,9 +8,9 @@
 // working end to end, just reporting the guest kernel itself as
 // unavailable.
 //
-// Defaults to NO for a fresh checkout. Set to YES only after the pinned
-// upstream iSH libraries have been linked into Ish.framework and the
-// framework/rootfs installed (the app CI job does this before archiving).
+// Defaults to NO for a fresh checkout. Set to YES when linking and embedding
+// Ish.framework; CI uses a link-only placeholder that IPA assembly replaces
+// with the pinned native framework and rootfs.
 ISH_NATIVE_AVAILABLE = NO
 
 ISH_EXCLUDED_SOURCES_NO =

@@ -438,10 +438,10 @@ jobs:
         with:
           enable-cache: false
 
-      - name: Prepare Hermes runtime link placeholder
+      - name: Prepare runtime framework link placeholders
         run: |
           set -euo pipefail
-          mkdir -p Frameworks/HermesRuntime.framework Resources
+          mkdir -p Frameworks/HermesRuntime.framework Frameworks/Ish.framework/Headers Resources
           cat > "$RUNNER_TEMP/hermes_runtime_stub.c" <<'EOF'
           int hermes_runtime_main(int argc, char **argv) {
             (void)argc;
@@ -461,6 +461,23 @@ jobs:
           <plist version="1.0"><dict>
             <key>CFBundleExecutable</key><string>HermesRuntime</string>
             <key>CFBundleIdentifier</key><string>com.cyan.hermes-runtime-link-stub</string>
+            <key>CFBundlePackageType</key><string>FMWK</string>
+          </dict></plist>
+          EOF
+          xcrun --sdk iphoneos clang \
+            -target arm64-apple-ios16.1 \
+            -isysroot "$(xcrun --sdk iphoneos --show-sdk-path)" \
+            -I ISHBridge \
+            -dynamiclib ISHBridge/ish_kernel_bridge_stub.m \
+            -install_name '@rpath/Ish.framework/Ish' \
+            -o Frameworks/Ish.framework/Ish
+          cp ISHBridge/ish_kernel_bridge.h Frameworks/Ish.framework/Headers/
+          cat > Frameworks/Ish.framework/Info.plist <<'EOF'
+          <?xml version="1.0" encoding="UTF-8"?>
+          <!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+          <plist version="1.0"><dict>
+            <key>CFBundleExecutable</key><string>Ish</string>
+            <key>CFBundleIdentifier</key><string>com.cyan.ish-link-stub</string>
             <key>CFBundlePackageType</key><string>FMWK</string>
           </dict></plist>
           EOF
@@ -501,7 +518,7 @@ jobs:
       - name: Prepare Xcode configuration
         run: |
           cp template_setup.xcconfig developer_setup.xcconfig
-          printf '\nISH_NATIVE_AVAILABLE = NO\n' >> developer_setup.xcconfig
+          printf '\nISH_NATIVE_AVAILABLE = YES\n' >> developer_setup.xcconfig
 
       - name: Build unsigned device archive
         if: steps.app_build_cache.outputs.cache-hit != 'true'
