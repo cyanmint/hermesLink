@@ -174,9 +174,12 @@ class IshNativeXcconfigTests(unittest.TestCase):
 
         self.assertIn("ISHRootfsActiveProfilePath", command)
         self.assertIn('stringByAppendingPathComponent:@"iSH"', profiles)
-        self.assertIn('stringByAppendingPathComponent:@"iSH-Profiles"', profiles)
+        self.assertIn("return [ISHDocumentsRoot() stringByAppendingPathComponent:name];", profiles)
         self.assertIn('stringByAppendingPathComponent:@"Profiles"', profiles)
+        self.assertIn('stringByAppendingPathComponent:@"iSH-Profiles"', profiles)
         self.assertIn('ISHDefaultProfileName = @"Alpine"', profiles)
+        self.assertIn("ISHPathEntryExists(defaultPath)", profiles)
+        self.assertIn("ISHMoveProfiles(alternateProfilesRoot, documentsRoot, NO, error)", profiles)
         self.assertIn("NSDocumentDirectory", bridge)
         self.assertIn('stringByAppendingPathComponent:@"iSH"', bridge)
         self.assertIn("Files-visible Documents/iSH", header)
@@ -187,6 +190,8 @@ class IshNativeXcconfigTests(unittest.TestCase):
         self.assertIn("ish_rootfs_prepare_fakefs", bridge)
         self.assertIn("incomplete or incompatible; remove it", bridge)
         self.assertIn("g_boot_started = 0", bridge)
+        self.assertIn("guest session startup failed (upstream status %d", bridge)
+        self.assertIn('stringByAppendingPathComponent:@"Alpine"', bridge)
 
     def test_kernel_readiness_waits_for_rootfs_init_instead_of_probing_workqueue(self) -> None:
         source = (ISH_DIR / "ish_kernel_bridge.m").read_text(encoding="utf-8")
@@ -205,7 +210,7 @@ class IshNativeXcconfigTests(unittest.TestCase):
         self.assertIn('stringByAppendingPathComponent:@"iSH"', source)
         self.assertIn('stringByAppendingPathComponent:@"iSH-Profiles"', source)
         self.assertIn("ISHDirectoryContainsOnlyEntry(documentsRoot, @\"Profiles\")", source)
-        self.assertIn("migratedNames.reverseObjectEnumerator", source)
+        self.assertIn("movedNames.reverseObjectEnumerator", source)
         self.assertIn("unrecognized files", source)
         self.assertIn('[newName isEqualToString:ISHDefaultProfileName]', source)
         self.assertIn("ISHValidProfileName", source)

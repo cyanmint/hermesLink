@@ -324,11 +324,12 @@ static NSString *ISHRootfsStorageDirectory(void) {
   pthread_mutex_lock(&g_configuration_lock);
   NSString *root = g_configured_root[0] != '\0'
       ? [NSString stringWithUTF8String:g_configured_root]
-      : [NSSearchPathForDirectoriesInDomains(NSDocumentDirectory, NSUserDomainMask, YES).firstObject
-          stringByAppendingPathComponent:@"iSH"];
+      : [[NSSearchPathForDirectoriesInDomains(NSDocumentDirectory, NSUserDomainMask, YES).firstObject
+          stringByAppendingPathComponent:@"iSH"] stringByAppendingPathComponent:@"Alpine"];
   pthread_mutex_unlock(&g_configuration_lock);
   if (root == nil) {
-    root = [NSHomeDirectory() stringByAppendingPathComponent:@"Documents/iSH"];
+    root = [[NSHomeDirectory() stringByAppendingPathComponent:@"Documents/iSH"]
+        stringByAppendingPathComponent:@"Alpine"];
   }
   [[NSFileManager defaultManager] createDirectoryAtPath:root withIntermediateDirectories:YES attributes:nil error:nil];
   return root;
@@ -663,6 +664,11 @@ int ish_run_command(const char *command, int input_fd, int output_fd, int cols, 
   free(script);
 
   if (start_retval < 0 || start_terminal == NULL) {
+    char message[160];
+    snprintf(message, sizeof(message),
+             "ish: guest session startup failed (upstream status %d, terminal %s)",
+             start_retval, start_terminal == NULL ? "unavailable" : "available");
+    ISHLog(message);
     return ISH_RUN_ERR_SESSION_START_FAILED;
   }
 

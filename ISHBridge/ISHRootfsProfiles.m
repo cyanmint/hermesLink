@@ -21,19 +21,12 @@ static NSString *ISHDocumentsRoot(void) {
   return [[BlinkPaths documentsPath] stringByAppendingPathComponent:@"iSH"];
 }
 
-static NSString *ISHProfilesRoot(void) {
-  return [[BlinkPaths documentsPath] stringByAppendingPathComponent:@"iSH-Profiles"];
-}
-
 static NSString *ISHLegacyProfilesRoot(void) {
   return [ISHDocumentsRoot() stringByAppendingPathComponent:@"Profiles"];
 }
 
 static NSString *ISHProfilePath(NSString *name) {
-  if ([name isEqualToString:ISHDefaultProfileName]) {
-    return ISHDocumentsRoot();
-  }
-  return [ISHProfilesRoot() stringByAppendingPathComponent:name];
+  return [ISHDocumentsRoot() stringByAppendingPathComponent:name];
 }
 
 static NSError *ISHProfilesError(NSInteger code, NSString *message) {
@@ -119,22 +112,86 @@ static void ISHRemoveTemporaryDirectory(NSString *path) {
   [ISHFileManager() removeItemAtPath:path error:nil];
 }
 
+static BOOL ISHMoveProfiles(NSString *sourceRoot, NSString *destinationRoot,
+                           BOOL preserveDuplicateAlpine, NSError **error) {
+  NSFileManager *fm = ISHFileManager();
+  NSArray<NSString *> *entries = [fm contentsOfDirectoryAtPath:sourceRoot error:error];
+  if (entries == nil) {
+    return NO;
+  }
+  NSMutableDictionary<NSString *, NSString *> *destinations = [NSMutableDictionary dictionary];
+  for (NSString *name in entries) {
+    if (!ISHValidProfileName(name) ||
+        !ISHIsDirectoryWithoutFollowingSymlink([sourceRoot stringByAppendingPathComponent:name])) {
+      return ISHSetError(error, 1,
+          @"Could not safely migrate rootfs profiles because the directory contains unrecognized files.");
+    }
+    NSString *destinationName = name;
+    if (preserveDuplicateAlpine && [name isEqualToString:ISHDefaultProfileName] &&
+        ISHPathEntryExists([destinationRoot stringByAppendingPathComponent:name])) {
+      destinationName = @"Alpine-legacy";
+    }
+    NSString *destination = [destinationRoot stringByAppendingPathComponent:destinationName];
+    if (ISHPathEntryExists(destination)) {
+      return ISHSetError(error, 1,
+          [NSString stringWithFormat:@"Could not safely migrate profile '%@' because its destination already exists.",
+                                     destinationName]);
+    }
+    destinations[name] = destinationName;
+  }
+
+  NSMutableArray<NSString *> *movedNames = [NSMutableArray array];
+  for (NSString *name in entries) {
+    NSString *source = [sourceRoot stringByAppendingPathComponent:name];
+    NSString *destination = [destinationRoot stringByAppendingPathComponent:destinations[name]];
+    NSError *underlying = nil;
+    if (![fm moveItemAtPath:source toPath:destination error:&underlying]) {
+      for (NSString *movedName in movedNames.reverseObjectEnumerator) {
+        NSString *movedSource = [destinationRoot stringByAppendingPathComponent:destinations[movedName]];
+        NSString *movedDestination = [sourceRoot stringByAppendingPathComponent:movedName];
+        [fm moveItemAtPath:movedSource toPath:movedDestination error:nil];
+      }
+      if (error != NULL) {
+        *error = underlying;
+      }
+      return NO;
+    }
+    [movedNames addObject:name];
+  }
+  if (!ISHDirectoryIsEmpty(sourceRoot)) {
+    for (NSString *movedName in movedNames.reverseObjectEnumerator) {
+      NSString *movedSource = [destinationRoot stringByAppendingPathComponent:destinations[movedName]];
+      NSString *movedDestination = [sourceRoot stringByAppendingPathComponent:movedName];
+      [fm moveItemAtPath:movedSource toPath:movedDestination error:nil];
+    }
+    return ISHSetError(error, 1,
+        @"Could not safely finish migrating rootfs profiles because the legacy directory contains unexpected files.");
+  }
+  if (![fm removeItemAtPath:sourceRoot error:error]) {
+    for (NSString *movedName in movedNames.reverseObjectEnumerator) {
+      NSString *movedSource = [destinationRoot stringByAppendingPathComponent:destinations[movedName]];
+      NSString *movedDestination = [sourceRoot stringByAppendingPathComponent:movedName];
+      [fm moveItemAtPath:movedSource toPath:movedDestination error:nil];
+    }
+    return NO;
+  }
+  return YES;
+}
+
 static BOOL ISHPrepareLocked(NSError **error) {
   NSFileManager *fm = ISHFileManager();
   NSString *documentsRoot = ISHDocumentsRoot();
-  NSString *profilesRoot = ISHProfilesRoot();
   NSString *legacyProfilesRoot = ISHLegacyProfilesRoot();
-  NSString *legacyDefaultPath = [legacyProfilesRoot stringByAppendingPathComponent:ISHDefaultProfileName];
   NSError *underlying = nil;
   BOOL documentsRootExists = ISHPathEntryExists(documentsRoot);
   if (documentsRootExists && !ISHIsDirectoryWithoutFollowingSymlink(documentsRoot)) {
     return ISHSetError(error, 12, @"The Documents/iSH profile directory must not be a symbolic link.");
   }
-  if (documentsRootExists && ISHRootfsIsValidAtPath(legacyDefaultPath) &&
-      !ISHRootfsIsValidAtPath(documentsRoot)) {
-    if (!ISHDirectoryContainsOnlyEntry(documentsRoot, @"Profiles")) {
+  if (documentsRootExists && ISHRootfsIsValidAtPath(documentsRoot)) {
+    NSString *defaultPath = ISHProfilePath(ISHDefaultProfileName);
+    if (ISHPathEntryExists(defaultPath)) {
       return ISHSetError(error, 1,
-          @"Could not safely migrate the existing rootfs because Documents/iSH contains unexpected files.");
+          @"Could not safely move the existing Documents/iSH rootfs because Documents/iSH/Alpine already exists.");
     }
     NSString *documentsDirectory = [documentsRoot stringByDeletingLastPathComponent];
     NSString *stagingPath = [documentsDirectory stringByAppendingPathComponent:
@@ -147,67 +204,21 @@ static BOOL ISHPrepareLocked(NSError **error) {
     }
     BOOL prepared = [fm createDirectoryAtPath:documentsRoot withIntermediateDirectories:NO
                                     attributes:nil error:&underlying];
-    BOOL defaultMoved = NO;
     if (prepared) {
-      NSString *stagedDefault = [[stagingPath stringByAppendingPathComponent:@"Profiles"]
-          stringByAppendingPathComponent:ISHDefaultProfileName];
-      prepared = [fm moveItemAtPath:stagedDefault toPath:documentsRoot
-                              error:&underlying];
-      defaultMoved = prepared;
-    }
-    if (prepared) {
-      prepared = [fm createDirectoryAtPath:profilesRoot withIntermediateDirectories:YES
-                                 attributes:nil error:&underlying];
-    }
-    NSString *stagedProfiles = [stagingPath stringByAppendingPathComponent:@"Profiles"];
-    NSMutableArray<NSString *> *migratedNames = [NSMutableArray array];
-    NSArray<NSString *> *legacyNames = prepared
-        ? [fm contentsOfDirectoryAtPath:stagedProfiles error:&underlying] : nil;
-    for (NSString *legacyName in legacyNames) {
-      if ([legacyName isEqualToString:ISHDefaultProfileName] ||
-          !ISHValidProfileName(legacyName)) {
-        continue;
-      }
-      NSString *source = [stagedProfiles stringByAppendingPathComponent:legacyName];
-      NSString *destination = [profilesRoot stringByAppendingPathComponent:legacyName];
-      if (ISHIsDirectoryWithoutFollowingSymlink(source) &&
-          !ISHPathEntryExists(destination) &&
-          ![fm moveItemAtPath:source toPath:destination error:&underlying]) {
-        prepared = NO;
-        break;
-      } else if (ISHIsDirectoryWithoutFollowingSymlink(destination) &&
-                 !ISHPathEntryExists(source)) {
-        [migratedNames addObject:legacyName];
-      }
-    }
-    if (prepared && (!ISHDirectoryIsEmpty(stagedProfiles) ||
-                     !ISHDirectoryContainsOnlyEntry(stagingPath, @"Profiles"))) {
-      prepared = NO;
-      underlying = ISHProfilesError(1,
-          @"Could not safely migrate the existing rootfs because the old profile directory contains unexpected files.");
-    }
-    if (prepared) {
-      [fm removeItemAtPath:stagedProfiles error:nil];
+      prepared = [fm moveItemAtPath:stagingPath toPath:defaultPath error:&underlying];
     }
     if (!prepared) {
-      for (NSString *legacyName in migratedNames.reverseObjectEnumerator) {
-        NSString *source = [profilesRoot stringByAppendingPathComponent:legacyName];
-        NSString *destination = [stagedProfiles stringByAppendingPathComponent:legacyName];
-        [fm moveItemAtPath:source toPath:destination error:nil];
-      }
-      if (defaultMoved) {
-        NSString *stagedDefault = [stagedProfiles stringByAppendingPathComponent:ISHDefaultProfileName];
-        [fm moveItemAtPath:documentsRoot toPath:stagedDefault error:nil];
-      } else {
+      if (ISHDirectoryIsEmpty(documentsRoot)) {
         [fm removeItemAtPath:documentsRoot error:nil];
       }
-      [fm moveItemAtPath:stagingPath toPath:documentsRoot error:nil];
+      if (!ISHPathEntryExists(documentsRoot)) {
+        [fm moveItemAtPath:stagingPath toPath:documentsRoot error:nil];
+      }
       if (error != NULL) {
-        *error = underlying ?: ISHProfilesError(1, @"Could not migrate the existing Documents/iSH rootfs.");
+        *error = underlying ?: ISHProfilesError(1, @"Could not move the existing Documents/iSH rootfs.");
       }
       return NO;
     }
-    ISHRemoveTemporaryDirectory(stagingPath);
     [NSUserDefaults.standardUserDefaults setObject:ISHDefaultProfileName forKey:ISHActiveProfileDefaultsKey];
   }
 
@@ -216,67 +227,19 @@ static BOOL ISHPrepareLocked(NSError **error) {
     return ISHSetError(error, 12, @"The legacy Documents/iSH/Profiles path must not be a symbolic link.");
   }
   if (ISHIsDirectoryWithoutFollowingSymlink(legacyProfilesRoot) &&
+      !ISHRootfsIsValidAtPath(legacyProfilesRoot) &&
       ISHDirectoryContainsOnlyEntry(documentsRoot, @"Profiles") &&
       !ISHRootfsIsValidAtPath(documentsRoot)) {
-    if (ISHPathEntryExists(profilesRoot) &&
-        !ISHIsDirectoryWithoutFollowingSymlink(profilesRoot)) {
-      return ISHSetError(error, 12, @"The alternate rootfs profile directory must not be a symbolic link.");
-    }
-    if (![fm createDirectoryAtPath:profilesRoot withIntermediateDirectories:YES
-                         attributes:nil error:&underlying]) {
-      if (error != NULL) {
-        *error = underlying;
-      }
+    if (!ISHMoveProfiles(legacyProfilesRoot, documentsRoot, YES, error)) {
       return NO;
     }
-    NSArray<NSString *> *legacyNames = [fm contentsOfDirectoryAtPath:legacyProfilesRoot error:nil] ?: @[];
-    NSMutableDictionary<NSString *, NSString *> *destinationsByName = [NSMutableDictionary dictionary];
-    for (NSString *legacyName in legacyNames) {
-      if (!ISHValidProfileName(legacyName) ||
-          !ISHIsDirectoryWithoutFollowingSymlink([legacyProfilesRoot stringByAppendingPathComponent:legacyName])) {
-        return ISHSetError(error, 1,
-            @"Could not safely migrate legacy rootfs profiles because the directory contains unrecognized files.");
-      }
-      NSString *destinationName = [legacyName isEqualToString:ISHDefaultProfileName]
-          ? @"Alpine-legacy" : legacyName;
-      NSString *destination = [profilesRoot stringByAppendingPathComponent:destinationName];
-      if (ISHPathEntryExists(destination)) {
-        return ISHSetError(error, 1,
-            @"Could not safely migrate legacy rootfs profiles because a destination profile already exists.");
-      }
-      destinationsByName[legacyName] = destinationName;
-    }
-    NSMutableArray<NSString *> *migratedNames = [NSMutableArray array];
-    for (NSString *legacyName in legacyNames) {
-      NSString *source = [legacyProfilesRoot stringByAppendingPathComponent:legacyName];
-      NSString *destination = [profilesRoot stringByAppendingPathComponent:destinationsByName[legacyName]];
-      if (![fm moveItemAtPath:source toPath:destination error:&underlying]) {
-        for (NSString *migratedName in migratedNames.reverseObjectEnumerator) {
-          NSString *migratedSource = [profilesRoot stringByAppendingPathComponent:destinationsByName[migratedName]];
-          NSString *migratedDestination = [legacyProfilesRoot stringByAppendingPathComponent:migratedName];
-          [fm moveItemAtPath:migratedSource toPath:migratedDestination error:nil];
-        }
-        if (error != NULL) {
-          *error = underlying;
-        }
-        return NO;
-      }
-      [migratedNames addObject:legacyName];
-    }
-    if (!ISHDirectoryIsEmpty(legacyProfilesRoot)) {
-      for (NSString *migratedName in migratedNames.reverseObjectEnumerator) {
-        NSString *migratedSource = [profilesRoot stringByAppendingPathComponent:destinationsByName[migratedName]];
-        NSString *migratedDestination = [legacyProfilesRoot stringByAppendingPathComponent:migratedName];
-        [fm moveItemAtPath:migratedSource toPath:migratedDestination error:nil];
-      }
-      return ISHSetError(error, 1,
-          @"Could not safely migrate legacy rootfs profiles because the directory contains unrecognized files.");
-    }
-    [fm removeItemAtPath:legacyProfilesRoot error:nil];
   }
 
-  if (ISHPathEntryExists(profilesRoot) && !ISHIsDirectoryWithoutFollowingSymlink(profilesRoot)) {
-    return ISHSetError(error, 12, @"The Documents/iSH profile directory must not be a symbolic link.");
+  NSString *alternateProfilesRoot = [[documentsRoot stringByDeletingLastPathComponent]
+      stringByAppendingPathComponent:@"iSH-Profiles"];
+  if (ISHPathEntryExists(alternateProfilesRoot) &&
+      !ISHIsDirectoryWithoutFollowingSymlink(alternateProfilesRoot)) {
+    return ISHSetError(error, 12, @"The legacy Documents/iSH-Profiles path must not be a symbolic link.");
   }
   if (![fm createDirectoryAtPath:documentsRoot withIntermediateDirectories:YES attributes:nil error:&underlying]) {
     if (error != NULL) {
@@ -288,14 +251,9 @@ static BOOL ISHPrepareLocked(NSError **error) {
     return ISHSetError(error, 12, @"The Documents/iSH profile directory must not be a symbolic link.");
   }
 
-  if (![fm createDirectoryAtPath:profilesRoot withIntermediateDirectories:YES attributes:nil error:&underlying]) {
-    if (error != NULL) {
-      *error = underlying;
-    }
+  if (ISHIsDirectoryWithoutFollowingSymlink(alternateProfilesRoot) &&
+      !ISHMoveProfiles(alternateProfilesRoot, documentsRoot, NO, error)) {
     return NO;
-  }
-  if (!ISHIsDirectoryWithoutFollowingSymlink(profilesRoot)) {
-    return ISHSetError(error, 12, @"The alternate iSH profile directory must not be a symbolic link.");
   }
   NSString *defaultPath = ISHProfilePath(ISHDefaultProfileName);
   if (ISHPathEntryExists(defaultPath) && !ISHIsDirectoryWithoutFollowingSymlink(defaultPath)) {
@@ -317,8 +275,8 @@ static BOOL ISHPrepareLocked(NSError **error) {
 }
 
 static NSArray<NSString *> *ISHProfileNamesLocked(void) {
-  NSArray<NSString *> *entries = [ISHFileManager() contentsOfDirectoryAtPath:ISHProfilesRoot() error:nil] ?: @[];
-  NSMutableArray<NSString *> *names = [NSMutableArray arrayWithObject:ISHDefaultProfileName];
+  NSArray<NSString *> *entries = [ISHFileManager() contentsOfDirectoryAtPath:ISHDocumentsRoot() error:nil] ?: @[];
+  NSMutableArray<NSString *> *names = [NSMutableArray array];
   for (NSString *entry in entries) {
     if (ISHValidProfileName(entry) && ISHIsDirectoryWithoutFollowingSymlink(ISHProfilePath(entry))) {
       [names addObject:entry];
@@ -411,7 +369,7 @@ BOOL ISHRootfsCreateProfile(NSString *name, NSError **error) {
   }
   NSString *active = [NSUserDefaults.standardUserDefaults stringForKey:ISHActiveProfileDefaultsKey] ?: ISHDefaultProfileName;
   NSString *source = ISHProfilePath(active);
-  NSString *staging = [ISHProfilesRoot() stringByAppendingPathComponent:
+  NSString *staging = [ISHDocumentsRoot() stringByAppendingPathComponent:
       [NSString stringWithFormat:@".create-%@", NSUUID.UUID.UUIDString]];
   NSError *underlying = nil;
   BOOL success = [ISHFileManager() copyItemAtPath:source toPath:staging error:&underlying] &&
@@ -436,17 +394,13 @@ BOOL ISHRootfsImportProfile(NSString *name, NSURL *sourceURL, NSError **error) {
     return NO;
   }
   [ISHProfilesLock lock];
-  NSString *profilesRoot = ISHProfilesRoot();
+  NSString *profilesRoot = ISHDocumentsRoot();
   NSString *sourcePath = sourceURL.URLByResolvingSymlinksInPath.URLByStandardizingPath.path;
   NSString *resolvedManagedRoot = [NSURL fileURLWithPath:ISHDocumentsRoot()].URLByResolvingSymlinksInPath.path;
-  NSString *resolvedProfilesRoot = [NSURL fileURLWithPath:profilesRoot].URLByResolvingSymlinksInPath.path;
   NSString *managedRootPrefix = [[resolvedManagedRoot stringByAppendingString:@"/"] lowercaseString];
-  NSString *profilesPrefix = [[resolvedProfilesRoot stringByAppendingString:@"/"] lowercaseString];
   NSString *normalizedSourcePath = sourcePath.lowercaseString;
   if ([normalizedSourcePath isEqualToString:resolvedManagedRoot.lowercaseString] ||
-      [normalizedSourcePath hasPrefix:managedRootPrefix] ||
-      [normalizedSourcePath isEqualToString:resolvedProfilesRoot.lowercaseString] ||
-      [normalizedSourcePath hasPrefix:profilesPrefix]) {
+      [normalizedSourcePath hasPrefix:managedRootPrefix]) {
     [ISHProfilesLock unlock];
     return ISHSetError(error, 6, @"Import a rootfs from outside the managed iSH directories.");
   }
@@ -610,7 +564,7 @@ BOOL ISHRootfsDeleteProfile(NSString *name, NSError **error) {
     [NSUserDefaults.standardUserDefaults setObject:fallback forKey:ISHActiveProfileDefaultsKey];
   }
   NSError *underlying = nil;
-  NSString *staging = [ISHProfilesRoot() stringByAppendingPathComponent:
+  NSString *staging = [ISHDocumentsRoot() stringByAppendingPathComponent:
       [NSString stringWithFormat:@".delete-%@", NSUUID.UUID.UUIDString]];
   if (names.count < 2) {
     BOOL moved = [ISHFileManager() moveItemAtPath:path toPath:staging error:&underlying];
