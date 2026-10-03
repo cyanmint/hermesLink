@@ -219,10 +219,10 @@ class IshBridgeCTests(unittest.TestCase):
             paths = dict(db.execute("SELECT CAST(path AS TEXT), inode FROM paths"))
             self.assertEqual(db.execute("PRAGMA user_version").fetchone()[0], 3)
             self.assertIn("", paths)
-            self.assertIn("bin/busybox", paths)
-            self.assertIn("etc/alpine-release", paths)
+            self.assertIn("/bin/busybox", paths)
+            self.assertIn("/etc/alpine-release", paths)
             mode_blob = db.execute(
-                "SELECT stat FROM stats WHERE inode = ?", (paths["bin/sh"],)
+                "SELECT stat FROM stats WHERE inode = ?", (paths["/bin/sh"],)
             ).fetchone()[0]
             mode = int.from_bytes(mode_blob[:4], byteorder="little")
             self.assertTrue(stat.S_ISLNK(mode))
@@ -301,7 +301,7 @@ class IshBridgeCTests(unittest.TestCase):
             guest_data_stat = db.execute(
                 "SELECT stats.stat FROM paths JOIN stats ON stats.inode = paths.inode "
                 "WHERE paths.path = ?",
-                (b"data",),
+                (b"/data",),
             ).fetchone()[0]
         self.assertEqual(int.from_bytes(root_stat[:4], byteorder="little") & 0o777, 0o555)
         self.assertEqual(
@@ -335,9 +335,9 @@ class IshBridgeCTests(unittest.TestCase):
         self.assertEqual(converted.stdout.strip(), b"0", converted.stderr)
         with sqlite3.connect(root / "meta.db") as db:
             paths = {row[0] for row in db.execute("SELECT CAST(path AS TEXT) FROM paths")}
-        self.assertIn("bin/busybox", paths)
-        self.assertIn("etc/alpine-release", paths)
-        self.assertIn("sbin/init", paths)
+        self.assertIn("/bin/busybox", paths)
+        self.assertIn("/etc/alpine-release", paths)
+        self.assertIn("/sbin/init", paths)
         self.assertNotIn("./bin/busybox", paths)
 
     # ---- ish_rootfs extraction: the real pinned archive ----

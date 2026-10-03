@@ -65,7 +65,17 @@ static int ish_fakefs_store_path(sqlite3 *db, sqlite3_stmt *insert_stat,
   sqlite3_reset(insert_stat);
   sqlite3_clear_bindings(insert_stat);
 
-  status = sqlite3_bind_blob(insert_path, 1, path, (int) strlen(path), SQLITE_TRANSIENT);
+  char slash_path[4097];
+  const char *database_path = path;
+  size_t path_length = strlen(path);
+  if (path_length > 0) {
+    slash_path[0] = '/';
+    memcpy(slash_path + 1, path, path_length + 1);
+    database_path = slash_path;
+    path_length++;
+  }
+  status = sqlite3_bind_blob(insert_path, 1, database_path, (int) path_length,
+                             SQLITE_TRANSIENT);
   if (status == SQLITE_OK) {
     status = sqlite3_bind_int64(insert_path, 2, sqlite3_last_insert_rowid(db));
   }
@@ -353,7 +363,7 @@ static int ish_fakefs_database_is_valid(const char *database_path) {
           "SELECT stats.stat FROM paths JOIN stats ON stats.inode = paths.inode WHERE paths.path = ?",
           -1, &statement, NULL) == SQLITE_OK;
   const char *required_paths[] = {
-      "", "bin/busybox", "etc/alpine-release", "sbin/init",
+      "", "/bin/busybox", "/etc/alpine-release", "/sbin/init",
   };
   for (size_t i = 0; valid && i < sizeof(required_paths) / sizeof(required_paths[0]); i++) {
     ish_fakefs_stat stat;
