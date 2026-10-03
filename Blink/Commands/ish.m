@@ -25,7 +25,6 @@ extern void HermesLinkAppendLog(const char *message);
  * ios_system command's own stdio so it behaves like any other Blink shell
  * command (correct $?, live interactive I/O, Ctrl-C/Ctrl-D passthrough via
  * the normal ios_system signal/EOF path on thread_stdin). */
-__attribute__((visibility("default")))
 static int ish_configure_documents_for_command(void) {
   NSString *documentsPath = ISHDocumentsAutoMountEnabled()
       ? ISHDocumentsHostPath() : @"";
@@ -45,6 +44,7 @@ static int ish_configure_documents_for_command(void) {
   return status;
 }
 
+__attribute__((visibility("default")))
 int ish_main(int argc, char *argv[]) {
   NSError *profileError = nil;
   NSString *ishRoot = ISHRootfsActiveProfilePath(&profileError);
