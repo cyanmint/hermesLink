@@ -200,6 +200,7 @@ class BuildIshStaticScriptTests(unittest.TestCase):
         self.assertIn('libfakefs.a', source)
         self.assertIn('libish_emu.a', source)
         self.assertIn('libdocumentsfs_module.a', source)
+        self.assertEqual(source.count('"$MESON_BUILD_DIR/libdocumentsfs_module.a"'), 2)
         self.assertIn(
             "MESON_XCODE_ARCHIVES=(deps/liblinux.a libfakefs.a libish_emu.a)",
             source,

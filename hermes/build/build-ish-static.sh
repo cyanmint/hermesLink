@@ -225,6 +225,7 @@ for archive in \
   "$PRODUCTS_DIR/libiSHLinux.a" \
   "$PRODUCTS_DIR/libiSHLinuxUser.a" \
   "$MESON_BUILD_DIR/deps/liblinux.a" \
+  "$MESON_BUILD_DIR/libdocumentsfs_module.a" \
   "$MESON_BUILD_DIR/libfakefs.a" \
   "$MESON_BUILD_DIR/libish_emu.a"; do
   [ -s "$archive" ] || fail "required upstream iSH archive was not produced: $archive"
@@ -235,6 +236,7 @@ for archive in \
   "$PRODUCTS_DIR/libiSHLinux.a" \
   "$PRODUCTS_DIR/libiSHLinuxUser.a" \
   "$MESON_BUILD_DIR/deps/liblinux.a" \
+  "$MESON_BUILD_DIR/libdocumentsfs_module.a" \
   "$MESON_BUILD_DIR/libfakefs.a" \
   "$MESON_BUILD_DIR/libish_emu.a"; do
   cp "$archive" "$OUTPUT_DIR/"
