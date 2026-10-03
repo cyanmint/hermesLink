@@ -13,6 +13,9 @@ struct ISHRootfsSettingsView: View {
   @State private var showingError = false
   @State private var errorMessage = ""
   @State private var restartRequired = false
+  @State private var documentsAutoMount = false
+  @State private var documentsMountPath = "/mnt/documents"
+  @State private var documentsMask = "0022"
   @State private var isBusy = false
 
   var body: some View {
@@ -77,9 +80,24 @@ struct ISHRootfsSettingsView: View {
         }
       }
 
+      Section {
+        Toggle("Automatically mount Documents", isOn: $documentsAutoMount)
+        TextField("Guest mount path", text: $documentsMountPath)
+          .textInputAutocapitalization(.never)
+          .autocorrectionDisabled()
+        TextField("Permission mask (octal)", text: $documentsMask)
+          .textInputAutocapitalization(.never)
+          .autocorrectionDisabled()
+        Button("Save Documents mount settings", action: saveDocumentsMount)
+      } header: {
+        Text("Documents mount")
+      } footer: {
+        Text("Mounts Files-visible Documents directly without fakefs metadata. Unix permissions and symlinks are not supported. The mask controls guest-visible modes; mount changes apply after restarting iSH.")
+      }
+
       if restartRequired {
         Section {
-          Label("Force-quit and reopen Blink before switching the running iSH kernel.", systemImage: "arrow.clockwise")
+          Label("Force-quit and reopen Blink for the saved iSH settings to take effect.", systemImage: "arrow.clockwise")
             .font(.footnote)
             .foregroundColor(.secondary)
         }
@@ -111,6 +129,10 @@ struct ISHRootfsSettingsView: View {
     }
     .onAppear {
       reload()
+      documentsAutoMount = ISHDocumentsAutoMountEnabled()
+      documentsMountPath = ISHDocumentsGuestMountPath()
+      let mask = String(ISHDocumentsMountMask(), radix: 8)
+      documentsMask = String(repeating: "0", count: max(0, 4 - mask.count)) + mask
     }
     .sheet(isPresented: $showingNameSheet) {
       NavigationView {
@@ -176,6 +198,20 @@ struct ISHRootfsSettingsView: View {
     }
     profiles = names
     activeProfile = active
+  }
+
+  private func saveDocumentsMount() {
+    guard let mask = UInt(documentsMask, radix: 8), mask <= 0o777 else {
+      showError("The permission mask must be octal and between 0000 and 0777.")
+      return
+    }
+    var error: NSError?
+    guard ISHDocumentsMountConfigure(documentsAutoMount, documentsMountPath,
+                                     mask, &error) else {
+      showError(error?.localizedDescription ?? "Could not save Documents mount settings.")
+      return
+    }
+    restartRequired = true
   }
 
   private func select(_ profile: String) {
