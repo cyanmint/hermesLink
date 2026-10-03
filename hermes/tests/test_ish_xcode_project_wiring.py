@@ -50,6 +50,10 @@ class CommandRegistrationTests(unittest.TestCase):
         self.assertIn("ish_network_reachability_changed", bridge)
         self.assertIn("ish_configure_guest_dns();", bridge)
 
+    def test_guest_kernel_disables_smp_for_the_vfork_panic_workaround(self) -> None:
+        bridge = (ISH_DIR / "ish_kernel_bridge.m").read_text(encoding="utf-8")
+        self.assertIn('actuate_kernel("nosmp")', bridge)
+
     def test_ishfs_is_registered_with_profile_lifecycle_operations(self) -> None:
         with COMMANDS_PLIST.open("rb") as handle:
             commands = plistlib.load(handle)

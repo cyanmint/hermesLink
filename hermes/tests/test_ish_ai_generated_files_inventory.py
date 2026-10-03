@@ -68,7 +68,7 @@ class AiGeneratedFilesInventoryTests(unittest.TestCase):
     def test_all_ishbridge_sources_are_listed(self) -> None:
         ish_bridge_dir = ROOT / "ISHBridge"
         on_disk = {
-            str(path.relative_to(ROOT)) for path in ish_bridge_dir.glob("*")
+            path.relative_to(ROOT).as_posix() for path in ish_bridge_dir.glob("*")
             if path.is_file()
         }
         self.assertTrue(on_disk, "expected ISHBridge/ to contain at least one file")

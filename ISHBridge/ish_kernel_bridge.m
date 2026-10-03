@@ -635,7 +635,10 @@ static void *ish_boot_thread_entry(void *context) {
   pthread_setname_np("ish-linux-kernel");
 #endif
   ISHLog("ish: entering guest Linux kernel");
-  actuate_kernel("");
+  /* Captured device IPS shows a panic in user_to_kernel_emu() during sys_vfork
+   * while another guest CPU is in an SMP TLB flush. Disable SMP as a
+   * workaround while the pinned kernel's concurrent-MM path is investigated. */
+  actuate_kernel("nosmp");
   return NULL; /* unreachable: actuate_kernel/run_kernel does not return */
 }
 
