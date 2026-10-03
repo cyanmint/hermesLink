@@ -469,6 +469,9 @@ jobs:
             -isysroot "$(xcrun --sdk iphoneos --show-sdk-path)" \
             -I ISHBridge \
             -dynamiclib ISHBridge/ish_kernel_bridge_stub.m \
+            ISHBridge/ish_rootfs.c ISHBridge/ish_path_safety.c \
+            ISHBridge/ish_exit_protocol.c \
+            -lsqlite3 -lz \
             -install_name '@rpath/Ish.framework/Ish' \
             -o Frameworks/Ish.framework/Ish
           cp ISHBridge/ish_kernel_bridge.h Frameworks/Ish.framework/Headers/
