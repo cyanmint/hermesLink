@@ -80,6 +80,22 @@ static BOOL ISHRootfsIsValidAtPath(NSString *path) {
   return fakefs || raw;
 }
 
+static BOOL ISHLegacyProfilesRootContainsProfiles(NSString *path) {
+  NSArray<NSString *> *entries = [ISHFileManager() contentsOfDirectoryAtPath:path error:nil];
+  if (entries.count == 0) {
+    return NO;
+  }
+  for (NSString *name in entries) {
+    NSString *profilePath = [path stringByAppendingPathComponent:name];
+    if (!ISHValidProfileName(name) ||
+        !ISHIsDirectoryWithoutFollowingSymlink(profilePath) ||
+        !ISHRootfsIsValidAtPath(profilePath)) {
+      return NO;
+    }
+  }
+  return YES;
+}
+
 static BOOL ISHDirectoryIsEmpty(NSString *path) {
   NSArray<NSString *> *entries = [ISHFileManager() contentsOfDirectoryAtPath:path error:nil];
   return entries != nil && entries.count == 0;
@@ -228,6 +244,7 @@ static BOOL ISHPrepareLocked(NSError **error) {
   }
   if (ISHIsDirectoryWithoutFollowingSymlink(legacyProfilesRoot) &&
       !ISHRootfsIsValidAtPath(legacyProfilesRoot) &&
+      ISHLegacyProfilesRootContainsProfiles(legacyProfilesRoot) &&
       ISHDirectoryContainsOnlyEntry(documentsRoot, @"Profiles") &&
       !ISHRootfsIsValidAtPath(documentsRoot)) {
     if (!ISHMoveProfiles(legacyProfilesRoot, documentsRoot, YES, error)) {

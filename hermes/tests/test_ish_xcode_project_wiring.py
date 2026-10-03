@@ -180,6 +180,7 @@ class IshNativeXcconfigTests(unittest.TestCase):
         self.assertIn('ISHDefaultProfileName = @"Alpine"', profiles)
         self.assertIn("ISHPathEntryExists(defaultPath)", profiles)
         self.assertIn("ISHMoveProfiles(alternateProfilesRoot, documentsRoot, NO, error)", profiles)
+        self.assertIn("ISHLegacyProfilesRootContainsProfiles(legacyProfilesRoot)", profiles)
         self.assertIn("NSDocumentDirectory", bridge)
         self.assertIn('stringByAppendingPathComponent:@"iSH"', bridge)
         self.assertIn("Files-visible Documents/iSH", header)
