@@ -73,6 +73,7 @@ xcrun --sdk "$SDK_NAME" clang "${COMMON_FLAGS[@]}" -dynamiclib \
   -framework Foundation -framework SystemConfiguration -lresolv -lsqlite3 -lz \
   -Wl,-install_name,@rpath/Ish.framework/Ish \
   -Wl,-exported_symbol,_ish_configure \
+  -Wl,-exported_symbol,_ish_configure_documents \
   -Wl,-exported_symbol,_ish_import_rootfs_archive \
   -Wl,-exported_symbol,_ish_rootfs_prepare_fakefs \
   -Wl,-exported_symbol,_ish_kernel_ensure_booted \
