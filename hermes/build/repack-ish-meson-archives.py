@@ -13,7 +13,12 @@ import tempfile
 from pathlib import Path
 
 
-ARCHIVES = ("deps/liblinux.a", "libfakefs.a", "libish_emu.a")
+ARCHIVES = (
+    "deps/liblinux.a",
+    "libfakefs.a",
+    "libish_emu.a",
+    "libdocumentsfs_module.a",
+)
 
 
 def repack_archive(archive: Path, llvm_ar: str, libtool: str) -> None:

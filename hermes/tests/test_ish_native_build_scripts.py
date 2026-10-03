@@ -130,7 +130,14 @@ class BuildIshStaticScriptTests(unittest.TestCase):
             (source_root / "linux").mkdir()
             meson = source_root / "meson.build"
             meson.write_text(
-                "kernel_src = [\n        'linux/fakefs.c',\n]\n",
+                "    kernel_src = [\n"
+                "        'linux/main.c',\n"
+                "        'linux/fakefs.c',\n"
+                "    ]\n"
+                "    user_src = []\n"
+                "    modules = static_library('linux_modules', kernel_src)\n"
+                "    user_modules = static_library('linux_user', user_src)\n"
+                "            declare_dependency(link_whole: [modules, user_modules])\n",
                 encoding="utf-8",
             )
             patcher.patch(source_root, DOCUMENTS_FS_SOURCE)
@@ -138,6 +145,18 @@ class BuildIshStaticScriptTests(unittest.TestCase):
             patcher.patch(source_root, DOCUMENTS_FS_SOURCE)
             self.assertEqual(meson.read_text(encoding="utf-8"), patched)
             self.assertEqual(patched.count("'linux/documentsfs.c',"), 1)
+            self.assertIn(
+                "static_library('documentsfs_module',\n"
+                "        'linux/documentsfs.c',",
+                patched,
+            )
+            self.assertIn(
+                "declare_dependency(link_whole: "
+                "[modules, user_modules, documentsfs_module])",
+                patched,
+            )
+            kernel_sources = patched.split("kernel_src = [", 1)[1].split("]", 1)[0]
+            self.assertNotIn("documentsfs", kernel_sources)
             self.assertEqual(
                 (source_root / "linux" / "documentsfs.c").read_text(encoding="utf-8"),
                 DOCUMENTS_FS_SOURCE.read_text(encoding="utf-8"),
@@ -151,9 +170,14 @@ class BuildIshStaticScriptTests(unittest.TestCase):
         self.assertNotIn(".symlink =", source)
         self.assertIn("ATTR_SIZE | ATTR_CTIME", source)
         self.assertIn("-EOPNOTSUPP", source)
+        self.assertIn("register_filesystem(&documentsfs_type)", source)
+        self.assertIn("fs_initcall(documentsfs_init)", source)
         build_script = BUILD_SCRIPT.read_text(encoding="utf-8")
+        repack_script = REPACK_MESON_ARCHIVES.read_text(encoding="utf-8")
         self.assertIn('python3 "$ROOT/build/patch-ish-documents-fs.py"', build_script)
         self.assertIn('rm -f "$ISH_SOURCE/linux/documentsfs.c"', build_script)
+        self.assertIn("libdocumentsfs_module.a", build_script)
+        self.assertIn('"libdocumentsfs_module.a"', repack_script)
 
     def test_pty_patcher_matches_pinned_initcall_declaration(self) -> None:
         source = PATCH_ISH_PTY.read_text(encoding="utf-8")
@@ -173,6 +197,12 @@ class BuildIshStaticScriptTests(unittest.TestCase):
         self.assertIn('deps/liblinux.a', source)
         self.assertIn('libfakefs.a', source)
         self.assertIn('libish_emu.a', source)
+        self.assertIn('libdocumentsfs_module.a', source)
+        self.assertIn(
+            "MESON_XCODE_ARCHIVES=(deps/liblinux.a libfakefs.a libish_emu.a)",
+            source,
+        )
+        self.assertIn('MESON_NINJA_TARGETS="${MESON_XCODE_ARCHIVES[*]}"', source)
         self.assertIn("ISH_KERNEL=linux", source)
         self.assertIn('xcrun --sdk "$SDK_PLATFORM" --show-sdk-path', source)
         self.assertIn('exec "$LLVM_BIN/clang" -target "$TARGET_TRIPLE" -isysroot "$SDKROOT"', source)
@@ -210,6 +240,13 @@ class PackageIshFrameworkTests(unittest.TestCase):
         self.assertIn("_ish_rootfs_write_documents_mount_script", source)
         self.assertIn("-framework SystemConfiguration", source)
         self.assertIn('-Wl,-force_load,"$LIB_DIR/libfakefs.a"', source)
+        self.assertIn(
+            '-Wl,-force_load,"$LIB_DIR/libdocumentsfs_module.a"', source
+        )
+        self.assertLess(
+            source.index('-Wl,-force_load,"$LIB_DIR/libdocumentsfs_module.a"'),
+            source.index('-Wl,-force_load,"$LIB_DIR/libfakefs.a"'),
+        )
         self.assertIn("-lresolv", source)
         self.assertNotIn("kernel/errno.h", source)
         self.assertIn("ish_kernel_bridge.m", source)
@@ -320,7 +357,12 @@ class RepackIshMesonArchivesTests(unittest.TestCase):
             (build_dir / "deps").mkdir(parents=True)
             fake_bin = root / "bin"
             fake_bin.mkdir()
-            for archive in ("deps/liblinux.a", "libfakefs.a", "libish_emu.a"):
+            for archive in (
+                "deps/liblinux.a",
+                "libfakefs.a",
+                "libish_emu.a",
+                "libdocumentsfs_module.a",
+            ):
                 (build_dir / archive).write_bytes(b"GNU archive")
 
             llvm_ar = fake_bin / "llvm-ar"
@@ -357,7 +399,12 @@ class RepackIshMesonArchivesTests(unittest.TestCase):
             )
 
             self.assertEqual(result.returncode, 0, result.stderr)
-            for archive in ("deps/liblinux.a", "libfakefs.a", "libish_emu.a"):
+            for archive in (
+                "deps/liblinux.a",
+                "libfakefs.a",
+                "libish_emu.a",
+                "libdocumentsfs_module.a",
+            ):
                 self.assertEqual(
                     (build_dir / archive).read_bytes(),
                     b"duplicate.o-1|duplicate.o-2|unique.o-1",

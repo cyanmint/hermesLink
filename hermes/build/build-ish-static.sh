@@ -144,10 +144,8 @@ restore_ish_source() {
 }
 trap restore_ish_source EXIT
 
-if [ "$BUILD_MODE" != "--xcode-only" ]; then
-  python3 "$ROOT/build/patch-ish-documents-fs.py" \
-    "$ISH_SOURCE" "$ROOT/build/ish-documents-fs.c"
-fi
+python3 "$ROOT/build/patch-ish-documents-fs.py" \
+  "$ISH_SOURCE" "$ROOT/build/ish-documents-fs.c"
 
 # app/xcode-meson.sh / app/xcode-ninja.sh are upstream's own Xcode
 # "Run Build Tool" build-phase scripts (see iSH.xcodeproj/project.pbxproj's
@@ -163,8 +161,9 @@ export ISH_LOG
 export ISH_LOGGER
 export ISH_KERNEL=linux
 PRODUCTS_DIR="$BUILD_ROOT/xcode/Build/Products/$CONFIGURATION-$SDK_PLATFORM"
-MESON_ARCHIVES=(deps/liblinux.a libfakefs.a libish_emu.a)
-MESON_NINJA_TARGETS="${MESON_ARCHIVES[*]}"
+MESON_ARCHIVES=(deps/liblinux.a libfakefs.a libish_emu.a libdocumentsfs_module.a)
+MESON_XCODE_ARCHIVES=(deps/liblinux.a libfakefs.a libish_emu.a)
+MESON_NINJA_TARGETS="${MESON_XCODE_ARCHIVES[*]}"
 if [ "$BUILD_MODE" = "--xcode-only" ]; then
   export NINJA_TARGETS="$MESON_NINJA_TARGETS"
 fi

@@ -35,6 +35,7 @@ for input in \
   "$LIB_DIR/liblinux.a" \
   "$LIB_DIR/libiSHLinux.a" \
   "$LIB_DIR/libiSHLinuxUser.a" \
+  "$LIB_DIR/libdocumentsfs_module.a" \
   "$LIB_DIR/libfakefs.a" \
   "$LIB_DIR/libish_emu.a" \
   "$LIB_DIR/LinuxInterop.h"; do
@@ -67,6 +68,7 @@ xcrun --sdk "$SDK_NAME" clang "${COMMON_FLAGS[@]}" -dynamiclib \
   "$BUILD_DIR/ish_exit_protocol.o" \
   -Wl,-force_load,"$LIB_DIR/liblinux.a" \
   -Wl,-force_load,"$LIB_DIR/libiSHLinux.a" \
+  -Wl,-force_load,"$LIB_DIR/libdocumentsfs_module.a" \
   -Wl,-force_load,"$LIB_DIR/libfakefs.a" \
   "$LIB_DIR/libiSHLinuxUser.a" \
   "$LIB_DIR/libish_emu.a" \
