@@ -71,16 +71,28 @@ class BlinkSourcePatchTests(unittest.TestCase):
             "Blink.xcodeproj",
             "BlinkConfig",
             "DarkAppIcon",
+            "Frameworks",
             "Media.xcassets",
             "Resources",
             "Sessions",
             "Settings",
+            ".gitmodules",
         )
         retained = [
             path for path in tracked
             if any(path == root or path.startswith(root + "/") for root in source_roots)
         ]
         self.assertEqual(retained, [])
+
+    def test_root_attribution_and_license_files_are_hermeslink_specific(self) -> None:
+        authors = (ROOT / "AUTHORS").read_text(encoding="utf-8")
+        copying = (ROOT / "COPYING").read_text(encoding="utf-8")
+        readme = (ROOT / "README.md").read_text(encoding="utf-8")
+        self.assertIn("HermesLink contributors", authors)
+        self.assertIn("LICENSES/GPL-3.0.txt", copying)
+        self.assertTrue((ROOT / "LICENSES" / "GPL-3.0.txt").is_file())
+        self.assertIn("HermesLink", readme)
+        self.assertNotIn("Do Blink!", readme)
 
     def test_preparation_script_checks_revision_and_runs_patch_scripts_before_staging(self) -> None:
         self.assertIn("rev-parse HEAD", self.script)
@@ -90,9 +102,14 @@ class BlinkSourcePatchTests(unittest.TestCase):
         self.assertIn("ambiguous source anchors", utility)
         self.assertIn("source anchor not found", utility)
         self.assertIn("rsync -a", self.script)
-        for excluded_path in (".git", ".github", ".gitignore", "README.md", "BUILD.md", "Frameworks"):
+        for excluded_path in (
+            ".git", ".github", ".gitignore", ".gitmodules", "AUTHORS",
+            "COPYING", "README.md", "BUILD.md",
+        ):
             with self.subTest(path=excluded_path):
-                self.assertIn(f"--exclude='/{excluded_path}'", self.script)
+                exclude = f"--exclude='{excluded_path if excluded_path == '.git' else '/' + excluded_path}'"
+                self.assertIn(exclude, self.script)
+        self.assertNotIn("--exclude='/Frameworks'", self.script)
 
     def test_app_and_e2e_jobs_checkout_and_patch_pinned_blink_first(self) -> None:
         for job_name, build_step in (
@@ -112,6 +129,7 @@ class BlinkSourcePatchTests(unittest.TestCase):
                 self.assertIn("hermes/blink/UPSTREAM_REVISION", revision_step["run"])
                 self.assertEqual(source_checkout["with"]["ref"], "${{ steps.blink_revision.outputs.sha }}")
                 self.assertEqual(source_checkout["with"]["path"], ".blink-upstream")
+                self.assertEqual(source_checkout["with"]["submodules"], "recursive")
                 self.assertLess(steps.index(source_checkout), steps.index(prepare))
                 self.assertLess(steps.index(prepare), steps.index(build))
 

@@ -72,6 +72,8 @@ Blink.xcodeproj/project.xcworkspace/xcshareddata
 
 # Blink source is materialized from the pinned upstream checkout for builds.
 /.blink-upstream/
+/.gitmodules
+/Frameworks/
 /.clang-format
 /.vscode/
 /AppKitBridge/

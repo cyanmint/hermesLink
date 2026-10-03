@@ -1,7 +1,7 @@
 # Building HermesLink
 
-This repository stores Hermes/iSH integration code and the Blink customization
-patch, not the Blink app source. The upstream Blink revision is pinned in
+This repository stores Hermes/iSH integration code and Blink customization
+scripts, not Blink app or framework source. The upstream Blink revision is pinned in
 `hermes/blink/UPSTREAM_REVISION`; app glue and assets are in
 `hermes/blink/overlay/`, and changes to upstream files are applied by small
 per-file Python scripts in `hermes/blink/patches/`.
@@ -14,8 +14,8 @@ required by the upstream Blink build.
 ```sh
 git clone https://github.com/blinksh/blink.git /tmp/blink-source
 git -C /tmp/blink-source checkout "$(tr -d '\r\n' < hermes/blink/UPSTREAM_REVISION)"
+git -C /tmp/blink-source submodule update --init --recursive
 bash hermes/build/prepare-blink-source.sh /tmp/blink-source "$PWD"
-git submodule update --init --recursive
 ./get_frameworks.sh
 ./get_resources.sh
 cp template_setup.xcconfig developer_setup.xcconfig

@@ -22,10 +22,12 @@ python3 "$integration_root/hermes/blink/apply-patches.py" "$source_root"
 
 test -s "$source_root/Blink.xcodeproj/project.pbxproj"
 rsync -a \
-  --exclude='/.git' \
+  --exclude='.git' \
   --exclude='/.github' \
   --exclude='/.gitignore' \
+  --exclude='/.gitmodules' \
+  --exclude='/AUTHORS' \
+  --exclude='/COPYING' \
   --exclude='/README.md' \
   --exclude='/BUILD.md' \
-  --exclude='/Frameworks' \
   "$source_root/" "$target_root/"

@@ -120,7 +120,7 @@ jobs:
                 ;;
             esac
             case "$path" in
-              hermes/blink/*|hermes/build/prepare-blink-source.sh|ISHBridge/*|Frameworks/*|xcfs/*|hermes/build/ISHNative.xcconfig|install_ish_runtime.sh|install_hermes_runtime.sh)
+              hermes/blink/*|hermes/build/prepare-blink-source.sh|ISHBridge/*|hermes/build/ISHNative.xcconfig|install_ish_runtime.sh|install_hermes_runtime.sh)
                 app_changed=true
                 ;;
             esac
@@ -269,7 +269,7 @@ jobs:
         uses: actions/cache@v6
         with:
           path: ${{ runner.temp }}/hermes-build/native-ios
-          key: ${{ runner.os }}-hermes-ios-${{ hashFiles('hermes/build/*.sh', 'hermes/build/*.py', 'hermes/overlay/**', 'hermes/patches/**') }}
+          key: ${{ runner.os }}-hermes-ios-${{ hashFiles('hermes/build/**') }}-${{ hashFiles('hermes/overlay/**') }}-${{ hashFiles('hermes/patches/**') }}
           restore-keys: |
             ${{ runner.os }}-hermes-ios-
 
@@ -324,7 +324,7 @@ jobs:
         uses: actions/cache@v6
         with:
           path: /tmp/hermeslink-ish/build
-          key: ${{ runner.os }}-hermes-ish-meson-ios16.5-${{ hashFiles('hermes/build/build-ish-static.sh', 'hermes/build/patch-ish-pty.py', 'hermes/build/patch-ish-documents-fs.py', 'hermes/build/ish-documents-fs.c', 'hermes/build/external/SOURCES') }}
+          key: ${{ runner.os }}-hermes-ish-meson-ios16.5-${{ hashFiles('hermes/build/**') }}
 
       - name: Build iSH Meson archives
         env:
@@ -430,8 +430,6 @@ jobs:
     steps:
       - name: Check out HermesLink
         uses: actions/checkout@v7
-        with:
-          submodules: true
 
       - name: Read pinned Blink revision
         id: blink_revision
@@ -443,6 +441,7 @@ jobs:
           repository: blinksh/blink
           ref: ${{ steps.blink_revision.outputs.sha }}
           path: .blink-upstream
+          submodules: recursive
 
       - name: Apply Blink integration and stage app sources
         run: bash hermes/build/prepare-blink-source.sh .blink-upstream "$GITHUB_WORKSPACE"
@@ -514,7 +513,7 @@ jobs:
           path: |
             ${{ runner.temp }}/HermesLink.xcarchive
             ${{ runner.temp }}/hermeslink-archive.log
-          key: ${{ runner.os }}-hermes-app-${{ github.sha }}-${{ steps.runtime_hash.outputs.sha256 }}-${{ hashFiles('hermes/blink/**', 'hermes/build/**', 'ISHBridge/**', 'Frameworks/**', 'xcfs/**', 'install_hermes_runtime.sh') }}
+          key: ${{ runner.os }}-hermes-app-${{ github.sha }}-${{ steps.runtime_hash.outputs.sha256 }}-${{ hashFiles('hermes/blink/**') }}-${{ hashFiles('hermes/build/**') }}-${{ hashFiles('ISHBridge/**') }}-${{ hashFiles('install_hermes_runtime.sh') }}
 
       - name: Cache framework builds
         id: cache
@@ -523,7 +522,7 @@ jobs:
           path: |
             xcfs/.build
             Frameworks/ios_system/xcfs/.build
-          key: ${{ runner.os }}-${{ hashFiles('hermes/blink/UPSTREAM_REVISION', 'get_frameworks.sh', 'xcfs/Package.swift') }}
+          key: ${{ runner.os }}-${{ hashFiles('hermes/blink/UPSTREAM_REVISION') }}
 
       - name: Get frameworks
         if: steps.cache.outputs.cache-hit != 'true'
@@ -690,8 +689,6 @@ jobs:
     steps:
       - name: Check out HermesLink
         uses: actions/checkout@v7
-        with:
-          submodules: true
 
       - name: Read pinned Blink revision
         id: blink_revision
@@ -703,6 +700,7 @@ jobs:
           repository: blinksh/blink
           ref: ${{ steps.blink_revision.outputs.sha }}
           path: .blink-upstream
+          submodules: recursive
 
       - name: Apply Blink integration and stage app sources
         run: bash hermes/build/prepare-blink-source.sh .blink-upstream "$GITHUB_WORKSPACE"
@@ -737,7 +735,7 @@ jobs:
           path: |
             xcfs/.build
             Frameworks/ios_system/xcfs/.build
-          key: ${{ runner.os }}-${{ hashFiles('get_frameworks.sh', 'xcfs/Package.swift') }}
+          key: ${{ runner.os }}-${{ hashFiles('hermes/blink/UPSTREAM_REVISION') }}
 
       - name: Get frameworks
         if: steps.cache.outputs.cache-hit != 'true'
