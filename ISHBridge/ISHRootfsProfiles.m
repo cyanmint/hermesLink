@@ -5,6 +5,7 @@
 #import "ish_kernel_bridge.h"
 #import "ish_rootfs.h"
 
+#include <string.h>
 #include <sys/stat.h>
 #include <unistd.h>
 
@@ -25,6 +26,7 @@ static NSString *ISHDocumentsRoot(void) {
 }
 
 static BOOL ISHSetError(NSError **error, NSInteger code, NSString *message);
+static BOOL ISHValidDocumentsGuestMountPath(NSString *path);
 
 NSString *ISHDocumentsHostPath(void) {
   return BlinkPaths.documentsPath;
@@ -37,19 +39,22 @@ BOOL ISHDocumentsAutoMountEnabled(void) {
 NSString *ISHDocumentsGuestMountPath(void) {
   NSString *path = [NSUserDefaults.standardUserDefaults
       stringForKey:ISHDocumentsMountPathDefaultsKey];
-  return path.length > 0 ? path : @"/mnt/documents";
+  return ISHValidDocumentsGuestMountPath(path) ? path : @"/mnt/documents";
 }
 
 NSUInteger ISHDocumentsMountMask(void) {
   NSNumber *mask = [NSUserDefaults.standardUserDefaults
       objectForKey:ISHDocumentsMountMaskDefaultsKey];
-  return mask != nil ? mask.unsignedIntegerValue : 0022;
+  return mask != nil && mask.unsignedIntegerValue <= 0777
+      ? mask.unsignedIntegerValue : 0022;
 }
 
 static BOOL ISHValidDocumentsGuestMountPath(NSString *path) {
+  const char *utf8Path = path.UTF8String;
   if (![path isKindOfClass:NSString.class] || path.length < 2 ||
-      path.length > 255 || ![path hasPrefix:@"/mnt/"] ||
-      [path hasSuffix:@"/"] || [path containsString:@"//"]) {
+      utf8Path == NULL || strlen(utf8Path) > 255 ||
+      ![path hasPrefix:@"/mnt/"] || [path hasSuffix:@"/"] ||
+      [path containsString:@"//"]) {
     return NO;
   }
   for (NSString *component in [path componentsSeparatedByString:@"/"]) {

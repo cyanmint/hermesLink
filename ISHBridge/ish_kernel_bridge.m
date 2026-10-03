@@ -71,7 +71,7 @@ int ish_configure(const char *root_path, ish_log_handler log_handler) {
 static int ish_valid_documents_guest_path(const char *path) {
   if (path == NULL || strncmp(path, "/mnt/", 5) != 0 ||
       path[5] == '\0' || strlen(path) >= sizeof(g_documents_guest_mount_path) ||
-      path[strlen(path) - 1] == '/') {
+      path[strlen(path) - 1] == '/' || strstr(path, "//") != NULL) {
     return 0;
   }
   const char *component = path;

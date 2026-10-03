@@ -26,7 +26,9 @@ Under the project's stated attribution policy, AI-generated content has no copyr
 - `hermes/build/build-hermesrt-zip.sh`
 - `hermes/build/build-ish-static.sh`
 - `hermes/build/build-native-ios.sh`
+- `hermes/build/ish-documents-fs.c`
 - `hermes/build/patch-ish-pty.py`
+- `hermes/build/patch-ish-documents-fs.py`
 - `hermes/build/configure_native_modules.py`
 - `hermes/build/fetch-sources.sh`
 - `hermes/build/fetch-ish-source.sh`

@@ -25,11 +25,23 @@ static __init void ish_mount_documents(void) {
         point == NULL || point[0] != '/' || point[1] == '\\0')
         return;
 
-    int err = init_mkdir(point, 0755);
-    if (err < 0 && err != -EEXIST) {
-        pr_warn("ish: could not create Documents mount point %s: %s\\n",
-                point, errname(err));
-        return;
+    char mountpoint[256];
+    strlcpy(mountpoint, point, sizeof(mountpoint));
+    int err;
+    for (char *cursor = mountpoint + 1; ; cursor++) {
+        if (*cursor != '/' && *cursor != '\\0')
+            continue;
+        char separator = *cursor;
+        *cursor = '\\0';
+        err = init_mkdir(mountpoint, 0755);
+        *cursor = separator;
+        if (err < 0 && err != -EEXIST) {
+            pr_warn("ish: could not create Documents mount point %s: %s\\n",
+                    mountpoint, errname(err));
+            return;
+        }
+        if (separator == '\\0')
+            break;
     }
 
     char options[32];
@@ -39,6 +51,8 @@ static __init void ish_mount_documents(void) {
         pr_warn("ish: could not mount Documents at %s: %s\\n",
                 point, errname(err));
 }"""
+ROOT_MOUNT_CALL = '    init_chroot(".");\n\n    FsInitialize();'
+ROOT_MOUNT_CALL_PATCHED = '    init_chroot(".");\n    ish_mount_documents();\n\n    FsInitialize();'
 PTY_PATH_DECLARATION = "static struct path ptmx_path;"
 PTY_PATH_DECLARATION_PATCHED = """static struct path ptmx_path;
 static int ios_pty_ensure_initialized(void);"""
@@ -146,11 +160,7 @@ def patch(source_root: Path) -> None:
             ROOT_DOCUMENTS_DECLARATION_PATCHED,
             1,
         )
-    root = root.replace(
-        '    init_chroot(".");\n\n    FsInitialize();',
-        '    init_chroot(".");\n    ish_mount_documents();\n\n    FsInitialize();',
-        1,
-    )
+    root = replace_once(root, ROOT_MOUNT_CALL, ROOT_MOUNT_CALL_PATCHED, ROOT_SOURCE)
     root = replace_once(root, ROOTFS_INITCALL, ROOTFS_INITCALL_PATCHED, ROOT_SOURCE)
     if PTY_PATH_DECLARATION_PATCHED not in pty:
         if pty.count(PTY_PATH_DECLARATION) != 1:

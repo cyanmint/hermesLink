@@ -31,6 +31,11 @@ static int ishfs_parse_mask(const char *value, NSUInteger *mask) {
   if (value == NULL || value[0] == '\0' || mask == NULL) {
     return 0;
   }
+  for (const char *digit = value; *digit != '\0'; digit++) {
+    if (*digit < '0' || *digit > '7') {
+      return 0;
+    }
+  }
   char *end = NULL;
   unsigned long parsed = strtoul(value, &end, 8);
   if (end == value || *end != '\0' || parsed > 0777) {

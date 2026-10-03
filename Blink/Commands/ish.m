@@ -40,7 +40,7 @@ int ish_main(int argc, char *argv[]) {
   }
   NSString *documentsPath = ISHDocumentsAutoMountEnabled()
       ? ISHDocumentsHostPath() : @"";
-  if (ish_configure_documents(documentsPath.fileSystemRepresentation,
+  if (ish_configure_documents(documentsPath.UTF8String,
                               ISHDocumentsGuestMountPath().UTF8String,
                               (unsigned int) ISHDocumentsMountMask()) != ISH_RUN_OK) {
     fprintf(thread_stderr, "ish: Documents mount settings changed after the kernel started; force-quit and relaunch the app\n");

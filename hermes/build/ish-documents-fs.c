@@ -30,8 +30,13 @@ struct documentsfs_context {
 #define DOCUMENTSFS_MAGIC 0x646f6373
 
 static const struct inode_operations documentsfs_dir_iops;
+static const struct inode_operations documentsfs_file_iops;
 static const struct file_operations documentsfs_file_fops;
 static const struct file_operations documentsfs_dir_fops;
+
+static const struct dentry_operations documentsfs_dentry_ops = {
+  .d_delete = always_delete_dentry,
+};
 
 static umode_t documentsfs_mode(const struct documentsfs_super *info,
                                 unsigned int host_mode) {
@@ -69,6 +74,7 @@ static int documentsfs_read_inode(struct inode *inode) {
     inode->i_op = &documentsfs_dir_iops;
     inode->i_fop = &documentsfs_dir_fops;
   } else {
+    inode->i_op = &documentsfs_file_iops;
     inode->i_fop = &documentsfs_file_fops;
   }
   return 0;
@@ -85,7 +91,11 @@ static struct dentry *documentsfs_lookup(struct inode *directory,
                                         unsigned int flags) {
   int fd = documentsfs_open_child(directory, dentry);
   if (fd == -ELOOP)
-    return d_splice_alias(NULL, dentry);
+    return ERR_PTR(fd);
+  if (fd == -ENOENT) {
+    d_add(dentry, NULL);
+    return NULL;
+  }
   if (fd < 0)
     return ERR_PTR(fd);
 
@@ -158,8 +168,11 @@ static int documentsfs_create(struct user_namespace *mnt_userns,
                        0666);
   if (fd < 0)
     return fd;
-  return documentsfs_create_node(mnt_userns, directory, dentry,
-                                 S_IFREG | mode, fd);
+  int error = documentsfs_create_node(mnt_userns, directory, dentry,
+                                      S_IFREG | mode, fd);
+  if (error < 0)
+    host_unlinkat(DOCUMENTSFS_INODE_FD(directory), dentry->d_name.name);
+  return error;
 }
 
 static int documentsfs_mkdir(struct user_namespace *mnt_userns,
@@ -174,8 +187,11 @@ static int documentsfs_mkdir(struct user_namespace *mnt_userns,
     host_rmdirat(DOCUMENTSFS_INODE_FD(directory), dentry->d_name.name);
     return fd;
   }
-  return documentsfs_create_node(mnt_userns, directory, dentry,
-                                 S_IFDIR | mode, fd);
+  error = documentsfs_create_node(mnt_userns, directory, dentry,
+                                  S_IFDIR | mode, fd);
+  if (error < 0)
+    host_rmdirat(DOCUMENTSFS_INODE_FD(directory), dentry->d_name.name);
+  return error;
 }
 
 static int documentsfs_unlink(struct inode *directory,
@@ -204,6 +220,34 @@ static int documentsfs_rename(struct user_namespace *mnt_userns,
                        to_dentry->d_name.name);
 }
 
+static int documentsfs_setattr(struct user_namespace *mnt_userns,
+                              struct dentry *dentry,
+                              struct iattr *attributes) {
+  if (attributes->ia_valid & ~(ATTR_SIZE | ATTR_CTIME))
+    return -EOPNOTSUPP;
+  int error = setattr_prepare(mnt_userns, dentry, attributes);
+  if (error < 0)
+    return error;
+  if (attributes->ia_valid & ATTR_SIZE) {
+    struct inode *inode = d_inode(dentry);
+    struct dentry *parent = dentry->d_parent;
+    int fd = host_openat(DOCUMENTSFS_INODE_FD(d_inode(parent)),
+                        dentry->d_name.name, O_WRONLY | O_NOFOLLOW, 0);
+    if (fd < 0)
+      return fd;
+    error = host_ftruncate(fd, attributes->ia_size);
+    host_close(fd);
+    if (error < 0)
+      return error;
+    truncate_setsize(inode, attributes->ia_size);
+  }
+  return 0;
+}
+
+static const struct inode_operations documentsfs_file_iops = {
+  .setattr = documentsfs_setattr,
+};
+
 static const struct inode_operations documentsfs_dir_iops = {
   .lookup = documentsfs_lookup,
   .create = documentsfs_create,
@@ -211,6 +255,7 @@ static const struct inode_operations documentsfs_dir_iops = {
   .unlink = documentsfs_unlink,
   .rmdir = documentsfs_rmdir,
   .rename = documentsfs_rename,
+  .setattr = documentsfs_setattr,
 };
 
 static ssize_t documentsfs_read_iter(struct kiocb *iocb,
@@ -258,6 +303,8 @@ static ssize_t documentsfs_write_iter(struct kiocb *iocb,
     }
     iocb->ki_pos += written;
     total += written;
+    if (iocb->ki_pos > i_size_read(iocb->ki_filp->f_inode))
+      i_size_write(iocb->ki_filp->f_inode, iocb->ki_pos);
     if ((size_t)written != copied)
       break;
   }
@@ -372,6 +419,7 @@ static int documentsfs_fill_super(struct super_block *sb,
     return error;
   }
   sb->s_op = &documentsfs_super_ops;
+  sb->s_d_op = &documentsfs_dentry_ops;
   sb->s_root = d_make_root(root);
   return sb->s_root != NULL ? 0 : -ENOMEM;
 }
@@ -421,10 +469,18 @@ static int documentsfs_get_tree(struct fs_context *fc) {
     kfree(info);
     return error;
   }
+  struct hostfs_stat root_stat;
+  int error = stat_file(NULL, &root_stat, info->root_fd);
+  if (error < 0 || !S_ISDIR(root_stat.mode)) {
+    host_close(info->root_fd);
+    kfree(info);
+    return error < 0 ? error : -ENOTDIR;
+  }
   fc->s_fs_info = info;
-  int error = vfs_get_super(fc, vfs_get_independent_super,
-                            documentsfs_fill_super);
-  if (error < 0) {
+  error = vfs_get_super(fc, vfs_get_independent_super,
+                        documentsfs_fill_super);
+  if (error < 0 && fc->s_fs_info == info) {
+    fc->s_fs_info = NULL;
     host_close(info->root_fd);
     kfree(info);
   }

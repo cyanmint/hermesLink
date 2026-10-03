@@ -23,6 +23,8 @@ PACKAGE_FRAMEWORK_SCRIPT = ROOT / "hermes" / "build" / "package-ish-framework.sh
 PREPARE_XCODE_PROJECT = ROOT / "hermes" / "build" / "prepare-ish-xcode-project.py"
 REPACK_MESON_ARCHIVES = ROOT / "hermes" / "build" / "repack-ish-meson-archives.py"
 PATCH_ISH_PTY = ROOT / "hermes" / "build" / "patch-ish-pty.py"
+PATCH_ISH_DOCUMENTS_FS = ROOT / "hermes" / "build" / "patch-ish-documents-fs.py"
+DOCUMENTS_FS_SOURCE = ROOT / "hermes" / "build" / "ish-documents-fs.c"
 INSTALL_SCRIPT = ROOT / "install_ish_runtime.sh"
 PINNED_ROOTFS = ROOT / "hermes" / "build" / "external" / "ish" / "rootfs.tar.gz"
 PINNED_SOURCE = ROOT / "hermes" / "build" / "external" / "ish" / "source"
@@ -76,7 +78,9 @@ class BuildIshStaticScriptTests(unittest.TestCase):
             )
             interop_path.write_text(patcher.SESSION_TTY + "\n", encoding="utf-8")
             root_path.write_text(
-                "static __init int ish_rootfs(void) {\n" +
+                "static __init int ish_rootfs(void) {\n"
+                "    init_chroot(\".\");\n\n"
+                "    FsInitialize();\n" +
                 patcher.ROOTFS_INITCALL + "\n",
                 encoding="utf-8",
             )
@@ -105,6 +109,54 @@ class BuildIshStaticScriptTests(unittest.TestCase):
             patched_root.index("rootfs_initcall(ish_rootfs);"),
             patched_root.index("late_initcall(ish_session_ready);"),
         )
+        self.assertLess(
+            patched_root.index("init_chroot(\".\");"),
+            patched_root.index("ish_mount_documents();"),
+        )
+        self.assertLess(
+            patched_root.index("ish_mount_documents();"),
+            patched_root.index("FsInitialize();"),
+        )
+        self.assertIn("DefaultDocumentsMask()", patched_root)
+
+    def test_documents_filesystem_patch_adds_source_to_pinned_meson_build(self) -> None:
+        spec = importlib.util.spec_from_file_location(
+            "patch_ish_documents_fs", PATCH_ISH_DOCUMENTS_FS
+        )
+        self.assertIsNotNone(spec)
+        self.assertIsNotNone(spec.loader)
+        patcher = importlib.util.module_from_spec(spec)
+        spec.loader.exec_module(patcher)
+
+        with tempfile.TemporaryDirectory() as temp_dir:
+            source_root = Path(temp_dir)
+            (source_root / "linux").mkdir()
+            meson = source_root / "meson.build"
+            meson.write_text(
+                "kernel_src = [\n        'linux/fakefs.c',\n]\n",
+                encoding="utf-8",
+            )
+            patcher.patch(source_root, DOCUMENTS_FS_SOURCE)
+            patched = meson.read_text(encoding="utf-8")
+            patcher.patch(source_root, DOCUMENTS_FS_SOURCE)
+            self.assertEqual(meson.read_text(encoding="utf-8"), patched)
+            self.assertEqual(patched.count("'linux/documentsfs.c',"), 1)
+            self.assertEqual(
+                (source_root / "linux" / "documentsfs.c").read_text(encoding="utf-8"),
+                DOCUMENTS_FS_SOURCE.read_text(encoding="utf-8"),
+            )
+
+    def test_documents_filesystem_supports_mask_remount_without_fakefs_metadata(self) -> None:
+        source = DOCUMENTS_FS_SOURCE.read_text(encoding="utf-8")
+        self.assertIn('strcmp(param->key, "mask")', source)
+        self.assertIn(".reconfigure = documentsfs_reconfigure", source)
+        self.assertIn("documentsfs_apply_mask", source)
+        self.assertNotIn(".symlink =", source)
+        self.assertIn("ATTR_SIZE | ATTR_CTIME", source)
+        self.assertIn("-EOPNOTSUPP", source)
+        build_script = BUILD_SCRIPT.read_text(encoding="utf-8")
+        self.assertIn('python3 "$ROOT/build/patch-ish-documents-fs.py"', build_script)
+        self.assertIn('rm -f "$ISH_SOURCE/linux/documentsfs.c"', build_script)
 
     def test_pty_patcher_matches_pinned_initcall_declaration(self) -> None:
         source = PATCH_ISH_PTY.read_text(encoding="utf-8")

@@ -148,7 +148,8 @@ class IshRuntimeWorkflowTests(unittest.TestCase):
         for marker in (
             "ISHBridge/*", "hermes/build/build-ish-static.sh",
             "hermes/build/fetch-ish-source.sh", "hermes/build/verify-ish-source.py",
-            "hermes/build/patch-ish-pty.py",
+            "hermes/build/patch-ish-pty.py", "hermes/build/patch-ish-documents-fs.py",
+            "hermes/build/ish-documents-fs.c",
             "hermes/build/prepare-ish-xcode-project.py",
             "hermes/build/repack-ish-meson-archives.py",
             "hermes/build/package-ish-framework.sh",

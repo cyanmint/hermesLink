@@ -110,7 +110,7 @@ jobs:
                 ;;
             esac
             case "$path" in
-              hermes/build/build-ish-static.sh|hermes/build/fetch-ish-source.sh|hermes/build/verify-ish-source.py|hermes/build/patch-ish-pty.py)
+              hermes/build/build-ish-static.sh|hermes/build/fetch-ish-source.sh|hermes/build/verify-ish-source.py|hermes/build/patch-ish-pty.py|hermes/build/patch-ish-documents-fs.py|hermes/build/ish-documents-fs.c)
                 ish_meson_changed=true
                 ;;
             esac
@@ -324,7 +324,7 @@ jobs:
         uses: actions/cache@v6
         with:
           path: /tmp/hermeslink-ish/build
-          key: ${{ runner.os }}-hermes-ish-meson-ios16.5-${{ hashFiles('hermes/build/build-ish-static.sh', 'hermes/build/external/SOURCES') }}
+          key: ${{ runner.os }}-hermes-ish-meson-ios16.5-${{ hashFiles('hermes/build/build-ish-static.sh', 'hermes/build/patch-ish-pty.py', 'hermes/build/patch-ish-documents-fs.py', 'hermes/build/ish-documents-fs.c', 'hermes/build/external/SOURCES') }}
 
       - name: Build iSH Meson archives
         env:
