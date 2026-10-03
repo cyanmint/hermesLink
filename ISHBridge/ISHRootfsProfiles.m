@@ -471,6 +471,14 @@ BOOL ISHRootfsImportProfile(NSString *name, NSURL *sourceURL, NSError **error) {
     }
   }
   if (success) {
+    int status = ish_rootfs_prepare_resolv_conf(staging.fileSystemRepresentation);
+    if (status != ISH_ROOTFS_OK) {
+      success = NO;
+      underlying = ISHProfilesError(status,
+          [NSString stringWithFormat:@"Could not prepare /etc/resolv.conf (status %d).", status]);
+    }
+  }
+  if (success) {
     int status = ish_rootfs_write_documents_mount_script(
         staging.fileSystemRepresentation,
         ISHDocumentsHostPath().fileSystemRepresentation);

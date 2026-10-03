@@ -285,6 +285,58 @@ class IshBridgeCTests(unittest.TestCase):
         self.assertEqual(repeat.stdout.strip(), b"0", repeat.stderr)
         self.assertIn(updated_path, script.read_text(encoding="utf-8"))
 
+    def test_resolver_file_is_prepared_and_host_updates_preserve_its_fakefs_index(self) -> None:
+        import sqlite3
+
+        root = self.build_dir / "resolver-root"
+        (root / "bin").mkdir(parents=True)
+        (root / "etc").mkdir()
+        (root / "sbin").mkdir()
+        (root / "bin/busybox").write_bytes(b"busybox")
+        (root / "etc/alpine-release").write_text("3.21.3\n", encoding="utf-8")
+        (root / "etc/resolv.conf").symlink_to("/run/resolv.conf")
+        (root / "sbin/init").symlink_to("../bin/busybox")
+        os.chmod(root / "bin/busybox", 0o755)
+        self.assertEqual(self._run("fakefsify", str(root)).stdout.strip(), b"0")
+
+        prepared = self._run("resolv-conf-prepare", str(root))
+        first = self._run(
+            "resolv-conf-update", str(root), input_bytes=b"nameserver 1.1.1.1\nsearch example.org\n"
+        )
+        updated = self._run(
+            "resolv-conf-update", str(root), input_bytes=b"nameserver 8.8.8.8\n"
+        )
+
+        self.assertEqual(prepared.stdout.strip(), b"0", prepared.stderr)
+        self.assertEqual(first.stdout.strip(), b"0", first.stderr)
+        self.assertEqual(updated.stdout.strip(), b"0", updated.stderr)
+        self.assertEqual((root / "data/etc/resolv.conf").read_bytes(), b"nameserver 8.8.8.8\n")
+        with sqlite3.connect(root / "meta.db") as db:
+            indexed = db.execute(
+                "SELECT stats.stat FROM paths JOIN stats ON stats.inode = paths.inode "
+                "WHERE CAST(paths.path AS TEXT) = ?",
+                ("/etc/resolv.conf",),
+            ).fetchone()
+        self.assertIsNotNone(indexed)
+        mode = int.from_bytes(indexed[0][:4], byteorder="little")
+        self.assertTrue(stat.S_ISREG(mode))
+
+    def test_resolver_update_requires_an_indexed_file_prepared_before_kernel_boot(self) -> None:
+        root = self.build_dir / "resolver-unprepared-root"
+        (root / "bin").mkdir(parents=True)
+        (root / "etc").mkdir()
+        (root / "sbin").mkdir()
+        (root / "bin/busybox").write_bytes(b"busybox")
+        (root / "etc/alpine-release").write_text("3.21.3\n", encoding="utf-8")
+        (root / "sbin/init").symlink_to("../bin/busybox")
+        os.chmod(root / "bin/busybox", 0o755)
+        self.assertEqual(self._run("fakefsify", str(root)).stdout.strip(), b"0")
+
+        result = self._run("resolv-conf-update", str(root), input_bytes=b"nameserver 1.1.1.1\n")
+
+        self.assertEqual(result.stdout.strip(), b"-3")
+        self.assertFalse((root / "data/etc/resolv.conf").exists())
+
     def test_incompatible_fakefs_schema_is_rejected_before_kernel_mount(self) -> None:
         import sqlite3
 

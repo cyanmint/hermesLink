@@ -108,6 +108,33 @@ static int cmd_documents_script(int argc, char **argv) {
   return 0;
 }
 
+static int cmd_resolv_conf_prepare(int argc, char **argv) {
+  if (argc != 3) {
+    fprintf(stderr, "usage: %s resolv-conf-prepare <rootfs-dir>\n", argv[0]);
+    return 2;
+  }
+  int status = ish_rootfs_prepare_resolv_conf(argv[2]);
+  printf("%d\n", status);
+  return 0;
+}
+
+static int cmd_resolv_conf_update(int argc, char **argv) {
+  if (argc != 3) {
+    fprintf(stderr, "usage: %s resolv-conf-update <rootfs-dir>\n", argv[0]);
+    return 2;
+  }
+  unsigned char *contents = NULL;
+  size_t length = 0;
+  if (read_all_stdin(&contents, &length) != 0) {
+    fprintf(stderr, "failed to read stdin\n");
+    return 2;
+  }
+  int status = ish_rootfs_update_resolv_conf(argv[2], (const char *) contents, length);
+  free(contents);
+  printf("%d\n", status);
+  return 0;
+}
+
 static int cmd_wrap(int argc, char **argv) {
   (void) argc;
   (void) argv;
@@ -176,7 +203,7 @@ static int cmd_scan(int argc, char **argv) {
 
 int main(int argc, char **argv) {
   if (argc < 2) {
-    fprintf(stderr, "usage: %s <path-safe|path-join|extract|fakefsify|wrap|scan> ...\n", argv[0]);
+    fprintf(stderr, "usage: %s <path-safe|path-join|extract|fakefsify|documents-script|resolv-conf-prepare|resolv-conf-update|wrap|scan> ...\n", argv[0]);
     return 2;
   }
   if (strcmp(argv[1], "path-safe") == 0) {
@@ -193,6 +220,12 @@ int main(int argc, char **argv) {
   }
   if (strcmp(argv[1], "documents-script") == 0) {
     return cmd_documents_script(argc, argv);
+  }
+  if (strcmp(argv[1], "resolv-conf-prepare") == 0) {
+    return cmd_resolv_conf_prepare(argc, argv);
+  }
+  if (strcmp(argv[1], "resolv-conf-update") == 0) {
+    return cmd_resolv_conf_update(argc, argv);
   }
   if (strcmp(argv[1], "wrap") == 0) {
     return cmd_wrap(argc, argv);

@@ -136,11 +136,11 @@ static void ish_append_dns_text(char *buffer, size_t capacity, size_t *length,
   *length += (size_t) written < remaining ? (size_t) written : remaining - 1;
 }
 
-/* Upstream iSH performs this in AppDelegate.configureDns(). The HermesLink
- * bridge has no upstream app delegate, so populate the guest resolver directly
- * after its fakefs root is mounted and refresh it whenever iOS network
- * reachability changes. */
+/* Update the host-backed resolver file directly from the app process. */
 static void ish_configure_guest_dns(void) {
+  if (g_rootfs_path[0] == '\0') {
+    return;
+  }
   struct __res_state resolver = {0};
   if (res_ninit(&resolver) != 0) {
     ISHLog("ish: could not read the iOS DNS configuration");
@@ -170,9 +170,9 @@ static void ish_configure_guest_dns(void) {
   }
   res_ndestroy(&resolver);
 
-  ssize_t written = linux_write_file("/etc/resolv.conf", resolv_conf, length);
-  if (written != (ssize_t) length) {
-    ISHLog("ish: could not update guest /etc/resolv.conf");
+  int status = ish_rootfs_update_resolv_conf(g_rootfs_path, resolv_conf, length);
+  if (status != ISH_ROOTFS_OK) {
+    ISHLog("ish: could not update the host-backed guest /etc/resolv.conf");
   }
 }
 
@@ -188,9 +188,7 @@ static void ish_network_reachability_changed(SCNetworkReachabilityRef target,
   if (!kernel_ready) {
     return;
   }
-  async_do_in_workqueue(^{
-    ish_configure_guest_dns();
-  });
+  ish_configure_guest_dns();
 }
 
 static void ish_start_network_monitor(void) {
@@ -526,6 +524,9 @@ int ish_import_rootfs_archive(const char *archive_path, const char *dest_root) {
   if (status == ISH_ROOTFS_OK) {
     status = ish_rootfs_prepare_fakefs(dest_root);
   }
+  if (status == ISH_ROOTFS_OK) {
+    status = ish_rootfs_prepare_resolv_conf(dest_root);
+  }
   if (status != ISH_ROOTFS_OK) {
     return ISH_RUN_ERR_ROOTFS_EXTRACT_FAILED;
   }
@@ -546,16 +547,24 @@ static int ISHPrepareRootfsIfNeeded(void) {
     if (validation == ISH_ROOTFS_OK) {
       validation = ish_rootfs_write_documents_mount_script(
           root.fileSystemRepresentation, g_documents_host_path);
-      return validation == ISH_ROOTFS_OK ? ISH_RUN_OK : ISH_RUN_ERR_ROOTFS_EXTRACT_FAILED;
     }
-    ISHLog("ish: the selected rootfs fakefs database is invalid; remove and recreate the profile");
-    return ISH_RUN_ERR_ROOTFS_EXTRACT_FAILED;
+    if (validation == ISH_ROOTFS_OK) {
+      validation = ish_rootfs_prepare_resolv_conf(root.fileSystemRepresentation);
+    }
+    if (validation != ISH_ROOTFS_OK) {
+      ISHLog("ish: could not prepare the selected rootfs profile for the guest");
+      return ISH_RUN_ERR_ROOTFS_EXTRACT_FAILED;
+    }
+    return ISH_RUN_OK;
   }
   if (ISHRootfsHasRawMarkers(root)) {
     int conversion = ish_rootfs_prepare_fakefs(root.fileSystemRepresentation);
     if (conversion == ISH_ROOTFS_OK) {
       conversion = ish_rootfs_write_documents_mount_script(
           root.fileSystemRepresentation, g_documents_host_path);
+    }
+    if (conversion == ISH_ROOTFS_OK) {
+      conversion = ish_rootfs_prepare_resolv_conf(root.fileSystemRepresentation);
     }
     if (conversion == ISH_ROOTFS_OK && ISHRootfsIsProvisioned(root)) {
       return ISH_RUN_OK;
@@ -601,6 +610,9 @@ static int ISHPrepareRootfsIfNeeded(void) {
     status = ish_rootfs_write_documents_mount_script(
         root.fileSystemRepresentation, g_documents_host_path);
   }
+  if (status == ISH_ROOTFS_OK) {
+    status = ish_rootfs_prepare_resolv_conf(root.fileSystemRepresentation);
+  }
   if (status != ISH_ROOTFS_OK) {
     char message[256];
     snprintf(message, sizeof(message), "ish: rootfs extraction into %s failed (status %d: %s)",
@@ -639,6 +651,7 @@ static void ish_boot_once_body(void) {
     atomic_store(&g_boot_result, status);
     return;
   }
+  ish_configure_guest_dns();
   pthread_t thread;
   pthread_attr_t attr;
   pthread_attr_init(&attr);

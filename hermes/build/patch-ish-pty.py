@@ -78,22 +78,6 @@ SESSION_TTY_PATCHED = """    session->tty = ios_pty_open(&session->terminal);
     }
     session->callback = done;"""
 
-LINUX_WRITE_FILE = """ssize_t linux_write_file(const char *path, const char *buf, size_t size) {
-    struct file *filp = filp_open(path, O_WRONLY, 0);
-    ssize_t res = vfs_write(filp, buf, size, NULL);
-    filp_close(filp, NULL);
-    return res;
-}"""
-
-LINUX_WRITE_FILE_PATCHED = """ssize_t linux_write_file(const char *path, const char *buf, size_t size) {
-    struct file *filp = filp_open(path, O_WRONLY | O_CREAT | O_TRUNC, 0644);
-    if (IS_ERR(filp))
-        return PTR_ERR(filp);
-    ssize_t res = vfs_write(filp, buf, size, NULL);
-    filp_close(filp, NULL);
-    return res;
-}"""
-
 ROOTFS_INITCALL = """    FsInitialize();
     return 0;
 }
@@ -138,8 +122,7 @@ def patch(source_root: Path) -> None:
         )
     pty = replace_once(pty, PTY_INIT, PTY_INIT_PATCHED, PTY_SOURCE)
     pty = replace_once(pty, PTY_OPEN, PTY_OPEN_PATCHED, PTY_SOURCE)
-    interop = replace_once(interop, LINUX_WRITE_FILE, LINUX_WRITE_FILE_PATCHED, INTEROP_SOURCE)
-    interop = replace_once(interop, SESSION_TTY, SESSION_TTY_PATCHED, INTEROP_SOURCE)
+    interop = replace_once(interop, SESSION_TTY, SESSION_TTY_PATCHED, interop_path)
     root = replace_once(root, ROOTFS_INITCALL, ROOTFS_INITCALL_PATCHED, ROOT_SOURCE)
     pty_path.write_text(pty, encoding="utf-8")
     interop_path.write_text(interop, encoding="utf-8")

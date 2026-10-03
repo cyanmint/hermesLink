@@ -77,7 +77,7 @@ class BuildIshStaticScriptTests(unittest.TestCase):
                 encoding="utf-8",
             )
             interop_path.write_text(
-                patcher.LINUX_WRITE_FILE + "\n\n" + patcher.SESSION_TTY + "\n",
+                patcher.SESSION_TTY + "\n",
                 encoding="utf-8",
             )
             root_path.write_text(
@@ -107,9 +107,6 @@ class BuildIshStaticScriptTests(unittest.TestCase):
         self.assertIn("return ERR_PTR(err);", patched_pty)
         self.assertIn("if (IS_ERR(session->tty))", patched_interop)
         self.assertIn("done(err, 0, NULL);", patched_interop)
-        self.assertIn("O_WRONLY | O_CREAT | O_TRUNC", patched_interop)
-        self.assertIn("if (IS_ERR(filp))", patched_interop)
-        self.assertIn("return PTR_ERR(filp);", patched_interop)
         self.assertIn("rootfs_initcall(ish_rootfs);", patched_root)
         self.assertIn("late_initcall(ish_session_ready);", patched_root)
         self.assertLess(
@@ -209,6 +206,7 @@ class PackageIshFrameworkTests(unittest.TestCase):
         self.assertIn("_ish_configure_documents", source)
         self.assertNotIn("_ish_documents_configuration_is_current", source)
         self.assertIn("_ish_rootfs_prepare_fakefs", source)
+        self.assertIn("_ish_rootfs_prepare_resolv_conf", source)
         self.assertIn("_ish_rootfs_write_documents_mount_script", source)
         self.assertIn("-framework SystemConfiguration", source)
         self.assertIn('-Wl,-force_load,"$LIB_DIR/libfakefs.a"', source)

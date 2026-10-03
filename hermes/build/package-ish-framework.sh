@@ -76,6 +76,7 @@ xcrun --sdk "$SDK_NAME" clang "${COMMON_FLAGS[@]}" -dynamiclib \
   -Wl,-exported_symbol,_ish_configure_documents \
   -Wl,-exported_symbol,_ish_import_rootfs_archive \
   -Wl,-exported_symbol,_ish_rootfs_prepare_fakefs \
+  -Wl,-exported_symbol,_ish_rootfs_prepare_resolv_conf \
   -Wl,-exported_symbol,_ish_rootfs_write_documents_mount_script \
   -Wl,-exported_symbol,_ish_kernel_ensure_booted \
   -Wl,-exported_symbol,_ish_kernel_has_booted \

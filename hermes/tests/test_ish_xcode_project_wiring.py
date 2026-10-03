@@ -40,12 +40,12 @@ class CommandRegistrationTests(unittest.TestCase):
         self.assertIn("int ish_main(int argc, char *argv[])", source)
         self.assertIn('#include "ish_kernel_bridge.h"', source)
 
-    def test_ish_populates_and_refreshes_guest_dns(self) -> None:
+    def test_ish_populates_and_refreshes_resolver_from_the_app_process(self) -> None:
         bridge = (ISH_DIR / "ish_kernel_bridge.m").read_text(encoding="utf-8")
         self.assertIn("res_ninit(&resolver)", bridge)
         self.assertIn("res_getservers(&resolver", bridge)
-        self.assertIn('linux_write_file("/etc/resolv.conf"', bridge)
-        self.assertNotIn("generic_open(", bridge)
+        self.assertIn("ish_rootfs_update_resolv_conf(g_rootfs_path, resolv_conf, length)", bridge)
+        self.assertNotIn("linux_write_file", bridge)
         self.assertIn("SCNetworkReachabilitySetCallback", bridge)
         self.assertIn("ish_network_reachability_changed", bridge)
         self.assertIn("ish_configure_guest_dns();", bridge)
@@ -59,9 +59,10 @@ class CommandRegistrationTests(unittest.TestCase):
             with self.subTest(operation=operation):
                 self.assertIn(f'"{operation}"', source)
 
-    def test_bridge_uses_supported_linuxinterop_files_api(self) -> None:
+    def test_bridge_uses_host_rootfs_writes_instead_of_guest_kernel_file_apis(self) -> None:
         bridge = (ISH_DIR / "ish_kernel_bridge.m").read_text(encoding="utf-8")
-        self.assertIn('linux_write_file("/etc/resolv.conf"', bridge)
+        self.assertIn("ish_rootfs_update_resolv_conf", bridge)
+        self.assertNotIn("linux_write_file", bridge)
         self.assertNotIn("current =", bridge)
         self.assertNotIn("generic_open(", bridge)
         self.assertNotIn("generic_mkdirat(", bridge)
@@ -256,11 +257,12 @@ class IshNativeXcconfigTests(unittest.TestCase):
         network_callback = source.split(
             "static void ish_network_reachability_changed", 1
         )[1].split("\n}", 1)[0]
-        self.assertIn("async_do_in_workqueue", network_callback)
+        self.assertNotIn("async_do_in_workqueue", network_callback)
         self.assertIn("ish_configure_guest_dns();", network_callback)
         dns_writer = source.split("static void ish_configure_guest_dns(void)", 1)[1].split("\n}", 1)[0]
-        self.assertIn('linux_write_file("/etc/resolv.conf", resolv_conf, length)', dns_writer)
+        self.assertIn("ish_rootfs_update_resolv_conf(g_rootfs_path, resolv_conf, length)", dns_writer)
         self.assertNotIn("memset(resolv_conf + length", dns_writer)
+        self.assertIn("ish_rootfs_prepare_resolv_conf(root.fileSystemRepresentation)", source)
 
     def test_profile_management_preserves_legacy_rootfs_and_blocks_unsafe_names(self) -> None:
         source = (ISH_DIR / "ISHRootfsProfiles.m").read_text(encoding="utf-8")
@@ -279,6 +281,7 @@ class IshNativeXcconfigTests(unittest.TestCase):
         self.assertIn("ish_kernel_has_booted()", source)
         self.assertIn("ish_import_rootfs_archive", source)
         self.assertIn("ish_rootfs_prepare_fakefs", source)
+        self.assertIn("ish_rootfs_prepare_resolv_conf", source)
         self.assertIn("names.count < 2", source)
         self.assertIn("Could not reset the only rootfs profile", source)
 

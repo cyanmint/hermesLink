@@ -150,9 +150,10 @@ registered alongside `terminal` in the standard Hermes bundles. The design:
   `0777 & ~0022`; ownership, chmod/chown, hard-link creation, and symlinks are
   not supported. The mask can be changed for the active mount with
   `mount -o remount,mask=0027 /mnt/documents`.
-- **iSH networking** — iSH guest sockets use iOS networking, and the bridge
-  writes iOS DNS servers into `/etc/resolv.conf` at startup and refreshes them
-  when network reachability changes.
+- **iSH networking** — iSH guest sockets use iOS networking. The app prepares
+  and indexes the host-backed `/etc/resolv.conf` in the profile before kernel
+  startup, then writes iOS DNS servers there at startup and when network
+  reachability changes; the guest kernel does not write the resolver file.
 - **Hermes Agent tool** — `hermes/overlay/hermes/tools/ish_tool.py` registers
   an `ish` tool that reuses the exact same native `_hermesios` async-process
   bridge the `terminal` tool's iOS backend uses, just pointed at the native

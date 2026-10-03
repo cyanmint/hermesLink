@@ -549,6 +549,158 @@ int ish_rootfs_write_documents_mount_script(const char *root,
   return result;
 }
 
+int ish_rootfs_prepare_resolv_conf(const char *root) {
+  if (root == NULL || root[0] == '\0') {
+    return ISH_ROOTFS_ERR_DEST;
+  }
+
+  char database_path[PATH_MAX];
+  int database_path_length = snprintf(database_path, sizeof(database_path),
+                                      "%s/meta.db", root);
+  if (database_path_length < 0 ||
+      (size_t) database_path_length >= sizeof(database_path)) {
+    return ISH_ROOTFS_ERR_DEST;
+  }
+  struct stat database_stat;
+  if (lstat(database_path, &database_stat) != 0 ||
+      !S_ISREG(database_stat.st_mode) || database_stat.st_size == 0) {
+    return ISH_ROOTFS_ERR_FORMAT;
+  }
+
+  int root_fd = open(root, O_RDONLY | O_DIRECTORY | O_NOFOLLOW);
+  int data_fd = root_fd < 0 ? -1 :
+      openat(root_fd, "data", O_RDONLY | O_DIRECTORY | O_NOFOLLOW);
+  if (root_fd >= 0) {
+    close(root_fd);
+  }
+  int etc_fd = data_fd < 0 ? -1 :
+      openat(data_fd, "etc", O_RDONLY | O_DIRECTORY | O_NOFOLLOW);
+  if (data_fd >= 0) {
+    close(data_fd);
+  }
+  if (etc_fd < 0) {
+    return ISH_ROOTFS_ERR_FORMAT;
+  }
+
+  struct stat existing;
+  if (fstatat(etc_fd, "resolv.conf", &existing, AT_SYMLINK_NOFOLLOW) == 0) {
+    if (S_ISLNK(existing.st_mode)) {
+      if (unlinkat(etc_fd, "resolv.conf", 0) != 0) {
+        close(etc_fd);
+        return ISH_ROOTFS_ERR_IO;
+      }
+    } else if (!S_ISREG(existing.st_mode)) {
+      close(etc_fd);
+      return ISH_ROOTFS_ERR_FORMAT;
+    }
+  } else if (errno != ENOENT) {
+    close(etc_fd);
+    return ISH_ROOTFS_ERR_IO;
+  }
+
+  int resolver_fd = openat(etc_fd, "resolv.conf",
+                           O_WRONLY | O_CREAT | O_TRUNC | O_NOFOLLOW, 0666);
+  struct stat resolver_stat;
+  if (resolver_fd < 0 || fchmod(resolver_fd, 0666) != 0 ||
+      fstat(resolver_fd, &resolver_stat) != 0 ||
+      !S_ISREG(resolver_stat.st_mode) || fsync(resolver_fd) != 0) {
+    if (resolver_fd >= 0) {
+      close(resolver_fd);
+    }
+    close(etc_fd);
+    return ISH_ROOTFS_ERR_IO;
+  }
+  if (close(resolver_fd) != 0) {
+    close(etc_fd);
+    return ISH_ROOTFS_ERR_IO;
+  }
+  close(etc_fd);
+
+  sqlite3 *db = NULL;
+  sqlite3_stmt *insert_stat = NULL;
+  sqlite3_stmt *insert_path = NULL;
+  int result = ISH_ROOTFS_ERR_IO;
+  if (sqlite3_open_v2(database_path, &db, SQLITE_OPEN_READWRITE, NULL) != SQLITE_OK ||
+      ish_fakefs_exec(db, "BEGIN IMMEDIATE;") != 0 ||
+      sqlite3_prepare_v2(db, "INSERT INTO stats (stat) VALUES (?)", -1,
+                         &insert_stat, NULL) != SQLITE_OK ||
+      sqlite3_prepare_v2(db,
+          "INSERT OR REPLACE INTO paths (path, inode) VALUES (?, ?)", -1,
+          &insert_path, NULL) != SQLITE_OK ||
+      ish_fakefs_store_path(db, insert_stat, insert_path,
+                            "etc/resolv.conf", S_IFREG | 0666) != 0 ||
+      ish_fakefs_exec(db, "COMMIT;") != 0) {
+    if (db != NULL) {
+      ish_fakefs_exec(db, "ROLLBACK;");
+    }
+  } else {
+    result = ISH_ROOTFS_OK;
+  }
+  sqlite3_finalize(insert_stat);
+  sqlite3_finalize(insert_path);
+  sqlite3_close(db);
+  return result;
+}
+
+int ish_rootfs_update_resolv_conf(const char *root, const char *contents,
+                                  size_t length) {
+  if (root == NULL || root[0] == '\0' ||
+      (contents == NULL && length != 0) || length > 4096) {
+    return ISH_ROOTFS_ERR_DEST;
+  }
+
+  int root_fd = open(root, O_RDONLY | O_DIRECTORY | O_NOFOLLOW);
+  int data_fd = root_fd < 0 ? -1 :
+      openat(root_fd, "data", O_RDONLY | O_DIRECTORY | O_NOFOLLOW);
+  if (root_fd >= 0) {
+    close(root_fd);
+  }
+  int etc_fd = data_fd < 0 ? -1 :
+      openat(data_fd, "etc", O_RDONLY | O_DIRECTORY | O_NOFOLLOW);
+  if (data_fd >= 0) {
+    close(data_fd);
+  }
+  if (etc_fd < 0) {
+    return ISH_ROOTFS_ERR_FORMAT;
+  }
+
+  int resolver_fd = openat(etc_fd, "resolv.conf",
+                           O_WRONLY | O_NOFOLLOW | O_NONBLOCK);
+  close(etc_fd);
+  struct stat resolver_stat;
+  if (resolver_fd < 0 || fstat(resolver_fd, &resolver_stat) != 0 ||
+      !S_ISREG(resolver_stat.st_mode)) {
+    if (resolver_fd >= 0) {
+      close(resolver_fd);
+    }
+    return ISH_ROOTFS_ERR_FORMAT;
+  }
+
+  size_t written = 0;
+  while (written < length) {
+    ssize_t count = write(resolver_fd, contents + written, length - written);
+    if (count < 0 && errno == EINTR) {
+      continue;
+    }
+    if (count <= 0) {
+      close(resolver_fd);
+      return ISH_ROOTFS_ERR_IO;
+    }
+    written += (size_t) count;
+  }
+  int result = ftruncate(resolver_fd, (off_t) length);
+  if (result == 0) {
+    result = fsync(resolver_fd);
+  }
+  if (close(resolver_fd) != 0) {
+    result = -1;
+  }
+  if (result != 0) {
+    return ISH_ROOTFS_ERR_IO;
+  }
+  return ISH_ROOTFS_OK;
+}
+
 static int ish_fakefs_move_entries(int root_fd, int data_fd,
                                    const char *temporary_data_name,
                                    const char *temporary_database_name) {

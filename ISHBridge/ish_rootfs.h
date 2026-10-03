@@ -3,6 +3,8 @@
 #ifndef ISH_ROOTFS_H
 #define ISH_ROOTFS_H
 
+#include <stddef.h>
+
 #ifdef __cplusplus
 extern "C" {
 #endif
@@ -59,6 +61,12 @@ int ish_rootfs_prepare_fakefs(const char *root);
  * fakefs root and indexes it in meta.db. */
 int ish_rootfs_write_documents_mount_script(const char *root,
                                             const char *host_documents_path);
+
+/* Creates and indexes the resolver file before the guest kernel starts, then
+ * updates its host-backed contents without using guest-kernel file APIs. */
+int ish_rootfs_prepare_resolv_conf(const char *root);
+int ish_rootfs_update_resolv_conf(const char *root, const char *contents,
+                                  size_t length);
 
 #ifdef __cplusplus
 }
