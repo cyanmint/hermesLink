@@ -336,16 +336,49 @@ static NSString *ISHRootfsStorageDirectory(void) {
 
 static BOOL ISHRootfsIsProvisioned(NSString *root) {
   struct stat root_status;
+  struct stat database_status;
   struct stat busybox_status;
   struct stat release_status;
-  NSString *busybox = [root stringByAppendingPathComponent:@"bin/busybox"];
-  NSString *release = [root stringByAppendingPathComponent:@"etc/alpine-release"];
+  struct stat init_status;
+  NSString *data = [root stringByAppendingPathComponent:@"data"];
+  NSString *database = [root stringByAppendingPathComponent:@"meta.db"];
+  NSString *busybox = [data stringByAppendingPathComponent:@"bin/busybox"];
+  NSString *release = [data stringByAppendingPathComponent:@"etc/alpine-release"];
+  NSString *init = [data stringByAppendingPathComponent:@"sbin/init"];
   return lstat(root.fileSystemRepresentation, &root_status) == 0 &&
          S_ISDIR(root_status.st_mode) &&
+         lstat(database.fileSystemRepresentation, &database_status) == 0 &&
+         S_ISREG(database_status.st_mode) &&
+         database_status.st_size > 0 &&
          lstat(busybox.fileSystemRepresentation, &busybox_status) == 0 &&
          S_ISREG(busybox_status.st_mode) &&
          lstat(release.fileSystemRepresentation, &release_status) == 0 &&
-         S_ISREG(release_status.st_mode);
+         S_ISREG(release_status.st_mode) &&
+         lstat(init.fileSystemRepresentation, &init_status) == 0 &&
+         S_ISREG(init_status.st_mode);
+}
+
+static BOOL ISHRootfsHasRawMarkers(NSString *root) {
+  NSString *rawRoot = root;
+  NSString *busybox = [rawRoot stringByAppendingPathComponent:@"bin/busybox"];
+  NSString *release = [rawRoot stringByAppendingPathComponent:@"etc/alpine-release"];
+  NSString *init = [rawRoot stringByAppendingPathComponent:@"sbin/init"];
+  if (![[NSFileManager defaultManager] fileExistsAtPath:busybox] ||
+      ![[NSFileManager defaultManager] fileExistsAtPath:release]) {
+    rawRoot = [root stringByAppendingPathComponent:@"data"];
+    busybox = [rawRoot stringByAppendingPathComponent:@"bin/busybox"];
+    release = [rawRoot stringByAppendingPathComponent:@"etc/alpine-release"];
+    init = [rawRoot stringByAppendingPathComponent:@"sbin/init"];
+  }
+  struct stat busybox_status;
+  struct stat release_status;
+  struct stat init_status;
+  return lstat(busybox.fileSystemRepresentation, &busybox_status) == 0 &&
+         (S_ISREG(busybox_status.st_mode) || S_ISLNK(busybox_status.st_mode)) &&
+         lstat(release.fileSystemRepresentation, &release_status) == 0 &&
+         S_ISREG(release_status.st_mode) &&
+         lstat(init.fileSystemRepresentation, &init_status) == 0 &&
+         (S_ISREG(init_status.st_mode) || S_ISLNK(init_status.st_mode));
 }
 
 int ish_import_rootfs_archive(const char *archive_path, const char *dest_root) {
@@ -361,6 +394,9 @@ int ish_import_rootfs_archive(const char *archive_path, const char *dest_root) {
     return ISH_RUN_ERR_ROOTFS_EXTRACT_FAILED;
   }
   int status = ish_rootfs_extract(archive_path, dest_root);
+  if (status == ISH_ROOTFS_OK) {
+    status = ish_rootfs_prepare_fakefs(dest_root);
+  }
   if (status != ISH_ROOTFS_OK) {
     return ISH_RUN_ERR_ROOTFS_EXTRACT_FAILED;
   }
@@ -377,18 +413,43 @@ static int ISHPrepareRootfsIfNeeded(void) {
   NSString *root = ISHRootfsStorageDirectory();
   strlcpy(g_rootfs_path, root.fileSystemRepresentation, sizeof(g_rootfs_path));
   if (ISHRootfsIsProvisioned(root)) {
-    return ISH_RUN_OK;
-  }
-  NSFileManager *fileManager = [NSFileManager defaultManager];
-  NSError *directoryError = nil;
-  if ([fileManager fileExistsAtPath:root] &&
-      ![fileManager removeItemAtPath:root error:&directoryError]) {
-    ISHLog([[NSString stringWithFormat:@"ish: could not reset incomplete Documents/iSH root: %@",
-              directoryError.localizedDescription ?: @"unknown filesystem error"] UTF8String]);
+    int validation = ish_rootfs_prepare_fakefs(root.fileSystemRepresentation);
+    if (validation == ISH_ROOTFS_OK) {
+      return ISH_RUN_OK;
+    }
+    ISHLog("ish: the selected rootfs fakefs database is invalid; remove and recreate the profile");
     return ISH_RUN_ERR_ROOTFS_EXTRACT_FAILED;
   }
-  if (![fileManager createDirectoryAtPath:root withIntermediateDirectories:YES attributes:nil error:&directoryError]) {
-    ISHLog([[NSString stringWithFormat:@"ish: could not prepare Documents/iSH root directory: %@",
+  if (ISHRootfsHasRawMarkers(root)) {
+    int conversion = ish_rootfs_prepare_fakefs(root.fileSystemRepresentation);
+    if (conversion == ISH_ROOTFS_OK && ISHRootfsIsProvisioned(root)) {
+      return ISH_RUN_OK;
+    }
+    char message[256];
+    snprintf(message, sizeof(message),
+             "ish: could not convert rootfs profile at %s to iSH fakefs format (status %d: %s)",
+             root.fileSystemRepresentation, conversion, strerror(errno));
+    ISHLog(message);
+    return ISH_RUN_ERR_ROOTFS_EXTRACT_FAILED;
+  }
+  NSFileManager *fileManager = [NSFileManager defaultManager];
+  struct stat rootStatus;
+  BOOL rootExists = lstat(root.fileSystemRepresentation, &rootStatus) == 0;
+  if (rootExists && !S_ISDIR(rootStatus.st_mode)) {
+    ISHLog("ish: the selected rootfs profile is not a real directory; remove and recreate it");
+    return ISH_RUN_ERR_ROOTFS_EXTRACT_FAILED;
+  }
+  if (rootExists) {
+    NSArray<NSString *> *entries = [fileManager contentsOfDirectoryAtPath:root error:nil];
+    if (entries == nil || entries.count > 0) {
+      ISHLog("ish: the selected rootfs profile is incomplete or incompatible; remove it and import or recreate a valid rootfs");
+      return ISH_RUN_ERR_ROOTFS_EXTRACT_FAILED;
+    }
+  }
+  NSError *directoryError = nil;
+  if (!rootExists &&
+      ![fileManager createDirectoryAtPath:root withIntermediateDirectories:YES attributes:nil error:&directoryError]) {
+    ISHLog([[NSString stringWithFormat:@"ish: could not prepare the selected rootfs profile: %@",
               directoryError.localizedDescription ?: @"unknown filesystem error"] UTF8String]);
     return ISH_RUN_ERR_ROOTFS_EXTRACT_FAILED;
   }
@@ -398,14 +459,19 @@ static int ISHPrepareRootfsIfNeeded(void) {
     return ISH_RUN_ERR_ROOTFS_EXTRACT_FAILED;
   }
   int status = ish_rootfs_extract(archivePath.fileSystemRepresentation, root.fileSystemRepresentation);
+  if (status == ISH_ROOTFS_OK) {
+    status = ish_rootfs_prepare_fakefs(root.fileSystemRepresentation);
+  }
   if (status != ISH_ROOTFS_OK) {
     char message[256];
     snprintf(message, sizeof(message), "ish: rootfs extraction into %s failed (status %d: %s)",
              root.fileSystemRepresentation, status, strerror(errno));
     ISHLog(message);
+    [fileManager removeItemAtPath:root error:nil];
+    [fileManager createDirectoryAtPath:root withIntermediateDirectories:YES attributes:nil error:nil];
     return ISH_RUN_ERR_ROOTFS_EXTRACT_FAILED;
   }
-  return ISH_RUN_OK;
+  return ISHRootfsIsProvisioned(root) ? ISH_RUN_OK : ISH_RUN_ERR_ROOTFS_EXTRACT_FAILED;
 }
 
 /* actuate_kernel() calls the pinned upstream run_kernel(), which is the
@@ -428,6 +494,9 @@ static void ish_boot_once_body(void) {
   pthread_mutex_unlock(&g_configuration_lock);
   int status = ISHPrepareRootfsIfNeeded();
   if (status != ISH_RUN_OK) {
+    pthread_mutex_lock(&g_configuration_lock);
+    g_boot_started = 0;
+    pthread_mutex_unlock(&g_configuration_lock);
     atomic_store(&g_boot_result, status);
     return;
   }
@@ -438,6 +507,9 @@ static void ish_boot_once_body(void) {
   int created = pthread_create(&thread, &attr, ish_boot_thread_entry, NULL);
   pthread_attr_destroy(&attr);
   if (created != 0) {
+    pthread_mutex_lock(&g_configuration_lock);
+    g_boot_started = 0;
+    pthread_mutex_unlock(&g_configuration_lock);
     ISHLog("ish: failed to start the guest kernel boot thread");
     atomic_store(&g_boot_result, ISH_RUN_ERR_SESSION_START_FAILED);
     return;

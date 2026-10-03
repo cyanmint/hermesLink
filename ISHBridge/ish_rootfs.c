@@ -10,10 +10,14 @@
 #include "ish_rootfs.h"
 #include "ish_path_safety.h"
 
+#include <sqlite3.h>
 #include <zlib.h>
 
+#include <dirent.h>
 #include <errno.h>
 #include <fcntl.h>
+#include <limits.h>
+#include <stdint.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
@@ -25,6 +29,360 @@
 #define ISH_TAR_NAME_LEN 100
 #define ISH_TAR_PREFIX_LEN 155
 #define ISH_TAR_PATH_MAX (ISH_TAR_NAME_LEN + 1 + ISH_TAR_PREFIX_LEN + 1)
+
+typedef struct {
+  uint32_t mode;
+  uint32_t uid;
+  uint32_t gid;
+  uint32_t rdev;
+} ish_fakefs_stat;
+
+static int ish_fakefs_exec(sqlite3 *db, const char *sql) {
+  char *error = NULL;
+  int status = sqlite3_exec(db, sql, NULL, NULL, &error);
+  sqlite3_free(error);
+  return status == SQLITE_OK ? 0 : -1;
+}
+
+static int ish_fakefs_store_path(sqlite3 *db, sqlite3_stmt *insert_stat,
+                                 sqlite3_stmt *insert_path, const char *path,
+                                 mode_t mode) {
+  ish_fakefs_stat stat = {
+      .mode = (uint32_t) mode,
+      .uid = 0,
+      .gid = 0,
+      .rdev = 0,
+  };
+  int status = sqlite3_bind_blob(insert_stat, 1, &stat, sizeof(stat), SQLITE_TRANSIENT);
+  if (status == SQLITE_OK) {
+    status = sqlite3_step(insert_stat);
+  }
+  if (status != SQLITE_DONE) {
+    sqlite3_reset(insert_stat);
+    sqlite3_clear_bindings(insert_stat);
+    return -1;
+  }
+  sqlite3_reset(insert_stat);
+  sqlite3_clear_bindings(insert_stat);
+
+  status = sqlite3_bind_blob(insert_path, 1, path, (int) strlen(path), SQLITE_TRANSIENT);
+  if (status == SQLITE_OK) {
+    status = sqlite3_bind_int64(insert_path, 2, sqlite3_last_insert_rowid(db));
+  }
+  if (status == SQLITE_OK) {
+    status = sqlite3_step(insert_path);
+  }
+  sqlite3_reset(insert_path);
+  sqlite3_clear_bindings(insert_path);
+  return status == SQLITE_DONE ? 0 : -1;
+}
+
+static int ish_fakefs_index_tree(sqlite3 *db, sqlite3_stmt *insert_stat,
+                                 sqlite3_stmt *insert_path, const char *data_root,
+                                 const char *relative_path) {
+  char directory_path[4096];
+  if (relative_path[0] == '\0') {
+    if (snprintf(directory_path, sizeof(directory_path), "%s", data_root) >=
+        (int) sizeof(directory_path)) {
+      errno = ENAMETOOLONG;
+      return -1;
+    }
+  } else if (snprintf(directory_path, sizeof(directory_path), "%s/%s",
+                      data_root, relative_path) >= (int) sizeof(directory_path)) {
+    errno = ENAMETOOLONG;
+    return -1;
+  }
+
+  struct stat directory_stat;
+  if (lstat(directory_path, &directory_stat) != 0 || !S_ISDIR(directory_stat.st_mode)) {
+    return -1;
+  }
+  if (ish_fakefs_store_path(db, insert_stat, insert_path, relative_path,
+                            directory_stat.st_mode) != 0 ||
+      chmod(directory_path, 0777) != 0) {
+    return -1;
+  }
+
+  DIR *directory = opendir(directory_path);
+  if (directory == NULL) {
+    return -1;
+  }
+  int result = 0;
+  struct dirent *entry;
+  while ((entry = readdir(directory)) != NULL) {
+    if (strcmp(entry->d_name, ".") == 0 || strcmp(entry->d_name, "..") == 0) {
+      continue;
+    }
+    char child_path[4096];
+    int written = relative_path[0] == '\0'
+        ? snprintf(child_path, sizeof(child_path), "%s", entry->d_name)
+        : snprintf(child_path, sizeof(child_path), "%s/%s", relative_path, entry->d_name);
+    if (written < 0 || written >= (int) sizeof(child_path)) {
+      errno = ENAMETOOLONG;
+      result = -1;
+      break;
+    }
+    char host_path[4096];
+    written = snprintf(host_path, sizeof(host_path), "%s/%s", data_root, child_path);
+    if (written < 0 || written >= (int) sizeof(host_path)) {
+      errno = ENAMETOOLONG;
+      result = -1;
+      break;
+    }
+
+    struct stat child_stat;
+    if (lstat(host_path, &child_stat) != 0) {
+      result = -1;
+      break;
+    }
+    if (S_ISDIR(child_stat.st_mode)) {
+      if (ish_fakefs_index_tree(db, insert_stat, insert_path, data_root, child_path) != 0) {
+        result = -1;
+        break;
+      }
+    } else if (S_ISREG(child_stat.st_mode)) {
+      if (ish_fakefs_store_path(db, insert_stat, insert_path, child_path,
+                                child_stat.st_mode) != 0 ||
+          chmod(host_path, 0666) != 0) {
+        result = -1;
+        break;
+      }
+    } else if (S_ISLNK(child_stat.st_mode)) {
+      char link_target[PATH_MAX + 1];
+      ssize_t target_length = readlink(host_path, link_target, PATH_MAX);
+      if (target_length <= 0 || target_length >= PATH_MAX) {
+        errno = EINVAL;
+        result = -1;
+        break;
+      }
+      link_target[target_length] = '\0';
+      if (unlink(host_path) != 0) {
+        result = -1;
+        break;
+      }
+      int fd = open(host_path, O_WRONLY | O_CREAT | O_EXCL | O_NOFOLLOW, 0666);
+      if (fd < 0) {
+        result = -1;
+        break;
+      }
+      size_t offset = 0;
+      while (offset < (size_t) target_length) {
+        ssize_t count = write(fd, link_target + offset, (size_t) target_length - offset);
+        if (count < 0 && errno == EINTR) {
+          continue;
+        }
+        if (count <= 0) {
+          if (count == 0) {
+            errno = EIO;
+          }
+          result = -1;
+          break;
+        }
+        offset += (size_t) count;
+      }
+      close(fd);
+      if (result != 0 ||
+          ish_fakefs_store_path(db, insert_stat, insert_path, child_path,
+                                child_stat.st_mode) != 0) {
+        result = -1;
+        break;
+      }
+    } else {
+      errno = ENOTSUP;
+      result = -1;
+      break;
+    }
+  }
+  closedir(directory);
+  return result;
+}
+
+static int ish_fakefs_create_database(const char *root, const char *data_root) {
+  char database_path[4096];
+  if (snprintf(database_path, sizeof(database_path), "%s/meta.db", root) >=
+      (int) sizeof(database_path)) {
+    errno = ENAMETOOLONG;
+    return -1;
+  }
+
+  sqlite3 *db = NULL;
+  if (sqlite3_open_v2(database_path, &db,
+                      SQLITE_OPEN_READWRITE | SQLITE_OPEN_CREATE, NULL) != SQLITE_OK) {
+    sqlite3_close(db);
+    return -1;
+  }
+  int result = -1;
+  sqlite3_stmt *insert_stat = NULL;
+  sqlite3_stmt *insert_path = NULL;
+  if (ish_fakefs_exec(db,
+      "PRAGMA journal_mode=DELETE;"
+      "BEGIN;"
+      "CREATE TABLE meta (id INTEGER UNIQUE DEFAULT 0, db_inode INTEGER);"
+      "INSERT INTO meta (db_inode) VALUES (0);"
+      "CREATE TABLE stats (inode INTEGER PRIMARY KEY, stat BLOB);"
+      "CREATE TABLE paths (path BLOB PRIMARY KEY, inode INTEGER REFERENCES stats(inode));"
+      "CREATE INDEX inode_to_path ON paths (inode, path);"
+      "PRAGMA user_version=3;") != 0 ||
+      sqlite3_prepare_v2(db, "INSERT INTO stats (stat) VALUES (?)", -1,
+                         &insert_stat, NULL) != SQLITE_OK ||
+      sqlite3_prepare_v2(db, "INSERT OR REPLACE INTO paths (path, inode) VALUES (?, ?)", -1,
+                         &insert_path, NULL) != SQLITE_OK) {
+    goto cleanup;
+  }
+  if (ish_fakefs_index_tree(db, insert_stat, insert_path, data_root, "") != 0 ||
+      ish_fakefs_exec(db, "COMMIT;") != 0) {
+    ish_fakefs_exec(db, "ROLLBACK;");
+    goto cleanup;
+  }
+  result = 0;
+
+cleanup:
+  sqlite3_finalize(insert_stat);
+  sqlite3_finalize(insert_path);
+  sqlite3_close(db);
+  return result;
+}
+
+static int ish_fakefs_database_is_valid(const char *database_path) {
+  sqlite3 *db = NULL;
+  if (sqlite3_open_v2(database_path, &db, SQLITE_OPEN_READONLY, NULL) != SQLITE_OK) {
+    sqlite3_close(db);
+    return 0;
+  }
+  sqlite3_stmt *statement = NULL;
+  int valid = sqlite3_prepare_v2(db,
+      "SELECT db_inode FROM meta LIMIT 1", -1, &statement, NULL) == SQLITE_OK &&
+      sqlite3_step(statement) == SQLITE_ROW;
+  sqlite3_finalize(statement);
+  statement = NULL;
+  valid = valid &&
+      sqlite3_prepare_v2(db,
+          "SELECT stats.stat FROM paths JOIN stats ON stats.inode = paths.inode WHERE paths.path = ?",
+          -1, &statement, NULL) == SQLITE_OK;
+  const char *required_paths[] = {
+      "", "bin/busybox", "etc/alpine-release", "sbin/init",
+  };
+  for (size_t i = 0; valid && i < sizeof(required_paths) / sizeof(required_paths[0]); i++) {
+    ish_fakefs_stat stat;
+    int path_length = (int) strlen(required_paths[i]);
+    if (sqlite3_bind_blob(statement, 1, required_paths[i], path_length, SQLITE_STATIC) != SQLITE_OK ||
+        sqlite3_step(statement) != SQLITE_ROW ||
+        sqlite3_column_bytes(statement, 0) != (int) sizeof(stat)) {
+      valid = 0;
+    } else {
+      memcpy(&stat, sqlite3_column_blob(statement, 0), sizeof(stat));
+      mode_t type = stat.mode & S_IFMT;
+      if ((i == 0 && type != S_IFDIR) ||
+          (i == 1 && (type != S_IFREG || (stat.mode & 0111) == 0)) ||
+          (i == 2 && type != S_IFREG) ||
+          (i == 3 && type != S_IFLNK && type != S_IFREG)) {
+        valid = 0;
+      }
+    }
+    sqlite3_reset(statement);
+    sqlite3_clear_bindings(statement);
+  }
+  sqlite3_finalize(statement);
+  sqlite3_close(db);
+  return valid;
+}
+
+static int ish_fakefs_move_entries(const char *root, const char *data_root) {
+  DIR *directory = opendir(root);
+  if (directory == NULL) {
+    return -1;
+  }
+  int result = 0;
+  struct dirent *entry;
+  while ((entry = readdir(directory)) != NULL) {
+    if (strcmp(entry->d_name, ".") == 0 || strcmp(entry->d_name, "..") == 0 ||
+        strcmp(entry->d_name, "data") == 0 || strcmp(entry->d_name, "meta.db") == 0) {
+      continue;
+    }
+    char source[4096];
+    char destination[4096];
+    if (snprintf(source, sizeof(source), "%s/%s", root, entry->d_name) >=
+            (int) sizeof(source) ||
+        snprintf(destination, sizeof(destination), "%s/%s", data_root, entry->d_name) >=
+            (int) sizeof(destination)) {
+      errno = ENAMETOOLONG;
+      result = -1;
+      break;
+    }
+    struct stat existing;
+    if (lstat(destination, &existing) == 0) {
+      errno = EEXIST;
+      result = -1;
+      break;
+    }
+    if (errno != ENOENT || rename(source, destination) != 0) {
+      result = -1;
+      break;
+    }
+  }
+  closedir(directory);
+  return result;
+}
+
+int ish_rootfs_prepare_fakefs(const char *root) {
+  if (root == NULL || root[0] == '\0') {
+    errno = EINVAL;
+    return ISH_ROOTFS_ERR_DEST;
+  }
+  char data_root[4096];
+  char database_path[4096];
+  if (snprintf(data_root, sizeof(data_root), "%s/data", root) >= (int) sizeof(data_root) ||
+      snprintf(database_path, sizeof(database_path), "%s/meta.db", root) >=
+          (int) sizeof(database_path)) {
+    errno = ENAMETOOLONG;
+    return ISH_ROOTFS_ERR_DEST;
+  }
+  struct stat data_stat;
+  struct stat database_stat;
+  int have_data = lstat(data_root, &data_stat) == 0 && S_ISDIR(data_stat.st_mode);
+  int have_database = lstat(database_path, &database_stat) == 0 &&
+      S_ISREG(database_stat.st_mode) && database_stat.st_size > 0;
+  if (have_data && have_database) {
+    return ish_fakefs_database_is_valid(database_path)
+        ? ISH_ROOTFS_OK : ISH_ROOTFS_ERR_FORMAT;
+  }
+  if (!have_data && lstat(data_root, &data_stat) != 0) {
+    if (errno != ENOENT || mkdir(data_root, 0777) != 0) {
+      return ISH_ROOTFS_ERR_IO;
+    }
+  } else if (!have_data && !S_ISDIR(data_stat.st_mode)) {
+    errno = ENOTDIR;
+    return ISH_ROOTFS_ERR_DEST;
+  }
+  if (chmod(root, 0777) != 0) {
+    return ISH_ROOTFS_ERR_IO;
+  }
+  if (ish_fakefs_move_entries(root, data_root) != 0) {
+    return ISH_ROOTFS_ERR_IO;
+  }
+  unlink(database_path);
+  char sidecar_path[4096];
+  if (snprintf(sidecar_path, sizeof(sidecar_path), "%s-wal", database_path) >=
+      (int) sizeof(sidecar_path)) {
+    errno = ENAMETOOLONG;
+    return ISH_ROOTFS_ERR_DEST;
+  }
+  unlink(sidecar_path);
+  if (snprintf(sidecar_path, sizeof(sidecar_path), "%s-shm", database_path) >=
+      (int) sizeof(sidecar_path)) {
+    errno = ENAMETOOLONG;
+    return ISH_ROOTFS_ERR_DEST;
+  }
+  unlink(sidecar_path);
+  if (ish_fakefs_create_database(root, data_root) != 0) {
+    return ISH_ROOTFS_ERR_IO;
+  }
+  if (!ish_fakefs_database_is_valid(database_path)) {
+    errno = EINVAL;
+    return ISH_ROOTFS_ERR_FORMAT;
+  }
+  return ISH_ROOTFS_OK;
+}
 
 struct ish_tar_header {
   char name[ISH_TAR_NAME_LEN];
@@ -179,6 +537,41 @@ static int ish_apply_directory_modes(ish_directory_mode *modes, size_t count) {
   return 0;
 }
 
+static int ish_normalize_entry_name(const char *name, char *normalized,
+                                    size_t normalized_size) {
+  size_t output_length = 0;
+  const char *cursor = name;
+  while (*cursor != '\0') {
+    while (*cursor == '/') {
+      cursor++;
+    }
+    if (*cursor == '\0') {
+      break;
+    }
+    const char *component = cursor;
+    while (*cursor != '\0' && *cursor != '/') {
+      cursor++;
+    }
+    size_t component_length = (size_t) (cursor - component);
+    if (component_length == 1 && component[0] == '.') {
+      continue;
+    }
+    if (output_length != 0) {
+      if (output_length + 1 >= normalized_size) {
+        return 0;
+      }
+      normalized[output_length++] = '/';
+    }
+    if (component_length >= normalized_size - output_length) {
+      return 0;
+    }
+    memcpy(normalized + output_length, component, component_length);
+    output_length += component_length;
+  }
+  normalized[output_length] = '\0';
+  return 1;
+}
+
 static void ish_free_directory_modes(ish_directory_mode *modes, size_t count) {
   for (size_t i = 0; i < count; i++) {
     free(modes[i].path);
@@ -324,9 +717,21 @@ int ish_rootfs_extract(const char *archive_path, const char *dest_root) {
       result = ISH_ROOTFS_ERR_UNSAFE_PATH;
       break;
     }
+    char normalized_name[ISH_TAR_PATH_MAX];
+    if (!ish_normalize_entry_name(name, normalized_name, sizeof(normalized_name))) {
+      result = ISH_ROOTFS_ERR_UNSAFE_PATH;
+      break;
+    }
+    if (normalized_name[0] == '\0') {
+      if (header.typeflag != '5' || ish_discard_entry_remainder(archive, size, 0) != 0) {
+        result = header.typeflag == '5' ? ISH_ROOTFS_ERR_READ : ISH_ROOTFS_ERR_UNSAFE_PATH;
+        break;
+      }
+      continue;
+    }
 
     char dest_path[4096];
-    if (!ish_path_join_within_root(dest_root, name, dest_path, sizeof(dest_path))) {
+    if (!ish_path_join_within_root(dest_root, normalized_name, dest_path, sizeof(dest_path))) {
       result = ISH_ROOTFS_ERR_UNSAFE_PATH;
       break;
     }

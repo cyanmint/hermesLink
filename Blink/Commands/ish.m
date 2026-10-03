@@ -70,9 +70,16 @@ int ish_main(int argc, char *argv[]) {
     case ISH_RUN_ERR_INVALID_ARGUMENT:
       fprintf(thread_stderr, "ish: invalid command\n");
       return 2;
-    case ISH_RUN_ERR_ROOTFS_EXTRACT_FAILED:
-      fprintf(thread_stderr, "ish: could not prepare the Alpine guest root (see diagnostics log)\n");
+    case ISH_RUN_ERR_ROOTFS_EXTRACT_FAILED: {
+      NSString *activeProfile = ISHRootfsActiveProfileName(NULL) ?: @"unknown";
+      fprintf(thread_stderr,
+              "ish: the selected rootfs profile '%s' is unusable. Remove it with "
+              "`ishfs delete '%s' --yes`, then recreate it or import a valid rootfs. "
+              "If it is the only profile, deletion resets it; force-quit and reopen Blink before retrying.\n",
+              activeProfile.UTF8String,
+              activeProfile.UTF8String);
       return 71;
+    }
     case ISH_RUN_ERR_BOOT_TIMEOUT:
       fprintf(thread_stderr, "ish: the guest Linux kernel did not finish booting in time; try again\n");
       return 75;

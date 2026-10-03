@@ -8,15 +8,14 @@ extern "C" {
 #endif
 
 /* Safe, from-scratch gzip+ustar extraction of the pinned Alpine rootfs
- * archive into writable, persistent app storage. This is original glue
+ * archive into writable, persistent app storage, followed by creation of
+ * the SQLite metadata required by upstream fakefs. This is original glue
  * code: it does not reuse or copy any part of upstream iSH's own root
  * import pipeline (app/Roots.m, which is UIKit-coupled and not vendored
- * here). It links against zlib only (a standard iOS system library) for
- * gzip framing, and parses the plain POSIX ustar container format used by
- * the pinned `rootfs.tar.gz` (regular files, directories and symlinks —
- * the only entry types present in that pinned archive; see
- * hermes/tests/test_ish_rootfs_extract.py for a format audit against the
- * real pinned asset).
+ * here). It uses the standard iOS zlib and SQLite libraries and parses
+ * the plain POSIX ustar container format (regular files, directories and
+ * symlinks — the only entry types present in the pinned archive; see
+ * hermes/tests/test_ish_bridge_c.py for host-side coverage).
  *
  * Security properties:
  *  - every entry path is validated with ish_path_is_safe_entry_name()
@@ -49,6 +48,12 @@ typedef enum {
  * fresh, uniquely-named staging directory can discard it on failure before
  * publishing. */
 int ish_rootfs_extract(const char *archive_path, const char *dest_root);
+
+/* Converts an extracted, ordinary root tree in `root` to the pinned iSH
+ * fakefs layout (`root/data` plus `root/meta.db`). Existing fakefs profiles
+ * are validated and left unchanged. The tree must contain executable
+ * `bin/busybox`, `etc/alpine-release`, and `sbin/init` entries. */
+int ish_rootfs_prepare_fakefs(const char *root);
 
 #ifdef __cplusplus
 }

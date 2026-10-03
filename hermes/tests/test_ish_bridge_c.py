@@ -57,7 +57,7 @@ class IshBridgeCTests(unittest.TestCase):
             str(BRIDGE_DIR / "ish_path_safety.c"),
             str(BRIDGE_DIR / "ish_rootfs.c"),
             str(BRIDGE_DIR / "ish_exit_protocol.c"),
-            "-lz", "-o", str(cls.binary),
+            "-lsqlite3", "-lz", "-o", str(cls.binary),
         ]
         result = subprocess.run(compile_command, capture_output=True, text=True)
         if result.returncode != 0:
@@ -195,10 +195,93 @@ class IshBridgeCTests(unittest.TestCase):
         self.assertEqual(stat.S_IMODE((dest / "root").stat().st_mode), 0o555)
         self.assertEqual(stat.S_IMODE((dest / "root/etc").stat().st_mode), 0o500)
 
+    def test_raw_rootfs_is_converted_to_iSH_fakefs_layout(self) -> None:
+        import sqlite3
+
+        root = self.build_dir / "fakefs-root"
+        (root / "bin").mkdir(parents=True)
+        (root / "etc").mkdir()
+        (root / "bin/busybox").write_bytes(b"busybox")
+        (root / "etc/alpine-release").write_text("3.21.3\n", encoding="utf-8")
+        (root / "sbin").mkdir()
+        (root / "sbin/init").symlink_to("../bin/busybox")
+        os.chmod(root / "bin/busybox", 0o755)
+        (root / "bin/sh").symlink_to("busybox")
+
+        result = self._run("fakefsify", str(root))
+
+        self.assertEqual(result.stdout.strip(), b"0", result.stderr)
+        self.assertFalse((root / "bin").exists())
+        self.assertTrue((root / "data/bin/busybox").is_file())
+        self.assertFalse((root / "data/bin/sh").is_symlink())
+        self.assertEqual((root / "data/bin/sh").read_text(encoding="utf-8"), "busybox")
+        with sqlite3.connect(root / "meta.db") as db:
+            paths = dict(db.execute("SELECT CAST(path AS TEXT), inode FROM paths"))
+            self.assertEqual(db.execute("PRAGMA user_version").fetchone()[0], 3)
+            self.assertIn("", paths)
+            self.assertIn("bin/busybox", paths)
+            self.assertIn("etc/alpine-release", paths)
+            mode_blob = db.execute(
+                "SELECT stat FROM stats WHERE inode = ?", (paths["bin/sh"],)
+            ).fetchone()[0]
+            mode = int.from_bytes(mode_blob[:4], byteorder="little")
+            self.assertTrue(stat.S_ISLNK(mode))
+
+    def test_fakefs_conversion_is_idempotent(self) -> None:
+        root = self.build_dir / "fakefs-idempotent"
+        (root / "bin").mkdir(parents=True)
+        (root / "etc").mkdir()
+        (root / "bin/busybox").write_bytes(b"busybox")
+        (root / "etc/alpine-release").write_text("3.21.3\n", encoding="utf-8")
+        (root / "sbin").mkdir()
+        (root / "sbin/init").symlink_to("../bin/busybox")
+        os.chmod(root / "bin/busybox", 0o755)
+
+        first = self._run("fakefsify", str(root))
+        second = self._run("fakefsify", str(root))
+
+        self.assertEqual(first.stdout.strip(), b"0", first.stderr)
+        self.assertEqual(second.stdout.strip(), b"0", second.stderr)
+        self.assertEqual((root / "data/bin/busybox").read_bytes(), b"busybox")
+
+    def test_tar_dot_prefixes_are_normalized_for_fakefs_database_paths(self) -> None:
+        import sqlite3
+
+        archive = self.build_dir / "dot-prefix.tar.gz"
+        busybox = tarfile.TarInfo(name="./bin/busybox")
+        busybox.mode = 0o755
+        busybox.size = 7
+        release = tarfile.TarInfo(name="./etc/alpine-release")
+        release.size = 7
+        init = tarfile.TarInfo(name="./sbin/init")
+        init.type = tarfile.SYMTYPE
+        init.linkname = "../bin/busybox"
+        self._make_tarball(archive, [
+            (busybox, b"busybox"),
+            (release, b"3.21.3\n"),
+            (init, None),
+        ])
+        root = self.build_dir / "dot-prefix-root"
+        root.mkdir()
+
+        extracted = self._run("extract", str(archive), str(root))
+        converted = self._run("fakefsify", str(root))
+
+        self.assertEqual(extracted.stdout.strip(), b"0", extracted.stderr)
+        self.assertEqual(converted.stdout.strip(), b"0", converted.stderr)
+        with sqlite3.connect(root / "meta.db") as db:
+            paths = {row[0] for row in db.execute("SELECT CAST(path AS TEXT) FROM paths")}
+        self.assertIn("bin/busybox", paths)
+        self.assertIn("etc/alpine-release", paths)
+        self.assertIn("sbin/init", paths)
+        self.assertNotIn("./bin/busybox", paths)
+
     # ---- ish_rootfs extraction: the real pinned archive ----
 
     @unittest.skipUnless(PINNED_ROOTFS.exists(), "pinned iSH rootfs has not been fetched")
     def test_pinned_alpine_rootfs_extracts_with_expected_markers(self) -> None:
+        import sqlite3
+
         dest = self.build_dir / "dest-pinned"
         dest.mkdir()
         result = self._run("extract", str(PINNED_ROOTFS), str(dest))
@@ -206,6 +289,15 @@ class IshBridgeCTests(unittest.TestCase):
         self.assertTrue((dest / "bin" / "busybox").exists())
         self.assertTrue((dest / "etc" / "alpine-release").exists())
         self.assertTrue((dest / "sbin" / "init").exists())
+        converted = self._run("fakefsify", str(dest))
+        self.assertEqual(converted.stdout.strip(), b"0", converted.stderr)
+        self.assertTrue((dest / "data" / "bin" / "busybox").exists())
+        self.assertTrue((dest / "data" / "etc" / "alpine-release").exists())
+        self.assertTrue((dest / "data" / "sbin" / "init").exists())
+        with sqlite3.connect(dest / "meta.db") as db:
+            self.assertGreater(
+                db.execute("SELECT count(*) FROM paths").fetchone()[0], 1000
+            )
 
     # ---- ish_exit_protocol: wrap + streaming scan ----
 

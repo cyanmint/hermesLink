@@ -112,12 +112,20 @@ registered alongside `terminal` in the standard Hermes bundles. The design:
 - **Guest root / fakefs** — `ISHBridge/ish_rootfs.{h,c}` is an original,
   from-scratch gzip+ustar extractor (zlib + a minimal ustar parser; no
   upstream code reused) that unpacks the pinned, build-time-bundled Alpine
-  rootfs archive into `Documents/iSH/Profiles/Alpine/` on first use. Existing
-  rootfs files at `Documents/iSH/` are migrated into that default profile.
-  Other named profiles remain Files-visible below `Documents/iSH/Profiles/`.
-  The extractor leaves directories writable while extracting their contents,
-  then restores the archive's directory modes. A complete manually imported
-  folder or gzip-compressed tar rootfs is reused as-is,
+  rootfs archive into `Documents/iSH/Profiles/Alpine/` on first use, then
+  converts it to upstream fakefs's required `data/` plus `meta.db` layout.
+  Existing rootfs files at `Documents/iSH/` are migrated into that default
+  profile. Other named profiles remain Files-visible below
+  `Documents/iSH/Profiles/`. The converter preserves guest modes in iSH's
+  metadata database while making host-backed data writable and encodes
+  symlinks in the representation fakefs expects. The extractor leaves
+  directories writable while extracting their contents, then restores the
+  archive's directory modes. Raw imported rootfs folders/archives and existing
+  legacy profiles are converted before the kernel starts. Nonempty invalid
+  profiles are preserved and reported with instructions to delete/recreate or
+  import a valid rootfs; they are never silently overwritten. Profiles are
+  checked for the required init program before boot so a missing fakefs root
+  cannot escalate into the kernel's panic/trap path,
   validating every entry with `ISHBridge/ish_path_safety.{h,c}` (rejects
   absolute paths and `..` components, and refuses to traverse through an
   existing non-directory/symlink path component) before touching the

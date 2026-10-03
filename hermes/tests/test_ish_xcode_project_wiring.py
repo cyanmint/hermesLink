@@ -179,8 +179,13 @@ class IshNativeXcconfigTests(unittest.TestCase):
         self.assertIn("NSDocumentDirectory", bridge)
         self.assertIn('stringByAppendingPathComponent:@"iSH/Profiles/Alpine"', bridge)
         self.assertIn("Files-visible Documents/iSH", header)
+        self.assertIn('@"data"', bridge)
         self.assertIn('@"bin/busybox"', bridge)
         self.assertIn('@"etc/alpine-release"', bridge)
+        self.assertIn('@"sbin/init"', bridge)
+        self.assertIn("ish_rootfs_prepare_fakefs", bridge)
+        self.assertIn("incomplete or incompatible; remove it", bridge)
+        self.assertIn("g_boot_started = 0", bridge)
 
     def test_kernel_readiness_waits_for_rootfs_init_instead_of_probing_workqueue(self) -> None:
         source = (ISH_DIR / "ish_kernel_bridge.m").read_text(encoding="utf-8")
@@ -202,6 +207,9 @@ class IshNativeXcconfigTests(unittest.TestCase):
         self.assertIn("moveItemAtPath:source toPath:destination", source)
         self.assertIn("ish_kernel_has_booted()", source)
         self.assertIn("ish_import_rootfs_archive", source)
+        self.assertIn("ish_rootfs_prepare_fakefs", source)
+        self.assertIn("names.count < 2", source)
+        self.assertIn("Could not reset the only rootfs profile", source)
 
     def test_settings_exposes_rootfs_profiles(self) -> None:
         settings = (ROOT / "Settings" / "SettingsView.swift").read_text(encoding="utf-8")

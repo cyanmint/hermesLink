@@ -87,6 +87,16 @@ static int cmd_extract(int argc, char **argv) {
   return 0;
 }
 
+static int cmd_fakefsify(int argc, char **argv) {
+  if (argc != 3) {
+    fprintf(stderr, "usage: %s fakefsify <rootfs-dir>\n", argv[0]);
+    return 2;
+  }
+  int status = ish_rootfs_prepare_fakefs(argv[2]);
+  printf("%d\n", status);
+  return 0;
+}
+
 static int cmd_wrap(int argc, char **argv) {
   (void) argc;
   (void) argv;
@@ -155,7 +165,7 @@ static int cmd_scan(int argc, char **argv) {
 
 int main(int argc, char **argv) {
   if (argc < 2) {
-    fprintf(stderr, "usage: %s <path-safe|path-join|extract|wrap|scan> ...\n", argv[0]);
+    fprintf(stderr, "usage: %s <path-safe|path-join|extract|fakefsify|wrap|scan> ...\n", argv[0]);
     return 2;
   }
   if (strcmp(argv[1], "path-safe") == 0) {
@@ -166,6 +176,9 @@ int main(int argc, char **argv) {
   }
   if (strcmp(argv[1], "extract") == 0) {
     return cmd_extract(argc, argv);
+  }
+  if (strcmp(argv[1], "fakefsify") == 0) {
+    return cmd_fakefsify(argc, argv);
   }
   if (strcmp(argv[1], "wrap") == 0) {
     return cmd_wrap(argc, argv);

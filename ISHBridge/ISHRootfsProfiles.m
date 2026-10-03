@@ -3,6 +3,7 @@
 
 #import <BlinkConfig/BlinkPaths.h>
 #import "ish_kernel_bridge.h"
+#import "ish_rootfs.h"
 
 #include <sys/stat.h>
 #include <unistd.h>
@@ -68,8 +69,15 @@ static BOOL ISHRootfsIsValidAtPath(NSString *path) {
   if (!ISHIsDirectoryWithoutFollowingSymlink(path)) {
     return NO;
   }
-  return ISHIsRegularFileWithoutFollowingSymlink([path stringByAppendingPathComponent:@"bin/busybox"]) &&
-         ISHIsRegularFileWithoutFollowingSymlink([path stringByAppendingPathComponent:@"etc/alpine-release"]);
+  NSString *dataPath = [path stringByAppendingPathComponent:@"data"];
+  BOOL fakefs = ISHIsRegularFileWithoutFollowingSymlink([path stringByAppendingPathComponent:@"meta.db"]) &&
+      ISHIsRegularFileWithoutFollowingSymlink([dataPath stringByAppendingPathComponent:@"bin/busybox"]) &&
+      ISHIsRegularFileWithoutFollowingSymlink([dataPath stringByAppendingPathComponent:@"etc/alpine-release"]) &&
+      ISHIsRegularFileWithoutFollowingSymlink([dataPath stringByAppendingPathComponent:@"sbin/init"]);
+  BOOL raw = ISHIsRegularFileWithoutFollowingSymlink([path stringByAppendingPathComponent:@"bin/busybox"]) &&
+      ISHIsRegularFileWithoutFollowingSymlink([path stringByAppendingPathComponent:@"etc/alpine-release"]) &&
+      ISHPathEntryExists([path stringByAppendingPathComponent:@"sbin/init"]);
+  return fakefs || raw;
 }
 
 static void ISHMakeDirectoriesWritable(NSString *path) {
@@ -333,7 +341,15 @@ BOOL ISHRootfsImportProfile(NSString *name, NSURL *sourceURL, NSError **error) {
   }
   if (success && !ISHRootfsIsValidAtPath(staging)) {
     success = NO;
-    underlying = ISHProfilesError(8, @"The selected folder or archive does not contain a valid rootfs (expected bin/busybox and etc/alpine-release).");
+    underlying = ISHProfilesError(8, @"The selected folder or archive does not contain a valid rootfs (expected bin/busybox, etc/alpine-release, and sbin/init).");
+  }
+  if (success) {
+    int status = ish_rootfs_prepare_fakefs(staging.fileSystemRepresentation);
+    if (status != ISH_ROOTFS_OK) {
+      success = NO;
+      underlying = ISHProfilesError(status,
+          [NSString stringWithFormat:@"Could not prepare the rootfs for iSH (status %d).", status]);
+    }
   }
   if (success) {
     success = [ISHFileManager() moveItemAtPath:staging toPath:destination error:&underlying];
@@ -402,10 +418,6 @@ BOOL ISHRootfsDeleteProfile(NSString *name, NSError **error) {
     [ISHProfilesLock unlock];
     return ISHSetError(error, 3, [NSString stringWithFormat:@"No iSH rootfs profile named '%@'.", name]);
   }
-  if (names.count < 2) {
-    [ISHProfilesLock unlock];
-    return ISHSetError(error, 11, @"The last iSH rootfs profile cannot be deleted.");
-  }
   if (active && ish_kernel_has_booted()) {
     [ISHProfilesLock unlock];
     return ISHSetError(error, 10, @"The active rootfs cannot be deleted while the iSH kernel is running. Restart the app after selecting another profile.");
@@ -423,6 +435,27 @@ BOOL ISHRootfsDeleteProfile(NSString *name, NSError **error) {
   NSError *underlying = nil;
   NSString *staging = [ISHProfilesRoot() stringByAppendingPathComponent:
       [NSString stringWithFormat:@".delete-%@", NSUUID.UUID.UUIDString]];
+  if (names.count < 2) {
+    BOOL moved = [ISHFileManager() moveItemAtPath:path toPath:staging error:&underlying];
+    BOOL recreated = moved &&
+        [ISHFileManager() createDirectoryAtPath:path withIntermediateDirectories:NO
+                                      attributes:nil error:&underlying];
+    if (!recreated) {
+      if (moved) {
+        [ISHFileManager() moveItemAtPath:staging toPath:path error:nil];
+      }
+      [ISHProfilesLock unlock];
+      if (error != NULL) {
+        *error = underlying ?: ISHProfilesError(5, @"Could not reset the only rootfs profile.");
+      }
+      return NO;
+    }
+    ISHMakeDirectoriesWritable(staging);
+    [ISHFileManager() removeItemAtPath:staging error:nil];
+    [NSUserDefaults.standardUserDefaults setObject:name forKey:ISHActiveProfileDefaultsKey];
+    [ISHProfilesLock unlock];
+    return YES;
+  }
   BOOL success = [ISHFileManager() moveItemAtPath:path toPath:staging error:&underlying];
   if (success) {
     ISHMakeDirectoriesWritable(staging);
