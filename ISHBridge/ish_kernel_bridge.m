@@ -22,7 +22,7 @@
 #include <unistd.h>
 
 static pthread_mutex_t g_configuration_lock = PTHREAD_MUTEX_INITIALIZER;
-static char g_storage_base[1024];
+static char g_configured_root[1024];
 static ish_log_handler g_log_handler;
 static int g_boot_started;
 
@@ -37,17 +37,17 @@ static void ISHLog(const char *message) {
   }
 }
 
-int ish_configure(const char *storage_base, ish_log_handler log_handler) {
-  if (storage_base == NULL || storage_base[0] == '\0' || strlen(storage_base) >= sizeof(g_storage_base)) {
+int ish_configure(const char *root_path, ish_log_handler log_handler) {
+  if (root_path == NULL || root_path[0] == '\0' || strlen(root_path) >= sizeof(g_configured_root)) {
     return ISH_RUN_ERR_INVALID_ARGUMENT;
   }
   pthread_mutex_lock(&g_configuration_lock);
   if (g_boot_started &&
-      (strcmp(g_storage_base, storage_base) != 0 || g_log_handler != log_handler)) {
+      (strcmp(g_configured_root, root_path) != 0 || g_log_handler != log_handler)) {
     pthread_mutex_unlock(&g_configuration_lock);
     return ISH_RUN_ERR_INVALID_ARGUMENT;
   }
-  strlcpy(g_storage_base, storage_base, sizeof(g_storage_base));
+  strlcpy(g_configured_root, root_path, sizeof(g_configured_root));
   g_log_handler = log_handler;
   pthread_mutex_unlock(&g_configuration_lock);
   return ISH_RUN_OK;
@@ -307,22 +307,23 @@ void FsInitialize(void) {
 
 static NSString *ISHRootfsStorageDirectory(void) {
   pthread_mutex_lock(&g_configuration_lock);
-  NSString *base = g_storage_base[0] != '\0'
-      ? [NSString stringWithUTF8String:g_storage_base]
-      : NSSearchPathForDirectoriesInDomains(NSApplicationSupportDirectory, NSUserDomainMask, YES).firstObject;
+  NSString *root = g_configured_root[0] != '\0'
+      ? [NSString stringWithUTF8String:g_configured_root]
+      : [NSSearchPathForDirectoriesInDomains(NSDocumentDirectory, NSUserDomainMask, YES).firstObject
+          stringByAppendingPathComponent:@"iSH"];
   pthread_mutex_unlock(&g_configuration_lock);
-  if (base == nil) {
-    base = NSHomeDirectory();
+  if (root == nil) {
+    root = [NSHomeDirectory() stringByAppendingPathComponent:@"Documents/iSH"];
   }
-  base = [base stringByAppendingPathComponent:@"ish-root"];
-  [[NSFileManager defaultManager] createDirectoryAtPath:base withIntermediateDirectories:YES attributes:nil error:nil];
-  return base;
+  [[NSFileManager defaultManager] createDirectoryAtPath:root withIntermediateDirectories:YES attributes:nil error:nil];
+  return root;
 }
 
 static BOOL ISHRootfsIsProvisioned(NSString *root) {
   NSFileManager *fm = [NSFileManager defaultManager];
   return [fm fileExistsAtPath:[root stringByAppendingPathComponent:@"bin/busybox"]] &&
-         [fm fileExistsAtPath:[root stringByAppendingPathComponent:@"etc/alpine-release"]];
+         [fm fileExistsAtPath:[root stringByAppendingPathComponent:@"etc/alpine-release"]] &&
+         [fm fileExistsAtPath:[root stringByAppendingPathComponent:@"sbin/init"]];
 }
 
 /* Extracts the bundled, pinned Alpine rootfs archive (packaged into the app
@@ -337,6 +338,19 @@ static int ISHPrepareRootfsIfNeeded(void) {
   if (ISHRootfsIsProvisioned(root)) {
     return ISH_RUN_OK;
   }
+  NSFileManager *fileManager = [NSFileManager defaultManager];
+  NSError *directoryError = nil;
+  if ([fileManager fileExistsAtPath:root] &&
+      ![fileManager removeItemAtPath:root error:&directoryError]) {
+    ISHLog([[NSString stringWithFormat:@"ish: could not reset incomplete Documents/iSH root: %@",
+              directoryError.localizedDescription ?: @"unknown filesystem error"] UTF8String]);
+    return ISH_RUN_ERR_ROOTFS_EXTRACT_FAILED;
+  }
+  if (![fileManager createDirectoryAtPath:root withIntermediateDirectories:YES attributes:nil error:&directoryError]) {
+    ISHLog([[NSString stringWithFormat:@"ish: could not prepare Documents/iSH root directory: %@",
+              directoryError.localizedDescription ?: @"unknown filesystem error"] UTF8String]);
+    return ISH_RUN_ERR_ROOTFS_EXTRACT_FAILED;
+  }
   NSString *archivePath = [[NSBundle mainBundle] pathForResource:@"ish-rootfs" ofType:@"tar.gz"];
   if (archivePath == nil) {
     ISHLog("ish: bundled rootfs archive (ish-rootfs.tar.gz) is missing from the app bundle");
@@ -344,9 +358,9 @@ static int ISHPrepareRootfsIfNeeded(void) {
   }
   int status = ish_rootfs_extract(archivePath.fileSystemRepresentation, root.fileSystemRepresentation);
   if (status != ISH_ROOTFS_OK) {
-    char message[192];
-    snprintf(message, sizeof(message), "ish: rootfs extraction into %s failed (status %d)",
-             root.fileSystemRepresentation, status);
+    char message[256];
+    snprintf(message, sizeof(message), "ish: rootfs extraction into %s failed (status %d: %s)",
+             root.fileSystemRepresentation, status, strerror(errno));
     ISHLog(message);
     return ISH_RUN_ERR_ROOTFS_EXTRACT_FAILED;
   }

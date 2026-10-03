@@ -16,8 +16,8 @@
  * This stub provides the same API as Ish.framework so the native command
  * can remain registered in builds that do not have the iSH runtime. */
 
-int ish_configure(const char *storage_base, ish_log_handler log_handler) {
-  (void) storage_base;
+int ish_configure(const char *root_path, ish_log_handler log_handler) {
+  (void) root_path;
   (void) log_handler;
   return ISH_RUN_OK;
 }

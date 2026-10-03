@@ -16,6 +16,7 @@ from __future__ import annotations
 
 import os
 import shutil
+import stat
 import subprocess
 import tarfile
 import tempfile
@@ -170,6 +171,29 @@ class IshBridgeCTests(unittest.TestCase):
         self.assertEqual((dest / "a" / "b.txt").read_bytes(), b"hello")
         self.assertTrue((dest / "a" / "c").is_dir())
         self.assertTrue((dest / "a" / "link.txt").is_symlink())
+
+    def test_read_only_directories_are_chmodded_after_their_contents_extract(self) -> None:
+        archive = self.build_dir / "read-only-directories.tar.gz"
+        outer = tarfile.TarInfo(name="root")
+        outer.type = tarfile.DIRTYPE
+        outer.mode = 0o555
+        inner = tarfile.TarInfo(name="root/etc")
+        inner.type = tarfile.DIRTYPE
+        inner.mode = 0o500
+        release = tarfile.TarInfo(name="root/etc/alpine-release")
+        release.mode = 0o444
+        data = b"3.21.3\n"
+        release.size = len(data)
+        self._make_tarball(archive, [(outer, None), (inner, None), (release, data)])
+        dest = self.build_dir / "dest-read-only"
+        dest.mkdir()
+
+        result = self._run("extract", str(archive), str(dest))
+
+        self.assertEqual(result.stdout.strip(), b"0", result.stderr)
+        self.assertEqual((dest / "root/etc/alpine-release").read_bytes(), data)
+        self.assertEqual(stat.S_IMODE((dest / "root").stat().st_mode), 0o555)
+        self.assertEqual(stat.S_IMODE((dest / "root/etc").stat().st_mode), 0o500)
 
     # ---- ish_rootfs extraction: the real pinned archive ----
 

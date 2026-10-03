@@ -44,10 +44,10 @@ typedef enum {
 
 typedef void (*ish_log_handler)(const char *message);
 
-/* Configures the persistent-storage parent and optional diagnostic callback.
- * The framework stores its writable guest root under <base>/ish-root. Call
- * before the first boot; repeated calls with the same values are harmless. */
-int ish_configure(const char *storage_base, ish_log_handler log_handler);
+/* Configures the persistent guest-root directory and optional diagnostic
+ * callback. HermesLink supplies Files-visible Documents/iSH. Call before the
+ * first boot; repeated calls with the same values are harmless. */
+int ish_configure(const char *root_path, ish_log_handler log_handler);
 
 /* Boots the shared guest kernel if it has not been booted yet in this app
  * process (idempotent and thread-safe; cheap to call before every `ish`

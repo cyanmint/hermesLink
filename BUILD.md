@@ -109,7 +109,10 @@ registered alongside `terminal` in the standard Hermes bundles. The design:
 - **Guest root / fakefs** — `ISHBridge/ish_rootfs.{h,c}` is an original,
   from-scratch gzip+ustar extractor (zlib + a minimal ustar parser; no
   upstream code reused) that unpacks the pinned, build-time-bundled Alpine
-  rootfs archive into writable, persistent app storage on first use,
+  rootfs archive into the Files-visible `Documents/iSH/` directory on first
+  use. It leaves directories writable while extracting their contents, then
+  restores the archive's directory modes. A complete rootfs placed there
+  manually is reused as-is,
   validating every entry with `ISHBridge/ish_path_safety.{h,c}` (rejects
   absolute paths and `..` components, and refuses to traverse through an
   existing non-directory/symlink path component) before touching the

@@ -46,6 +46,11 @@ struct ish_tar_header {
   char padding[12];
 };
 
+typedef struct {
+  char *path;
+  mode_t mode;
+} ish_directory_mode;
+
 static int ish_block_is_all_zero(const unsigned char *block) {
   for (int i = 0; i < ISH_TAR_BLOCK_SIZE; i++) {
     if (block[i] != 0) {
@@ -135,6 +140,52 @@ static int ish_mkdir_parents(char *path, int create_last) {
   return 0;
 }
 
+static int ish_record_directory_mode(ish_directory_mode **modes, size_t *count,
+                                     size_t *capacity, const char *path, mode_t mode) {
+  for (size_t i = 0; i < *count; i++) {
+    if (strcmp((*modes)[i].path, path) == 0) {
+      (*modes)[i].mode = mode;
+      return 0;
+    }
+  }
+  if (*count == *capacity) {
+    size_t new_capacity = *capacity == 0 ? 16 : *capacity * 2;
+    ish_directory_mode *new_modes = realloc(*modes, new_capacity * sizeof(**modes));
+    if (new_modes == NULL) {
+      return -1;
+    }
+    *modes = new_modes;
+    *capacity = new_capacity;
+  }
+  char *copy = strdup(path);
+  if (copy == NULL) {
+    return -1;
+  }
+  (*modes)[*count].path = copy;
+  (*modes)[*count].mode = mode;
+  (*count)++;
+  return 0;
+}
+
+static int ish_apply_directory_modes(ish_directory_mode *modes, size_t count) {
+  /* Restore child directories first so restrictive parent modes cannot block
+   * finalizing their descendants. */
+  while (count > 0) {
+    count--;
+    if (chmod(modes[count].path, modes[count].mode) != 0) {
+      return -1;
+    }
+  }
+  return 0;
+}
+
+static void ish_free_directory_modes(ish_directory_mode *modes, size_t count) {
+  for (size_t i = 0; i < count; i++) {
+    free(modes[i].path);
+  }
+  free(modes);
+}
+
 /* Every tar entry body is padded to a 512-byte boundary. `consumed` is how
  * many of the `size` logical bytes the caller already read (0 for entries
  * whose body is skipped entirely, such as symlinks, or the body size for
@@ -170,9 +221,22 @@ static int ish_extract_regular_file(gzFile archive, const char *dest_path, long 
       ok = 0;
       break;
     }
-    ssize_t written = write(fd, buffer, (size_t) chunk);
-    if (written != chunk) {
-      ok = 0;
+    size_t offset = 0;
+    while (offset < (size_t) chunk) {
+      ssize_t written = write(fd, buffer + offset, (size_t) chunk - offset);
+      if (written < 0 && errno == EINTR) {
+        continue;
+      }
+      if (written <= 0) {
+        if (written == 0) {
+          errno = EIO;
+        }
+        ok = 0;
+        break;
+      }
+      offset += (size_t) written;
+    }
+    if (!ok) {
       break;
     }
     remaining -= chunk;
@@ -199,8 +263,12 @@ int ish_rootfs_extract(const char *archive_path, const char *dest_root) {
   }
 
   int result = ISH_ROOTFS_OK;
+  int io_errno = 0;
   unsigned char block[ISH_TAR_BLOCK_SIZE];
   int consecutive_zero_blocks = 0;
+  ish_directory_mode *directory_modes = NULL;
+  size_t directory_mode_count = 0;
+  size_t directory_mode_capacity = 0;
 
   for (;;) {
     int got = gzread(archive, block, ISH_TAR_BLOCK_SIZE);
@@ -267,9 +335,16 @@ int ish_rootfs_extract(const char *archive_path, const char *dest_root) {
     if (typeflag == '5') {
       if (ish_mkdir_parents(dest_path, 1) != 0) {
         result = ISH_ROOTFS_ERR_IO;
+        io_errno = errno != 0 ? errno : EIO;
         break;
       }
-      chmod(dest_path, (mode_t) (mode & 0777));
+      if (ish_record_directory_mode(&directory_modes, &directory_mode_count,
+                                    &directory_mode_capacity, dest_path,
+                                    (mode_t) (mode & 0777)) != 0) {
+        result = ISH_ROOTFS_ERR_IO;
+        io_errno = errno != 0 ? errno : ENOMEM;
+        break;
+      }
       if (ish_discard_entry_remainder(archive, size, 0) != 0) {
         result = ISH_ROOTFS_ERR_READ;
         break;
@@ -277,10 +352,12 @@ int ish_rootfs_extract(const char *archive_path, const char *dest_root) {
     } else if (typeflag == '0' || typeflag == '\0') {
       if (ish_mkdir_parents(dest_path, 0) != 0) {
         result = ISH_ROOTFS_ERR_IO;
+        io_errno = errno != 0 ? errno : EIO;
         break;
       }
       if (ish_extract_regular_file(archive, dest_path, size, (unsigned long) mode) != 0) {
         result = ISH_ROOTFS_ERR_IO;
+        io_errno = errno != 0 ? errno : EIO;
         break;
       }
       if (ish_discard_entry_remainder(archive, size, size) != 0) {
@@ -296,11 +373,13 @@ int ish_rootfs_extract(const char *archive_path, const char *dest_root) {
       }
       if (ish_mkdir_parents(dest_path, 0) != 0) {
         result = ISH_ROOTFS_ERR_IO;
+        io_errno = errno != 0 ? errno : EIO;
         break;
       }
       unlink(dest_path); /* fresh extraction: replace a prior symlink/file if present */
       if (symlink(linkname, dest_path) != 0) {
         result = ISH_ROOTFS_ERR_IO;
+        io_errno = errno != 0 ? errno : EIO;
         break;
       }
       if (ish_discard_entry_remainder(archive, size, 0) != 0) {
@@ -313,6 +392,15 @@ int ish_rootfs_extract(const char *archive_path, const char *dest_root) {
     }
   }
 
+  if (result == ISH_ROOTFS_OK &&
+      ish_apply_directory_modes(directory_modes, directory_mode_count) != 0) {
+    result = ISH_ROOTFS_ERR_IO;
+    io_errno = errno != 0 ? errno : EIO;
+  }
+  ish_free_directory_modes(directory_modes, directory_mode_count);
   gzclose(archive);
+  if (result == ISH_ROOTFS_ERR_IO) {
+    errno = io_errno != 0 ? io_errno : EIO;
+  }
   return result;
 }

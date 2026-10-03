@@ -141,7 +141,7 @@ class IshNativeXcconfigTests(unittest.TestCase):
     def test_real_bridge_provides_framework_configuration_api(self) -> None:
         source = (ISH_DIR / "ish_kernel_bridge.m").read_text(encoding="utf-8")
         self.assertIn("void FsInitialize(void)", source)
-        self.assertIn("int ish_configure(const char *storage_base, ish_log_handler log_handler)", source)
+        self.assertIn("int ish_configure(const char *root_path, ish_log_handler log_handler)", source)
         self.assertNotIn("#import <BlinkConfig/BlinkPaths.h>", source)
         self.assertNotIn("extern void HermesLinkAppendLog", source)
 
@@ -151,6 +151,20 @@ class IshNativeXcconfigTests(unittest.TestCase):
         self.assertIn("const char *envp_values[]", source)
         self.assertIn("const char **argv = argv_values", source)
         self.assertIn("const char **envp = envp_values", source)
+
+    def test_guest_rootfs_uses_files_visible_documents_iSH_directory(self) -> None:
+        command = (ROOT / "Blink" / "Commands" / "ish.m").read_text(encoding="utf-8")
+        bridge = (ISH_DIR / "ish_kernel_bridge.m").read_text(encoding="utf-8")
+        header = (ISH_DIR / "ish_kernel_bridge.h").read_text(encoding="utf-8")
+
+        self.assertIn(
+            '[[BlinkPaths documentsPath] stringByAppendingPathComponent:@"iSH"]',
+            command,
+        )
+        self.assertIn("NSDocumentDirectory", bridge)
+        self.assertIn('stringByAppendingPathComponent:@"iSH"', bridge)
+        self.assertIn("Files-visible Documents/iSH", header)
+        self.assertIn('@"sbin/init"', bridge)
 
     def test_template_setup_includes_the_ish_native_xcconfig(self) -> None:
         source = TEMPLATE_XCCONFIG.read_text(encoding="utf-8")
