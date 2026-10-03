@@ -142,6 +142,7 @@ class IshRuntimeWorkflowTests(unittest.TestCase):
         steps_text = str(job["steps"])
         self.assertIn("ISHLinuxNative.zip", steps_text)
         self.assertIn("gh release upload", steps_text)
+        self.assertIn("/tmp/hermeslink-ish/source", steps_text)
 
     def test_decide_path_filter_covers_every_new_ish_build_input(self) -> None:
         for marker in (

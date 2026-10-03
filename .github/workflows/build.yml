@@ -404,7 +404,8 @@ jobs:
           mkdir -p "$RUNNER_TEMP/ish-native-package/Frameworks"
           bash hermes/build/package-ish-framework.sh \
             hermes/build/external/ish/lib \
-            "$RUNNER_TEMP/ish-native-package/Frameworks"
+            "$RUNNER_TEMP/ish-native-package/Frameworks" \
+            /tmp/hermeslink-ish/source
           mkdir -p "$RUNNER_TEMP/ish-native-package/Resources"
           bash hermes/build/fetch-ish-source.sh --rootfs-only \
             "$RUNNER_TEMP/ish-native-package/Resources/ish-rootfs.tar.gz"
