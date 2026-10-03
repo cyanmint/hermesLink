@@ -77,15 +77,11 @@ static int ish_fakefs_store_path(sqlite3 *db, sqlite3_stmt *insert_stat,
   return status == SQLITE_DONE ? 0 : -1;
 }
 
-static int ish_fakefs_raw_root_is_valid(const char *root) {
+static int ish_fakefs_raw_root_is_valid(int root_fd) {
   const char *paths[] = {"bin/busybox", "etc/alpine-release", "sbin/init"};
   for (size_t i = 0; i < sizeof(paths) / sizeof(paths[0]); i++) {
-    char path[4096];
-    if (snprintf(path, sizeof(path), "%s/%s", root, paths[i]) >= (int) sizeof(path)) {
-      return 0;
-    }
     struct stat stat;
-    if (lstat(path, &stat) != 0) {
+    if (fstatat(root_fd, paths[i], &stat, AT_SYMLINK_NOFOLLOW) != 0) {
       return 0;
     }
     if ((i == 0 && (!S_ISREG(stat.st_mode) || (stat.st_mode & 0111) == 0)) ||
@@ -97,13 +93,15 @@ static int ish_fakefs_raw_root_is_valid(const char *root) {
   return 1;
 }
 
-static int ish_fakefs_move_path(const char *source, const char *destination) {
+static int ish_fakefs_move_path(int source_fd, const char *source,
+                                int destination_fd, const char *destination) {
   struct stat source_stat;
-  if (lstat(source, &source_stat) != 0) {
+  if (fstatat(source_fd, source, &source_stat, AT_SYMLINK_NOFOLLOW) != 0) {
     return -1;
   }
   struct stat destination_stat;
-  if (lstat(destination, &destination_stat) == 0) {
+  if (fstatat(destination_fd, destination, &destination_stat,
+              AT_SYMLINK_NOFOLLOW) == 0) {
     errno = EEXIST;
     return -1;
   }
@@ -113,34 +111,46 @@ static int ish_fakefs_move_path(const char *source, const char *destination) {
 
   mode_t original_mode = source_stat.st_mode & 07777;
   int is_directory = S_ISDIR(source_stat.st_mode);
-  if (is_directory && chmod(source, original_mode | S_IWUSR) != 0) {
-    return -1;
+  int directory_fd = -1;
+  if (is_directory) {
+    directory_fd = openat(source_fd, source, O_RDONLY | O_DIRECTORY | O_NOFOLLOW);
+    if (directory_fd < 0 || fchmod(directory_fd, original_mode | S_IWUSR) != 0) {
+      if (directory_fd >= 0) {
+        close(directory_fd);
+      }
+      return -1;
+    }
   }
-  if (rename(source, destination) != 0) {
+  if (renameat(source_fd, source, destination_fd, destination) != 0) {
     int saved_errno = errno;
     if (is_directory) {
-      chmod(source, original_mode);
+      fchmod(directory_fd, original_mode);
+      close(directory_fd);
     }
     errno = saved_errno;
     return -1;
   }
-  if (is_directory && chmod(destination, original_mode) != 0) {
-    return -1;
+  if (is_directory) {
+    int result = fchmod(directory_fd, original_mode);
+    close(directory_fd);
+    if (result != 0) {
+      return -1;
+    }
   }
   return 0;
 }
 
-static int ish_fakefs_make_temporary_path(const char *root, const char *label,
-                                          char *path, size_t path_size) {
+static int ish_fakefs_make_temporary_name(int root_fd, const char *label,
+                                          char *name, size_t name_size) {
   for (unsigned int attempt = 0; attempt < 100; attempt++) {
-    int written = snprintf(path, path_size, "%s/.hermeslink-%s-%ld-%u",
-                           root, label, (long) getpid(), attempt);
-    if (written < 0 || (size_t) written >= path_size) {
+    int written = snprintf(name, name_size, ".hermeslink-%s-%ld-%u",
+                           label, (long) getpid(), attempt);
+    if (written < 0 || (size_t) written >= name_size) {
       errno = ENAMETOOLONG;
       return -1;
     }
     struct stat stat;
-    if (lstat(path, &stat) != 0) {
+    if (fstatat(root_fd, name, &stat, AT_SYMLINK_NOFOLLOW) != 0) {
       return errno == ENOENT ? 0 : -1;
     }
   }
@@ -149,34 +159,26 @@ static int ish_fakefs_make_temporary_path(const char *root, const char *label,
 }
 
 static int ish_fakefs_index_tree(sqlite3 *db, sqlite3_stmt *insert_stat,
-                                 sqlite3_stmt *insert_path, const char *data_root,
+                                 sqlite3_stmt *insert_path, int directory_fd,
                                  const char *relative_path, mode_t root_mode) {
-  char directory_path[4096];
-  if (relative_path[0] == '\0') {
-    if (snprintf(directory_path, sizeof(directory_path), "%s", data_root) >=
-        (int) sizeof(directory_path)) {
-      errno = ENAMETOOLONG;
-      return -1;
-    }
-  } else if (snprintf(directory_path, sizeof(directory_path), "%s/%s",
-                      data_root, relative_path) >= (int) sizeof(directory_path)) {
-    errno = ENAMETOOLONG;
-    return -1;
-  }
-
   struct stat directory_stat;
-  if (lstat(directory_path, &directory_stat) != 0 || !S_ISDIR(directory_stat.st_mode)) {
+  if (fstat(directory_fd, &directory_stat) != 0 ||
+      !S_ISDIR(directory_stat.st_mode)) {
     return -1;
   }
   mode_t stored_mode = relative_path[0] == '\0' ? root_mode : directory_stat.st_mode;
   if (ish_fakefs_store_path(db, insert_stat, insert_path, relative_path,
                             stored_mode) != 0 ||
-      chmod(directory_path, 0777) != 0) {
+      fchmod(directory_fd, 0777) != 0) {
     return -1;
   }
 
-  DIR *directory = opendir(directory_path);
+  int scan_fd = dup(directory_fd);
+  DIR *directory = scan_fd < 0 ? NULL : fdopendir(scan_fd);
   if (directory == NULL) {
+    if (scan_fd >= 0) {
+      close(scan_fd);
+    }
     return -1;
   }
   int result = 0;
@@ -194,46 +196,57 @@ static int ish_fakefs_index_tree(sqlite3 *db, sqlite3_stmt *insert_stat,
       result = -1;
       break;
     }
-    char host_path[4096];
-    written = snprintf(host_path, sizeof(host_path), "%s/%s", data_root, child_path);
-    if (written < 0 || written >= (int) sizeof(host_path)) {
-      errno = ENAMETOOLONG;
-      result = -1;
-      break;
-    }
-
     struct stat child_stat;
-    if (lstat(host_path, &child_stat) != 0) {
+    if (fstatat(directory_fd, entry->d_name, &child_stat,
+                AT_SYMLINK_NOFOLLOW) != 0) {
       result = -1;
       break;
     }
     if (S_ISDIR(child_stat.st_mode)) {
-      if (ish_fakefs_index_tree(db, insert_stat, insert_path, data_root, child_path,
+      int child_fd = openat(directory_fd, entry->d_name,
+                            O_RDONLY | O_DIRECTORY | O_NOFOLLOW);
+      if (child_fd < 0 ||
+          ish_fakefs_index_tree(db, insert_stat, insert_path, child_fd, child_path,
                                 root_mode) != 0) {
+        if (child_fd >= 0) {
+          close(child_fd);
+        }
         result = -1;
         break;
       }
+      close(child_fd);
     } else if (S_ISREG(child_stat.st_mode)) {
-      if (ish_fakefs_store_path(db, insert_stat, insert_path, child_path,
-                                child_stat.st_mode) != 0 ||
-          chmod(host_path, 0666) != 0) {
+      int file_fd = openat(directory_fd, entry->d_name,
+                           O_RDONLY | O_NOFOLLOW | O_NONBLOCK);
+      struct stat opened_stat;
+      if (file_fd < 0 || fstat(file_fd, &opened_stat) != 0 ||
+          !S_ISREG(opened_stat.st_mode) ||
+          ish_fakefs_store_path(db, insert_stat, insert_path, child_path,
+                                opened_stat.st_mode) != 0 ||
+          fchmod(file_fd, 0666) != 0) {
+        if (file_fd >= 0) {
+          close(file_fd);
+        }
         result = -1;
         break;
       }
+      close(file_fd);
     } else if (S_ISLNK(child_stat.st_mode)) {
       char link_target[PATH_MAX + 1];
-      ssize_t target_length = readlink(host_path, link_target, PATH_MAX);
+      ssize_t target_length = readlinkat(directory_fd, entry->d_name,
+                                         link_target, PATH_MAX);
       if (target_length <= 0 || target_length >= PATH_MAX) {
         errno = EINVAL;
         result = -1;
         break;
       }
       link_target[target_length] = '\0';
-      if (unlink(host_path) != 0) {
+      if (unlinkat(directory_fd, entry->d_name, 0) != 0) {
         result = -1;
         break;
       }
-      int fd = open(host_path, O_WRONLY | O_CREAT | O_EXCL | O_NOFOLLOW, 0666);
+      int fd = openat(directory_fd, entry->d_name,
+                      O_WRONLY | O_CREAT | O_EXCL | O_NOFOLLOW, 0666);
       if (fd < 0) {
         result = -1;
         break;
@@ -270,15 +283,8 @@ static int ish_fakefs_index_tree(sqlite3 *db, sqlite3_stmt *insert_stat,
   return result;
 }
 
-static int ish_fakefs_create_database(const char *root, const char *data_root,
+static int ish_fakefs_create_database(const char *database_path, int data_fd,
                                       mode_t root_mode) {
-  char database_path[4096];
-  if (snprintf(database_path, sizeof(database_path), "%s/meta.db", root) >=
-      (int) sizeof(database_path)) {
-    errno = ENAMETOOLONG;
-    return -1;
-  }
-
   sqlite3 *db = NULL;
   if (sqlite3_open_v2(database_path, &db,
                       SQLITE_OPEN_READWRITE | SQLITE_OPEN_CREATE, NULL) != SQLITE_OK) {
@@ -303,7 +309,7 @@ static int ish_fakefs_create_database(const char *root, const char *data_root,
                          &insert_path, NULL) != SQLITE_OK) {
     goto cleanup;
   }
-  if (ish_fakefs_index_tree(db, insert_stat, insert_path, data_root, "", root_mode) != 0 ||
+  if (ish_fakefs_index_tree(db, insert_stat, insert_path, data_fd, "", root_mode) != 0 ||
       ish_fakefs_exec(db, "COMMIT;") != 0) {
     ish_fakefs_exec(db, "ROLLBACK;");
     goto cleanup;
@@ -361,11 +367,15 @@ static int ish_fakefs_database_is_valid(const char *database_path) {
   return valid;
 }
 
-static int ish_fakefs_move_entries(const char *root, const char *data_root,
+static int ish_fakefs_move_entries(int root_fd, int data_fd,
                                    const char *temporary_data_name,
                                    const char *temporary_database_name) {
-  DIR *directory = opendir(root);
+  int scan_fd = dup(root_fd);
+  DIR *directory = scan_fd < 0 ? NULL : fdopendir(scan_fd);
   if (directory == NULL) {
+    if (scan_fd >= 0) {
+      close(scan_fd);
+    }
     return -1;
   }
   int result = 0;
@@ -378,17 +388,7 @@ static int ish_fakefs_move_entries(const char *root, const char *data_root,
          strcmp(entry->d_name, temporary_database_name) == 0)) {
       continue;
     }
-    char source[4096];
-    char destination[4096];
-    if (snprintf(source, sizeof(source), "%s/%s", root, entry->d_name) >=
-            (int) sizeof(source) ||
-        snprintf(destination, sizeof(destination), "%s/%s", data_root, entry->d_name) >=
-            (int) sizeof(destination)) {
-      errno = ENAMETOOLONG;
-      result = -1;
-      break;
-    }
-    if (ish_fakefs_move_path(source, destination) != 0) {
+    if (ish_fakefs_move_path(root_fd, entry->d_name, data_fd, entry->d_name) != 0) {
       result = -1;
       break;
     }
@@ -402,105 +402,117 @@ int ish_rootfs_prepare_fakefs(const char *root) {
     errno = EINVAL;
     return ISH_ROOTFS_ERR_DEST;
   }
-  char data_root[4096];
   char database_path[4096];
-  if (snprintf(data_root, sizeof(data_root), "%s/data", root) >= (int) sizeof(data_root) ||
-      snprintf(database_path, sizeof(database_path), "%s/meta.db", root) >=
-          (int) sizeof(database_path)) {
-    errno = ENAMETOOLONG;
+  int root_fd = open(root, O_RDONLY | O_DIRECTORY | O_NOFOLLOW);
+  if (root_fd < 0) {
     return ISH_ROOTFS_ERR_DEST;
   }
-  struct stat data_stat;
+  if (snprintf(database_path, sizeof(database_path), "/dev/fd/%d/meta.db", root_fd) >=
+          (int) sizeof(database_path)) {
+    errno = ENAMETOOLONG;
+    close(root_fd);
+    return ISH_ROOTFS_ERR_DEST;
+  }
+
+  struct stat root_stat;
   struct stat database_stat;
-  int have_data_entry = lstat(data_root, &data_stat) == 0;
-  int have_database_entry = lstat(database_path, &database_stat) == 0;
-  int have_data = have_data_entry && S_ISDIR(data_stat.st_mode);
+  if (fstat(root_fd, &root_stat) != 0 || !S_ISDIR(root_stat.st_mode)) {
+    close(root_fd);
+    errno = ENOTDIR;
+    return ISH_ROOTFS_ERR_DEST;
+  }
+  int have_data_entry = fstatat(root_fd, "data", &database_stat,
+                                AT_SYMLINK_NOFOLLOW) == 0;
+  int have_data = have_data_entry && S_ISDIR(database_stat.st_mode);
+  int have_database_entry = fstatat(root_fd, "meta.db", &database_stat,
+                                    AT_SYMLINK_NOFOLLOW) == 0;
   int have_database = have_database_entry && S_ISREG(database_stat.st_mode) &&
       database_stat.st_size > 0;
   if (have_data && have_database) {
     if (ish_fakefs_database_is_valid(database_path)) {
+      close(root_fd);
       return ISH_ROOTFS_OK;
     }
-    if (!ish_fakefs_raw_root_is_valid(root)) {
+    if (!ish_fakefs_raw_root_is_valid(root_fd)) {
+      close(root_fd);
       return ISH_ROOTFS_ERR_FORMAT;
     }
   }
-  if (!ish_fakefs_raw_root_is_valid(root)) {
+  if (!ish_fakefs_raw_root_is_valid(root_fd)) {
+    close(root_fd);
     return ISH_ROOTFS_ERR_FORMAT;
   }
-  struct stat root_stat;
-  if (lstat(root, &root_stat) != 0 || !S_ISDIR(root_stat.st_mode)) {
-    errno = ENOTDIR;
-    return ISH_ROOTFS_ERR_DEST;
-  }
   mode_t root_mode = root_stat.st_mode;
-  if (chmod(root, 0777) != 0) {
+  if (fchmod(root_fd, 0777) != 0) {
+    close(root_fd);
     return ISH_ROOTFS_ERR_IO;
   }
-  char temporary_data[4096];
-  char temporary_database[4096];
+  char temporary_data[128];
+  char temporary_database[128];
   int has_temporary_data = 0;
   int has_temporary_database = 0;
   if (have_data_entry) {
-    if (ish_fakefs_make_temporary_path(root, "raw-data", temporary_data,
+    if (ish_fakefs_make_temporary_name(root_fd, "raw-data", temporary_data,
                                        sizeof(temporary_data)) != 0 ||
-        ish_fakefs_move_path(data_root, temporary_data) != 0) {
+        ish_fakefs_move_path(root_fd, "data", root_fd, temporary_data) != 0) {
+      close(root_fd);
       return ISH_ROOTFS_ERR_IO;
     }
     has_temporary_data = 1;
   }
   if (have_database_entry) {
-    if (ish_fakefs_make_temporary_path(root, "raw-meta", temporary_database,
+    if (ish_fakefs_make_temporary_name(root_fd, "raw-meta", temporary_database,
                                        sizeof(temporary_database)) != 0 ||
-        ish_fakefs_move_path(database_path, temporary_database) != 0) {
+        ish_fakefs_move_path(root_fd, "meta.db", root_fd, temporary_database) != 0) {
+      close(root_fd);
       return ISH_ROOTFS_ERR_IO;
     }
     has_temporary_database = 1;
   }
-  if (mkdir(data_root, 0777) != 0) {
+  if (mkdirat(root_fd, "data", 0777) != 0) {
+    close(root_fd);
+    return ISH_ROOTFS_ERR_IO;
+  }
+  int data_fd = openat(root_fd, "data", O_RDONLY | O_DIRECTORY | O_NOFOLLOW);
+  if (data_fd < 0) {
+    close(root_fd);
     return ISH_ROOTFS_ERR_IO;
   }
   const char *temporary_data_name = has_temporary_data
-      ? strrchr(temporary_data, '/') + 1 : NULL;
+      ? temporary_data : NULL;
   const char *temporary_database_name = has_temporary_database
-      ? strrchr(temporary_database, '/') + 1 : NULL;
-  if (ish_fakefs_move_entries(root, data_root, temporary_data_name,
+      ? temporary_database : NULL;
+  if (ish_fakefs_move_entries(root_fd, data_fd, temporary_data_name,
                               temporary_database_name) != 0) {
+    close(data_fd);
+    close(root_fd);
     return ISH_ROOTFS_ERR_IO;
   }
   if (has_temporary_data) {
-    char guest_data_path[4096];
-    if (snprintf(guest_data_path, sizeof(guest_data_path), "%s/data", data_root) >=
-        (int) sizeof(guest_data_path) ||
-        ish_fakefs_move_path(temporary_data, guest_data_path) != 0) {
+    if (ish_fakefs_move_path(root_fd, temporary_data, data_fd, "data") != 0) {
+      close(data_fd);
+      close(root_fd);
       return ISH_ROOTFS_ERR_IO;
     }
   }
   if (has_temporary_database) {
-    char guest_meta_path[4096];
-    if (snprintf(guest_meta_path, sizeof(guest_meta_path), "%s/meta.db", data_root) >=
-        (int) sizeof(guest_meta_path) ||
-        ish_fakefs_move_path(temporary_database, guest_meta_path) != 0) {
+    if (ish_fakefs_move_path(root_fd, temporary_database, data_fd, "meta.db") != 0) {
+      close(data_fd);
+      close(root_fd);
       return ISH_ROOTFS_ERR_IO;
     }
   }
-  char sidecar_path[4096];
-  if (snprintf(sidecar_path, sizeof(sidecar_path), "%s-wal", database_path) >=
-      (int) sizeof(sidecar_path)) {
-    errno = ENAMETOOLONG;
-    return ISH_ROOTFS_ERR_DEST;
-  }
-  unlink(sidecar_path);
-  if (snprintf(sidecar_path, sizeof(sidecar_path), "%s-shm", database_path) >=
-      (int) sizeof(sidecar_path)) {
-    errno = ENAMETOOLONG;
-    return ISH_ROOTFS_ERR_DEST;
-  }
-  unlink(sidecar_path);
-  if (ish_fakefs_create_database(root, data_root, root_mode) != 0) {
+  unlinkat(root_fd, "meta.db-wal", 0);
+  unlinkat(root_fd, "meta.db-shm", 0);
+  if (ish_fakefs_create_database(database_path, data_fd, root_mode) != 0) {
+    close(data_fd);
+    close(root_fd);
     return ISH_ROOTFS_ERR_IO;
   }
-  if (!ish_fakefs_database_is_valid(database_path)) {
+  close(data_fd);
+  int database_is_valid = ish_fakefs_database_is_valid(database_path);
+  close(root_fd);
+  if (!database_is_valid) {
     errno = EINVAL;
     return ISH_ROOTFS_ERR_FORMAT;
   }
