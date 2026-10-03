@@ -74,10 +74,10 @@ xcrun --sdk "$SDK_NAME" clang "${COMMON_FLAGS[@]}" -dynamiclib \
   "$BUILD_DIR/ish_exit_protocol.o" \
   -Wl,-force_load,"$LIB_DIR/liblinux.a" \
   -Wl,-force_load,"$LIB_DIR/libiSHLinux.a" \
+  -Wl,-force_load,"$LIB_DIR/libfakefs.a" \
   "$LIB_DIR/libiSHLinuxUser.a" \
-  "$LIB_DIR/libfakefs.a" \
   "$LIB_DIR/libish_emu.a" \
-  -framework Foundation -framework SystemConfiguration -lsqlite3 -lz \
+  -framework Foundation -framework SystemConfiguration -lresolv -lsqlite3 -lz \
   -Wl,-install_name,@rpath/Ish.framework/Ish \
   -Wl,-exported_symbol,_ish_configure \
   -Wl,-exported_symbol,_ish_import_rootfs_archive \

@@ -141,6 +141,8 @@ class PackageIshFrameworkTests(unittest.TestCase):
         self.assertIn("_ish_mount_documents", source)
         self.assertIn("_ish_rootfs_prepare_fakefs", source)
         self.assertIn("-framework SystemConfiguration", source)
+        self.assertIn('-Wl,-force_load,"$LIB_DIR/libfakefs.a"', source)
+        self.assertIn("-lresolv", source)
         self.assertIn('ISH_SOURCE=${3:-$ROOT/hermes/build/external/ish/source}', source)
         self.assertIn('-I"$ISH_SOURCE"', source)
         self.assertIn('missing pinned iSH kernel headers at $ISH_SOURCE', source)
