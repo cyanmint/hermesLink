@@ -82,6 +82,8 @@ class PackageIshFrameworkTests(unittest.TestCase):
         self.assertIn("-dynamiclib", source)
         self.assertIn("-D_DARWIN_C_SOURCE=1", source)
         self.assertIn("ish-sections.o", source)
+        self.assertIn("-Wl,-sectalign,__DATA,__percpu_first,1000", source)
+        self.assertIn("-Wl,-sectalign,__DATA,__tracepoints,20", source)
         self.assertIn("-Wl,-force_load", source)
         self.assertIn("@rpath/Ish.framework/Ish", source)
         self.assertIn("_ish_run_command", source)

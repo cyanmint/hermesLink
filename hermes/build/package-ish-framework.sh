@@ -57,7 +57,10 @@ for source in ish_rootfs ish_path_safety ish_exit_protocol; do
     -c "$ROOT/ISHBridge/$source.c" -o "$BUILD_DIR/$source.o"
 done
 
+# Match arch/ish/Makefile: Mach-O per-CPU anchors require page alignment.
 xcrun --sdk "$SDK_NAME" clang "${COMMON_FLAGS[@]}" -dynamiclib \
+  -Wl,-sectalign,__DATA,__percpu_first,1000 \
+  -Wl,-sectalign,__DATA,__tracepoints,20 \
   "$LIB_DIR/ish-sections.o" \
   "$BUILD_DIR/ish_kernel_bridge.o" \
   "$BUILD_DIR/ish_rootfs.o" \
