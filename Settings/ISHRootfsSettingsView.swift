@@ -217,15 +217,13 @@ struct ISHRootfsSettingsView: View {
 
   private func documentsConfigurationIsCurrent() -> Bool {
     let hostPath = documentsAutoMount ? ISHDocumentsHostPath() : ""
-    guard let hostPathCString = hostPath.cString(using: .utf8),
-          let mountPathCString = documentsMountPath.cString(using: .utf8),
-          let mask = UInt(documentsMask, radix: 8) else {
+    guard let mask = UInt(documentsMask, radix: 8) else {
       return false
     }
-    return hostPathCString.withUnsafeBufferPointer { hostPathBuffer in
-      mountPathCString.withUnsafeBufferPointer { mountPathBuffer in
+    return hostPath.withCString { hostPathPointer in
+      documentsMountPath.withCString { mountPathPointer in
         ish_documents_configuration_is_current(
-          hostPathBuffer.baseAddress, mountPathBuffer.baseAddress, UInt32(mask)) != 0
+          hostPathPointer, mountPathPointer, UInt32(mask)) != 0
       }
     }
   }

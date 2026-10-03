@@ -123,12 +123,12 @@ int ish_documents_configuration_is_current(const char *host_path,
     return 0;
   }
   pthread_mutex_lock(&g_configuration_lock);
-  int current = !g_boot_started ||
+  int configuration_matches = !g_boot_started ||
       (strcmp(g_documents_host_path, host_path) == 0 &&
        strcmp(g_documents_guest_mount_path, guest_mount_path) == 0 &&
        g_documents_mount_mask == mask);
   pthread_mutex_unlock(&g_configuration_lock);
-  return current;
+  return configuration_matches;
 }
 
 const char *DefaultDocumentsPath(void) {
