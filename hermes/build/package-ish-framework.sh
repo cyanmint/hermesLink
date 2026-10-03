@@ -6,7 +6,6 @@ set -euo pipefail
 ROOT=$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)
 LIB_DIR=${1:?directory containing the built iSH archives and section anchors}
 OUTPUT_DIR=${2:?directory for the packaged Ish.framework}
-ISH_SOURCE=${3:-$ROOT/hermes/build/external/ish/source}
 FRAMEWORK="$OUTPUT_DIR/Ish.framework"
 SDK_NAME=${SDK_NAME:-iphoneos}
 DEPLOYMENT_TARGET=${IPHONEOS_DEPLOYMENT_TARGET:-16.1}
@@ -41,11 +40,6 @@ for input in \
   "$LIB_DIR/LinuxInterop.h"; do
   [ -s "$input" ] || { echo "missing iSH framework input: $input" >&2; exit 2; }
 done
-[ -f "$ISH_SOURCE/kernel/errno.h" ] || {
-  echo "missing pinned iSH kernel headers at $ISH_SOURCE; pass the fetched source directory as the third argument" >&2
-  exit 2
-}
-
 mkdir -p "$FRAMEWORK/Headers" "$FRAMEWORK/Modules"
 COMMON_FLAGS=(
   -target "$TARGET"
@@ -53,7 +47,6 @@ COMMON_FLAGS=(
   "$MIN_VERSION_FLAG=$DEPLOYMENT_TARGET"
   -D_DARWIN_C_SOURCE=1
   -I"$ROOT/ISHBridge"
-  -I"$ISH_SOURCE"
 )
 
 xcrun --sdk "$SDK_NAME" clang "${COMMON_FLAGS[@]}" -fobjc-arc -fblocks \
@@ -84,7 +77,6 @@ xcrun --sdk "$SDK_NAME" clang "${COMMON_FLAGS[@]}" -dynamiclib \
   -Wl,-exported_symbol,_ish_rootfs_prepare_fakefs \
   -Wl,-exported_symbol,_ish_kernel_ensure_booted \
   -Wl,-exported_symbol,_ish_kernel_has_booted \
-  -Wl,-exported_symbol,_ish_mount_documents \
   -Wl,-exported_symbol,_ish_run_command \
   -o "$FRAMEWORK/Ish"
 chmod 755 "$FRAMEWORK/Ish"

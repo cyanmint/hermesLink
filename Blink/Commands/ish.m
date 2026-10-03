@@ -39,26 +39,6 @@ int ish_main(int argc, char *argv[]) {
     return 70;
   }
 
-  if (argc > 1 && strcmp(argv[1], "mount-documents") == 0) {
-    if (argc != 3) {
-      fprintf(thread_stderr, "usage: ish mount-documents <existing-guest-directory>\n");
-      return 2;
-    }
-    int mount_error = 0;
-    int status = ish_mount_documents(argv[2], &mount_error);
-    if (status == ISH_RUN_OK) {
-      fprintf(thread_stdout, "ish: mounted Documents at %s\n", argv[2]);
-      return 0;
-    }
-    if (status == ISH_RUN_ERR_MOUNT_FAILED) {
-      fprintf(thread_stderr, "ish: could not mount Documents at %s: %s (%d)\n",
-              argv[2], mount_error < 0 ? strerror(-mount_error) : "mount failed", mount_error);
-      return 1;
-    }
-    fprintf(thread_stderr, "ish: could not start the guest to mount Documents (status %d)\n", status);
-    return status == ISH_RUN_ERR_NOT_AVAILABLE ? 69 : 70;
-  }
-
   NSMutableString *command = [NSMutableString new];
   if (argc < 2) {
     [command appendString:@"/bin/sh"];

@@ -40,25 +40,12 @@ class CommandRegistrationTests(unittest.TestCase):
         self.assertIn("int ish_main(int argc, char *argv[])", source)
         self.assertIn('#include "ish_kernel_bridge.h"', source)
 
-    def test_ish_mounts_documents_at_a_guest_selected_path(self) -> None:
-        command = (ROOT / "Blink" / "Commands" / "ish.m").read_text(encoding="utf-8")
-        bridge = (ISH_DIR / "ish_kernel_bridge.m").read_text(encoding="utf-8")
-        header = (ISH_DIR / "ish_kernel_bridge.h").read_text(encoding="utf-8")
-        stub = (ISH_DIR / "ish_kernel_bridge_stub.m").read_text(encoding="utf-8")
-        self.assertIn('"mount-documents"', command)
-        self.assertIn("ish_mount_documents(argv[2], &mount_error)", command)
-        self.assertIn("NSSearchPathForDirectoriesInDomains(", bridge)
-        self.assertIn("path_normalize(AT_PWD, mount_path", bridge)
-        self.assertIn("do_mount(&realfs, resolved_documents_path, normalized_path", bridge)
-        self.assertIn("ish_sync_do_in_workqueue", bridge)
-        self.assertIn("ish_mount_documents", header)
-        self.assertIn("ish_mount_documents", stub)
-
     def test_ish_populates_and_refreshes_guest_dns(self) -> None:
         bridge = (ISH_DIR / "ish_kernel_bridge.m").read_text(encoding="utf-8")
         self.assertIn("res_ninit(&resolver)", bridge)
         self.assertIn("res_getservers(&resolver", bridge)
-        self.assertIn('generic_open("/etc/resolv.conf"', bridge)
+        self.assertIn('linux_write_file("/etc/resolv.conf"', bridge)
+        self.assertNotIn("generic_open(", bridge)
         self.assertIn("SCNetworkReachabilitySetCallback", bridge)
         self.assertIn("ish_network_reachability_changed", bridge)
         self.assertIn("ish_configure_guest_dns();", bridge)
@@ -71,21 +58,14 @@ class CommandRegistrationTests(unittest.TestCase):
         for operation in ("list", "create", "import", "rename", "delete", "use"):
             with self.subTest(operation=operation):
                 self.assertIn(f'"{operation}"', source)
-        self.assertIn('"mount-documents"', source)
-        self.assertIn("HermesLinkISHDocumentsMountPath", source)
 
-    def test_documents_mount_is_configurable_in_settings_and_auto_mounted_at_boot(self) -> None:
+    def test_bridge_uses_supported_linuxinterop_files_api(self) -> None:
         bridge = (ISH_DIR / "ish_kernel_bridge.m").read_text(encoding="utf-8")
-        settings = (ROOT / "Settings" / "ISHRootfsSettingsView.swift").read_text(encoding="utf-8")
-        command = (ROOT / "Blink" / "Commands" / "ishfs.m").read_text(encoding="utf-8")
-        self.assertIn('#define ISH_DEFAULT_DOCUMENTS_MOUNT_PATH "/mnt/documents"', bridge)
-        self.assertIn("ISH_DOCUMENTS_MOUNT_PATH_KEY", bridge)
-        self.assertIn("ish_mount_documents_on_kernel_thread", bridge)
-        self.assertIn("generic_mkdirat(AT_PWD, directory, 0755)", bridge)
-        self.assertIn("@AppStorage(\"HermesLinkISHDocumentsMountPath\")", settings)
-        self.assertIn("saveDocumentsMountPath", settings)
-        self.assertIn("Disabled automatic Documents mounting", command)
-        self.assertIn("ishfs mount-documents [<guest-path>|off]", command)
+        self.assertIn('linux_write_file("/etc/resolv.conf"', bridge)
+        self.assertNotIn("current =", bridge)
+        self.assertNotIn("generic_open(", bridge)
+        self.assertNotIn("generic_mkdirat(", bridge)
+        self.assertNotIn("do_mount(", bridge)
 
 
 class PbxprojWiringTests(unittest.TestCase):
@@ -290,7 +270,7 @@ class IshNativeXcconfigTests(unittest.TestCase):
         header = (ISH_DIR / "ish_kernel_bridge.h").read_text(encoding="utf-8")
         stub = (ISH_DIR / "ish_kernel_bridge_stub.m").read_text(encoding="utf-8")
         for symbol in ("ish_configure", "ish_import_rootfs_archive", "ish_kernel_ensure_booted",
-                       "ish_kernel_has_booted", "ish_mount_documents", "ish_run_command"):
+                       "ish_kernel_has_booted", "ish_run_command"):
             with self.subTest(symbol=symbol):
                 self.assertIn(symbol, header)
                 self.assertIn(symbol, stub)

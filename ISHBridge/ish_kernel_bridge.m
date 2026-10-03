@@ -11,12 +11,6 @@
 #include "ish_kernel_bridge.h"
 #include "ish_rootfs.h"
 #include "ish_exit_protocol.h"
-#include "kernel/errno.h"
-#include "kernel/fs.h"
-#include "kernel/task.h"
-#include "fs/fd.h"
-#include "fs/path.h"
-#include "fs/real.h"
 
 #include <dispatch/dispatch.h>
 #include <errno.h>
@@ -43,13 +37,6 @@ static pthread_mutex_t g_kernel_ready_lock = PTHREAD_MUTEX_INITIALIZER;
 static pthread_cond_t g_kernel_ready_cond = PTHREAD_COND_INITIALIZER;
 static int g_kernel_ready;
 static int g_kernel_panicked;
-
-#define ISH_DOCUMENTS_MOUNT_PATH_KEY "HermesLinkISHDocumentsMountPath"
-#define ISH_DEFAULT_DOCUMENTS_MOUNT_PATH "/mnt/documents"
-
-static int ish_mount_documents_on_kernel_thread(const char *documents_path,
-                                                const char *mount_path);
-static int ish_documents_mount_path_is_valid(const char *mount_path);
 
 static void ISHLog(const char *message) {
   pthread_mutex_lock(&g_configuration_lock);
@@ -166,29 +153,13 @@ static void ish_configure_guest_dns(void) {
   }
   res_ndestroy(&resolver);
 
-  struct task *previous_task = current;
-  struct task *init_task = pid_get_task(1);
-  if (init_task == NULL) {
-    ISHLog("ish: guest init task was unavailable while configuring DNS");
-    return;
+  size_t write_length = sizeof(resolv_conf) - 1;
+  memset(resolv_conf + length, ' ', write_length - length);
+  resolv_conf[write_length - 1] = '\n';
+  ssize_t written = linux_write_file("/etc/resolv.conf", resolv_conf, write_length);
+  if (written != (ssize_t) write_length) {
+    ISHLog("ish: could not update guest /etc/resolv.conf");
   }
-  current = init_task;
-  struct fd *file = generic_open("/etc/resolv.conf", O_WRONLY_ | O_CREAT_ | O_TRUNC_, 0666);
-  if (IS_ERR(file)) {
-    ISHLog("ish: could not open guest /etc/resolv.conf");
-  } else {
-    size_t offset = 0;
-    while (offset < length) {
-      ssize_t written = file->ops->write(file, resolv_conf + offset, length - offset);
-      if (written <= 0) {
-        ISHLog("ish: could not write guest /etc/resolv.conf");
-        break;
-      }
-      offset += (size_t) written;
-    }
-    fd_close(file);
-  }
-  current = previous_task;
 }
 
 static void ish_network_reachability_changed(SCNetworkReachabilityRef target,
@@ -443,34 +414,6 @@ void FsInitialize(void) {
   /* Upstream's CurrentRoot.m only performs app-specific version and
    * repository bookkeeping here; HermesLink owns rootfs provisioning. */
   ish_configure_guest_dns();
-  NSString *mount_path = [[NSUserDefaults standardUserDefaults]
-      stringForKey:[NSString stringWithUTF8String:ISH_DOCUMENTS_MOUNT_PATH_KEY]];
-  if (mount_path == nil) {
-    mount_path = [NSString stringWithUTF8String:ISH_DEFAULT_DOCUMENTS_MOUNT_PATH];
-  }
-  if (mount_path.length > 0) {
-    NSString *documents_path = [NSSearchPathForDirectoriesInDomains(
-        NSDocumentDirectory, NSUserDomainMask, YES) firstObject];
-    if (documents_path.length == 0 ||
-        !ish_documents_mount_path_is_valid(mount_path.UTF8String)) {
-      ISHLog("ish: automatic Documents mount has an invalid path or unavailable Documents directory");
-    } else {
-      int mount_error = ish_mount_documents_on_kernel_thread(
-          documents_path.fileSystemRepresentation, mount_path.UTF8String);
-      if (mount_error < 0) {
-        char message[256];
-        snprintf(message, sizeof(message),
-                 "ish: automatic Documents mount at %s failed (iSH error %d)",
-                 mount_path.UTF8String, mount_error);
-        ISHLog(message);
-      } else {
-        char message[256];
-        snprintf(message, sizeof(message), "ish: mounted Documents at %s",
-                 mount_path.UTF8String);
-        ISHLog(message);
-      }
-    }
-  }
   async_do_in_ios(^{
     ish_start_network_monitor();
   });
@@ -723,143 +666,6 @@ static int ish_wait_for_kernel_ready(void) {
   if (!ready) {
     ISHLog("ish: guest kernel was not ready to start a session within the boot timeout");
     return ISH_RUN_ERR_BOOT_TIMEOUT;
-  }
-  return ISH_RUN_OK;
-}
-
-static int ish_documents_mount_path_is_valid(const char *mount_path) {
-  if (mount_path == NULL || mount_path[0] != '/' || mount_path[1] == '\0' ||
-      strnlen(mount_path, MAX_PATH) >= MAX_PATH) {
-    return 0;
-  }
-  const char *component = mount_path + 1;
-  for (const char *cursor = component;; cursor++) {
-    if (*cursor == '/' || *cursor == '\0') {
-      size_t length = (size_t) (cursor - component);
-      if (length == 0 ||
-          (length == 1 && component[0] == '.') ||
-          (length == 2 && component[0] == '.' && component[1] == '.')) {
-        return 0;
-      }
-      if (*cursor == '\0') {
-        return 1;
-      }
-      component = cursor + 1;
-    }
-  }
-}
-
-static int ish_mount_documents_on_kernel_thread(const char *documents_path,
-                                                const char *mount_path) {
-  struct task *previous_task = current;
-  struct task *init_task = pid_get_task(1);
-  if (init_task == NULL) {
-    return -_ESRCH;
-  }
-  current = init_task;
-
-  if (!ish_documents_mount_path_is_valid(mount_path)) {
-    current = previous_task;
-    return -_EINVAL;
-  }
-
-  char normalized_path[MAX_PATH];
-  int error = path_normalize(AT_PWD, mount_path, normalized_path, N_SYMLINK_FOLLOW);
-  if (error < 0) {
-    goto done;
-  }
-  if (strcmp(normalized_path, "/") == 0) {
-    error = -_EBUSY;
-    goto done;
-  }
-
-  char directory[MAX_PATH] = "";
-  for (const char *cursor = normalized_path + 1;; cursor++) {
-    if (*cursor == '/' || *cursor == '\0') {
-      size_t prefix_length = (size_t) (cursor - normalized_path);
-      memcpy(directory, normalized_path, prefix_length);
-      directory[prefix_length] = '\0';
-      error = generic_mkdirat(AT_PWD, directory, 0755);
-      if (error == -_EEXIST) {
-        struct statbuf existing_stat;
-        error = generic_statat(AT_PWD, directory, &existing_stat, true);
-        if (error >= 0 && !S_ISDIR(existing_stat.mode)) {
-          error = -_ENOTDIR;
-        }
-      }
-      if (error < 0) {
-        goto done;
-      }
-      if (*cursor == '\0') {
-        break;
-      }
-    }
-  }
-
-  char *resolved_documents_path = realpath(documents_path, NULL);
-  if (resolved_documents_path == NULL) {
-    error = -_ENOENT;
-    goto done;
-  }
-
-  lock(&mounts_lock);
-  struct mount *existing;
-  list_for_each_entry(&mounts, existing, mounts) {
-    if (strcmp(existing->point, normalized_path) == 0) {
-      error = existing->fs == &realfs &&
-              strcmp(existing->source, resolved_documents_path) == 0
-          ? 0 : -_EBUSY;
-      unlock(&mounts_lock);
-      free(resolved_documents_path);
-      goto done;
-    }
-  }
-  error = do_mount(&realfs, resolved_documents_path, normalized_path, "", 0);
-  unlock(&mounts_lock);
-  free(resolved_documents_path);
-
-done:
-  current = previous_task;
-  return error;
-}
-
-int ish_mount_documents(const char *mount_path, int *mount_error_out) {
-  if (mount_error_out != NULL) {
-    *mount_error_out = 0;
-  }
-  if (!ish_documents_mount_path_is_valid(mount_path) || mount_error_out == NULL) {
-    return ISH_RUN_ERR_INVALID_ARGUMENT;
-  }
-
-  int boot_status = ish_kernel_ensure_booted();
-  if (boot_status != ISH_RUN_OK) {
-    return boot_status;
-  }
-  int ready_status = ish_wait_for_kernel_ready();
-  if (ready_status != ISH_RUN_OK) {
-    return ready_status;
-  }
-
-  NSString *documents_path = [NSSearchPathForDirectoriesInDomains(
-      NSDocumentDirectory, NSUserDomainMask, YES) firstObject];
-  if (documents_path.length == 0) {
-    *mount_error_out = -_ENOENT;
-    return ISH_RUN_ERR_MOUNT_FAILED;
-  }
-  NSString *guest_mount_path = [NSString stringWithUTF8String:mount_path];
-  if (guest_mount_path == nil) {
-    return ISH_RUN_ERR_INVALID_ARGUMENT;
-  }
-
-  __block int mount_error = -_EIO;
-  ish_sync_do_in_workqueue(^(void (^done)(void)) {
-    mount_error = ish_mount_documents_on_kernel_thread(
-        documents_path.fileSystemRepresentation, guest_mount_path.UTF8String);
-    done();
-  });
-  if (mount_error < 0) {
-    *mount_error_out = mount_error;
-    return ISH_RUN_ERR_MOUNT_FAILED;
   }
   return ISH_RUN_OK;
 }

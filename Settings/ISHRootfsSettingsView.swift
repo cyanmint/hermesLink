@@ -2,9 +2,7 @@ import SwiftUI
 import UniformTypeIdentifiers
 
 struct ISHRootfsSettingsView: View {
-  @AppStorage("HermesLinkISHDocumentsMountPath") private var savedDocumentsMountPath = "/mnt/documents"
   @State private var profiles: [String] = []
-  @State private var documentsMountPath = "/mnt/documents"
   @State private var activeProfile = ""
   @State private var newName = ""
   @State private var editingProfile: String?
@@ -19,24 +17,6 @@ struct ISHRootfsSettingsView: View {
 
   var body: some View {
     List {
-      Section {
-        TextField("Guest mount path", text: $documentsMountPath)
-          .textInputAutocapitalization(.never)
-          .autocorrectionDisabled()
-        Button("Save mount path", action: saveDocumentsMountPath)
-          .disabled(!isValidDocumentsMountPath(documentsMountPath))
-        Button("Disable automatic mounting", role: .destructive) {
-          savedDocumentsMountPath = ""
-        }
-        .disabled(savedDocumentsMountPath.isEmpty)
-      } header: {
-        Text("Documents auto-mount")
-      } footer: {
-        Text(savedDocumentsMountPath.isEmpty
-             ? "Automatic mounting is disabled. Saving a path takes effect after force-quitting and reopening Blink."
-             : "Documents is automatically mounted at \(savedDocumentsMountPath) when iSH starts. Changes take effect after force-quitting and reopening Blink.")
-      }
-
       Section {
         ForEach(profiles, id: \.self) { profile in
           HStack {
@@ -130,7 +110,6 @@ struct ISHRootfsSettingsView: View {
       }
     }
     .onAppear {
-      documentsMountPath = savedDocumentsMountPath.isEmpty ? "/mnt/documents" : savedDocumentsMountPath
       reload()
     }
     .sheet(isPresented: $showingNameSheet) {
@@ -197,19 +176,6 @@ struct ISHRootfsSettingsView: View {
     }
     profiles = names
     activeProfile = active
-  }
-
-  private func isValidDocumentsMountPath(_ path: String) -> Bool {
-    guard path.hasPrefix("/"), path != "/", path.utf8.count < 4096 else {
-      return false
-    }
-    return path.dropFirst().split(separator: "/", omittingEmptySubsequences: false)
-      .allSatisfy { $0 != "." && $0 != ".." && !$0.isEmpty }
-  }
-
-  private func saveDocumentsMountPath() {
-    guard isValidDocumentsMountPath(documentsMountPath) else { return }
-    savedDocumentsMountPath = documentsMountPath
   }
 
   private func select(_ profile: String) {

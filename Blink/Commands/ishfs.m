@@ -11,58 +11,12 @@
 static void ishfs_usage(FILE *stream) {
   fprintf(stream,
           "Usage:\n"
-          "  ishfs mount-documents [<guest-path>|off]\n"
           "  ishfs list\n"
           "  ishfs create <name>\n"
           "  ishfs import <name> <rootfs-folder-or-tar.gz>\n"
           "  ishfs rename <old-name> <new-name>\n"
           "  ishfs delete <name> --yes\n"
           "  ishfs use <name>\n");
-}
-
-static BOOL ishfs_documents_mount_path_is_valid(NSString *path) {
-  if (![path hasPrefix:@"/"] || [path isEqualToString:@"/"] || path.length >= 4096) {
-    return NO;
-  }
-  for (NSString *component in [path componentsSeparatedByString:@"/"]) {
-    if ([component isEqualToString:@"."] || [component isEqualToString:@".."] ||
-        component.length == 0) {
-      return NO;
-    }
-  }
-  return YES;
-}
-
-static int ishfs_documents_mount(int argc, char *argv[]) {
-  NSUserDefaults *defaults = [NSUserDefaults standardUserDefaults];
-  NSString *currentPath = [defaults stringForKey:@"HermesLinkISHDocumentsMountPath"];
-  if (currentPath == nil) {
-    currentPath = @"/mnt/documents";
-  }
-  if (argc == 2) {
-    fprintf(thread_stdout, "%s\n", currentPath.length > 0 ? currentPath.UTF8String : "off");
-    return 0;
-  }
-  if (argc != 3) {
-    ishfs_usage(thread_stderr);
-    return 2;
-  }
-  NSString *newPath = [NSString stringWithUTF8String:argv[2]];
-  if ([newPath isEqualToString:@"off"]) {
-    [defaults setObject:@"" forKey:@"HermesLinkISHDocumentsMountPath"];
-    fprintf(thread_stdout,
-            "Disabled automatic Documents mounting. The change takes effect after restarting Blink.\n");
-    return 0;
-  }
-  if (!ishfs_documents_mount_path_is_valid(newPath)) {
-    fprintf(thread_stderr,
-            "ishfs: mount path must be an absolute guest path other than /, without empty, . or .. components\n");
-    return 2;
-  }
-  [defaults setObject:newPath forKey:@"HermesLinkISHDocumentsMountPath"];
-  fprintf(thread_stdout,
-          "Documents will be mounted at %s after restarting Blink.\n", newPath.UTF8String);
-  return 0;
 }
 
 static int ishfs_error(NSError *error) {
@@ -80,10 +34,6 @@ int ishfs_main(int argc, char *argv[]) {
   if (argc < 2 || strcmp(argv[1], "help") == 0 || strcmp(argv[1], "--help") == 0) {
     ishfs_usage(argc < 2 ? thread_stderr : thread_stdout);
     return argc < 2 ? 2 : 0;
-  }
-
-  if (strcmp(argv[1], "mount-documents") == 0) {
-    return ishfs_documents_mount(argc, argv);
   }
 
   if (strcmp(argv[1], "list") == 0 && argc == 2) {
