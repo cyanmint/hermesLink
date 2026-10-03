@@ -172,6 +172,8 @@ class BuildIshStaticScriptTests(unittest.TestCase):
         self.assertIn("-EOPNOTSUPP", source)
         self.assertIn("register_filesystem(&documentsfs_type)", source)
         self.assertIn("fs_initcall(documentsfs_init)", source)
+        self.assertIn("i_uid_write(inode, 0)", source)
+        self.assertIn("i_gid_write(inode, 0)", source)
         build_script = BUILD_SCRIPT.read_text(encoding="utf-8")
         repack_script = REPACK_MESON_ARCHIVES.read_text(encoding="utf-8")
         self.assertIn('python3 "$ROOT/build/patch-ish-documents-fs.py"', build_script)

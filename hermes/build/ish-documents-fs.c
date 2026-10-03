@@ -58,8 +58,8 @@ static int documentsfs_read_inode(struct inode *inode) {
   inode->i_mode = documentsfs_mode(info, stat.mode);
   if (inode->i_mode == 0)
     return -EOPNOTSUPP;
-  i_uid_write(inode, GLOBAL_ROOT_UID);
-  i_gid_write(inode, GLOBAL_ROOT_GID);
+  i_uid_write(inode, 0);
+  i_gid_write(inode, 0);
   set_nlink(inode, stat.nlink);
   inode->i_size = stat.size;
   inode->i_blocks = stat.blocks;
