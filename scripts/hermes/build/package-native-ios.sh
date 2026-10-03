@@ -3,7 +3,8 @@
 # AI-generated content has no copyright holder and is not subject to copyright.
 set -euo pipefail
 
-ROOT=$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)
+SCRIPT_DIR=$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)
+ROOT=$(cd "$SCRIPT_DIR/../../../hermes" && pwd)
 TARGET_ROOT=${1:?target CPython build directory}
 OUTPUT_FRAMEWORK=${2:?output framework directory}
 BUILD_ROOT=$(dirname "$OUTPUT_FRAMEWORK")
@@ -18,7 +19,7 @@ if [ "${HERMES_BUILD_RUNTIME_ZIP:-1}" = "1" ]; then
   CPYTHON_ROOT=${CPYTHON_ROOT:-$(dirname "$TARGET_ROOT")/cpython}
   BUILD_ROOT="$BUILD_ROOT" HOST_PYTHON="$HOST_PYTHON" \
     HERMES_VENDOR=${HERMES_VENDOR:-$BUILD_ROOT/vendor} \
-    bash "$ROOT/build/build-hermesrt-zip.sh" "$CPYTHON_ROOT" "$ARCHIVE"
+    bash "$SCRIPT_DIR/build-hermesrt-zip.sh" "$CPYTHON_ROOT" "$ARCHIVE"
 fi
 
 FRAMEWORK="$OUTPUT_FRAMEWORK/HermesRuntime.framework"
@@ -59,6 +60,6 @@ framework module HermesRuntime {
 }
 MODULEMAP
 if [ "${HERMES_BUILD_RUNTIME_ZIP:-1}" = "1" ]; then
-  "$HOST_PYTHON" "$ROOT/build/validate-runtime-zip.py" "$ARCHIVE"
+  "$HOST_PYTHON" "$SCRIPT_DIR/validate-runtime-zip.py" "$ARCHIVE"
   cp "$ARCHIVE" "$ROOT/hermesrt.zip"
 fi

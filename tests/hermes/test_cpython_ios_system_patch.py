@@ -12,8 +12,8 @@ PATCH_PATH = ROOT / "hermes" / "overlay" / "patches" / "patch-cpython-ios-system
 
 class CPythonIosSystemPatchTests(unittest.TestCase):
     def test_native_and_zip_builds_apply_the_cpython_overlay(self):
-        native_build = (ROOT / "hermes" / "build" / "build-native-ios.sh").read_text(encoding="utf-8")
-        zip_build = (ROOT / "hermes" / "build" / "build-hermesrt-zip.sh").read_text(encoding="utf-8")
+        native_build = (ROOT / "scripts" / "hermes" / "build" / "build-native-ios.sh").read_text(encoding="utf-8")
+        zip_build = (ROOT / "scripts" / "hermes" / "build" / "build-hermesrt-zip.sh").read_text(encoding="utf-8")
 
         self.assertIn('patch-cpython-ios-system.py" "$TARGET_ROOT"', native_build)
         self.assertIn('patch-cpython-ios-system.py" --stdlib-only "$STAGE/python"', zip_build)

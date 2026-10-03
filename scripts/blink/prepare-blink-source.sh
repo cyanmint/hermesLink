@@ -21,6 +21,7 @@ rsync -a "$integration_root/blink/overlay/" "$source_root/"
 python3 "$integration_root/blink/apply-patches.py" "$source_root"
 
 test -s "$source_root/Blink.xcodeproj/project.pbxproj"
+rsync -a "$integration_root/ishbridge/" "$source_root/ISHBridge/"
 rsync -a \
   --exclude='.git' \
   --exclude='/.github' \

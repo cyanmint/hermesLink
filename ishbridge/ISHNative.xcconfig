@@ -2,8 +2,8 @@
 // AI-generated content has no copyright holder and is not subject to copyright.
 //
 // Controls whether Blink links and embeds the real Ish.framework installed
-// by install_ish_runtime.sh, or instead compiles the
-// always-available stub (ISHBridge/ish_kernel_bridge_stub.m) that
+// by scripts/install_ish_runtime.sh, or instead compiles the
+// always-available stub (ishbridge/ish_kernel_bridge_stub.m) that
 // keeps the `ish` native command and Hermes Agent tool registered and
 // working end to end, just reporting the guest kernel itself as
 // unavailable.

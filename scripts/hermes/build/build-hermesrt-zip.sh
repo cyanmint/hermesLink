@@ -2,7 +2,8 @@
 # Build the pure-Python Hermes runtime archive without compiling a native runtime.
 set -euo pipefail
 
-ROOT=$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)
+SCRIPT_DIR=$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)
+ROOT=$(cd "$SCRIPT_DIR/../../../hermes" && pwd)
 BUILD_ROOT=${BUILD_ROOT:-$ROOT/build/python-runtime}
 CPYTHON_REF=${CPYTHON_REF:-v3.13.9}
 CPYTHON_ROOT=${1:-${CPYTHON_ROOT:-$BUILD_ROOT/cpython}}
@@ -25,7 +26,7 @@ fi
 [ -x "$HOST_PYTHON" ] || { echo "missing host Python: $HOST_PYTHON" >&2; exit 2; }
 
 if [ ! -f "$HERMES_SOURCE/hermes_cli/main.py" ] || [ ! -f "$WEBUI_SOURCE/api/config.py" ]; then
-  bash "$ROOT/build/fetch-sources.sh"
+  bash "$SCRIPT_DIR/fetch-sources.sh"
 fi
 [ -f "$HERMES_SOURCE/hermes_cli/main.py" ] || { echo "missing Hermes Agent source" >&2; exit 2; }
 [ -f "$WEBUI_SOURCE/api/config.py" ] || { echo "missing Hermes WebUI source" >&2; exit 2; }
@@ -106,4 +107,4 @@ with zipfile.ZipFile(output, 'w', compression=zipfile.ZIP_STORED) as archive:
             archive.write(source, relative, compress_type=zipfile.ZIP_STORED)
 PY
 
-"$HOST_PYTHON" "$ROOT/build/validate-runtime-zip.py" "$ARCHIVE"
+"$HOST_PYTHON" "$SCRIPT_DIR/validate-runtime-zip.py" "$ARCHIVE"

@@ -139,7 +139,7 @@ class IshTogglePatchTests(unittest.TestCase):
 
 class IshBuildWiringTests(unittest.TestCase):
     def test_runtime_zip_build_applies_the_ish_tool_patch(self) -> None:
-        build_script = (ROOT / "hermes" / "build" / "build-hermesrt-zip.sh").read_text(encoding="utf-8")
+        build_script = (ROOT / "scripts" / "hermes" / "build" / "build-hermesrt-zip.sh").read_text(encoding="utf-8")
         self.assertIn("patch-ish-tool.py", build_script)
         self.assertIn('"$STAGE/hermes/toolsets.py"', build_script)
 

@@ -54,7 +54,7 @@ class IshRuntimeWorkflowTests(unittest.TestCase):
         self.assertIn("needs.decide.outputs.run_ish_runtime == 'true'", xcode_job["if"])
         self.assertIn("needs.decide.outputs.run_ish_meson != 'true'", xcode_job["if"])
         ish_case = self.text.split('case "$path" in')[3].split("esac", 1)[0]
-        self.assertNotIn("ISHBridge/*", ish_case)
+        self.assertNotIn("ishbridge/*", ish_case)
 
     def test_ish_runtime_job_runs_on_macos_and_is_blocking(self) -> None:
         job = self.workflow["jobs"]["build-ish-runtime"]
@@ -143,7 +143,7 @@ class IshRuntimeWorkflowTests(unittest.TestCase):
         steps_text = str(job["steps"])
         self.assertIn("ISHMesonBuild.tar.gz", steps_text)
         self.assertIn("build-ish-static.sh", steps_text)
-        build_script = (ROOT / "hermes" / "build" / "build-ish-static.sh").read_text()
+        build_script = (ROOT / "scripts" / "hermes" / "build" / "build-ish-static.sh").read_text()
         self.assertIn("repack-ish-meson-archives.py", build_script)
         self.assertIn("meson", steps_text.lower())
         self.assertIn("ninja", steps_text.lower())
@@ -157,7 +157,7 @@ class IshRuntimeWorkflowTests(unittest.TestCase):
 
     def test_decide_path_filter_covers_every_new_ish_build_input(self) -> None:
         for marker in (
-            "ISHBridge/*", "scripts/hermes/build/build-ish-static.sh",
+            "ishbridge/*", "scripts/hermes/build/build-ish-static.sh",
             "scripts/hermes/build/fetch-ish-source.sh", "scripts/hermes/build/verify-ish-source.py",
             "scripts/hermes/build/patch-ish-pty.py", "scripts/hermes/build/patch-ish-documents-fs.py",
             "scripts/hermes/build/ish-documents-fs.c",
@@ -170,9 +170,9 @@ class IshRuntimeWorkflowTests(unittest.TestCase):
                 self.assertIn(marker, self.text)
 
     def test_ish_bridge_changes_also_trigger_app_builds(self) -> None:
-        self.assertIn("ishbridge/ISHNative.xcconfig|ISHBridge/*)", self.text)
+        self.assertIn("ishbridge/ISHNative.xcconfig|ishbridge/*)", self.text)
         self.assertIn(
-            "blink/*|scripts/blink/prepare-blink-source.sh|ISHBridge/*|",
+            "blink/*|scripts/blink/prepare-blink-source.sh|ishbridge/*|",
             self.text,
         )
         self.assertGreaterEqual(self.text.count("ishbridge/ISHNative.xcconfig"), 1)

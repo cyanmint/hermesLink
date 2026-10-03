@@ -12,9 +12,14 @@ from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[2]
 PATCH_PATH = ROOT / "hermes" / "overlay" / "patches" / "patch-webui-zip.py"
+BLINK_SOURCE_AVAILABLE = (ROOT / "Blink" / "AppDelegate.m").is_file()
 
 
 class UserVisiblePathTests(unittest.TestCase):
+    @unittest.skipUnless(
+        BLINK_SOURCE_AVAILABLE,
+        "Blink source is materialized from the pinned upstream checkout during builds",
+    )
     def test_app_uses_actual_shared_documents_directory_for_hermes_home(self):
         app_delegate = (ROOT / "Blink" / "AppDelegate.m").read_text(encoding="utf-8")
         mcp_session = (ROOT / "Sessions" / "MCPSession.m").read_text(encoding="utf-8")
@@ -36,6 +41,10 @@ class UserVisiblePathTests(unittest.TestCase):
         self.assertNotIn('stringByAppendingPathComponent:@"Documents"', mcp_session)
         self.assertIn('[[self documentsPath] stringByAppendingPathComponent:@"HermesHome"]', blink_paths)
 
+    @unittest.skipUnless(
+        BLINK_SOURCE_AVAILABLE,
+        "Blink source is materialized from the pinned upstream checkout during builds",
+    )
     def test_app_documents_are_enabled_for_files_and_file_sharing(self):
         with (ROOT / "Blink" / "Info.plist").open("rb") as stream:
             info = plistlib.load(stream)
@@ -43,6 +52,10 @@ class UserVisiblePathTests(unittest.TestCase):
         self.assertIs(info["UIFileSharingEnabled"], True)
         self.assertIs(info["LSSupportsOpeningDocumentsInPlace"], True)
 
+    @unittest.skipUnless(
+        BLINK_SOURCE_AVAILABLE,
+        "Blink source is materialized from the pinned upstream checkout during builds",
+    )
     def test_app_installs_embedded_runtime_only_when_newer_and_loads_external_zip(self):
         app_delegate = (ROOT / "Blink" / "AppDelegate.m").read_text(encoding="utf-8")
         command = (ROOT / "Blink" / "Commands" / "hermes.m").read_text(encoding="utf-8")

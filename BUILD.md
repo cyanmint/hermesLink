@@ -1,8 +1,8 @@
 # Building HermesLink
 
-This repository stores Hermes/iSH integration code and Blink customization
-scripts, not Blink app or framework source. The upstream Blink revision is pinned in
-`blink/UPSTREAM_REVISION`; app glue and assets are in
+This repository stores component integration code, build scripts, tests, and
+Blink customization—not Blink app or framework source. The upstream Blink
+revision is pinned in `blink/UPSTREAM_REVISION`; app glue and assets are in
 `blink/overlay/`, and changes to upstream files are applied by small
 per-file Python scripts in `blink/patches/`.
 
@@ -31,6 +31,16 @@ repository sources.
 After preparation, open `Blink.xcodeproj`, configure the developer identity,
 and build the `Blink` scheme. Refer to the Xcode and dependency requirements of
 the pinned upstream Blink revision.
+
+## CI stages
+
+The workflow decides which components need rebuilding and ensures the shared
+release exists first. It then runs the Python runtime ZIP, native Hermes
+framework, Blink app without runtime frameworks, and iSH build branches in
+parallel; the iSH branch itself cross-compiles on Linux before packaging its
+framework on macOS. IPA assembly waits until every requested branch has
+succeeded or been skipped. Simulator tests and the Copilot E2E flow are opt-in
+and run only after IPA assembly.
 
 ## iSH integration status
 `bash scripts/hermes/build/fetch-ish-source.sh` fetches the pinned upstream iSH source

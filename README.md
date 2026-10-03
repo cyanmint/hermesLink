@@ -12,8 +12,10 @@ application source or its framework dependencies.
 - `blink/patches/` contains small, source-anchored Python scripts for
   modifying existing Blink files. They stop with an error when the expected
   source context is missing or ambiguous.
-- `hermes/` and `ishbridge/` contain the Hermes and iSH build/runtime
-  integration.
+- `hermes/`, `ishbridge/`, and `blink/` contain component-specific integration
+  code, overlays, and Blink patch scripts.
+- `scripts/` contains build and source-preparation scripts; `tests/` contains the
+  repository's test suite. Project documentation remains at the repository root.
 
 The CI workflow checks out the pinned Blink revision and its submodules,
 applies the overlay and Python scripts, then builds the app. The upstream

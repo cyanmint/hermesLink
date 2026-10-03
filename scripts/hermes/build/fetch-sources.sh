@@ -4,7 +4,7 @@
 set -euo pipefail
 
 # Build-time sources. These are deliberately not Git submodules.
-ROOT=$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)
+ROOT=$(cd "$(dirname "${BASH_SOURCE[0]}")/../../../hermes" && pwd)
 DEST=${1:-"$ROOT/build/external"}
 AGENT_COMMIT=${HERMES_AGENT_COMMIT:-2246c245f51e03eb6a151d19119009156e84659a}
 WEBUI_COMMIT=${HERMES_WEBUI_COMMIT:-e36f77389191fe9d81cd3a7416772e2f7b022e19}

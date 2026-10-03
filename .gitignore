@@ -11,13 +11,16 @@ DerivedData/
 
 # Hermes build sources are checked in; only generated runtime artifacts are ignored.
 !hermes/
+!scripts/
+!scripts/hermes/
 !scripts/hermes/build/
-!scripts/hermes/build/*.sh
+!scripts/hermes/build/**
 !hermes/overlay/
 !hermes/overlay/**
 /hermes/hermes
 /hermes/hermesrt.zip
 /hermes/build/external/
+/ISHBridge/
 
 ## Various settings
 *.pbxuser
@@ -113,3 +116,7 @@ Blink.xcodeproj/project.xcworkspace/xcshareddata
 /ios_patches.m
 /template_setup.xcconfig
 /update_cacert.sh
+
+# Keep generated Python caches ignored even under unignored source trees.
+__pycache__/
+*.py[cod]

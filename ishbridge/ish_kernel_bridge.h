@@ -11,9 +11,9 @@ extern "C" {
  * Blink/Commands/ish.m. This header intentionally has no Foundation/UIKit
  * dependency so it can be included from plain C callers too.
  *
- * Design (see BUILD.md and ISHBridge/ish_kernel_bridge.m for the full
+ * Design (see BUILD.md and ishbridge/ish_kernel_bridge.m for the full
  * rationale): the pinned upstream iSH Linux kernel
- * (hermes/build/external/ish/source, built by hermes/build/build-ish-static.sh
+ * (hermes/build/external/ish/source, built by scripts/hermes/build/build-ish-static.sh
  * into libraries this target links against) is booted exactly once per app
  * process via `actuate_kernel()`, on a dedicated background thread, because
  * upstream's `run_kernel()` never returns. Every `ish <command>` invocation
@@ -32,10 +32,10 @@ typedef enum {
    * usually because the command replaced the shell via exec(2). */
   ISH_RUN_ERR_NO_EXIT_SENTINEL = -5,
   /* This build was compiled without the native guest kernel bridge linked
-   * in (ISH_NATIVE_AVAILABLE=NO in hermes/build/ISHNative.xcconfig — the
+   * in (ISH_NATIVE_AVAILABLE=NO in ishbridge/ISHNative.xcconfig — the
    * default, since the prebuilt static libraries
-   * hermes/build/build-ish-static.sh produces are not part of a plain
-   * checkout). See ISHBridge/ish_kernel_bridge_stub.m. */
+   * scripts/hermes/build/build-ish-static.sh produces are not part of a plain
+   * checkout). See ishbridge/ish_kernel_bridge_stub.m. */
   ISH_RUN_ERR_NOT_AVAILABLE = -6,
   ISH_RUN_ERR_KERNEL_PANIC = -7,
 } ish_run_status;

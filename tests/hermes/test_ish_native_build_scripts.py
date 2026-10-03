@@ -18,13 +18,13 @@ from pathlib import Path
 
 
 ROOT = Path(__file__).resolve().parents[2]
-BUILD_SCRIPT = ROOT / "hermes" / "build" / "build-ish-static.sh"
-PACKAGE_FRAMEWORK_SCRIPT = ROOT / "hermes" / "build" / "package-ish-framework.sh"
-PREPARE_XCODE_PROJECT = ROOT / "hermes" / "build" / "prepare-ish-xcode-project.py"
-REPACK_MESON_ARCHIVES = ROOT / "hermes" / "build" / "repack-ish-meson-archives.py"
-PATCH_ISH_PTY = ROOT / "hermes" / "build" / "patch-ish-pty.py"
-PATCH_ISH_DOCUMENTS_FS = ROOT / "hermes" / "build" / "patch-ish-documents-fs.py"
-DOCUMENTS_FS_SOURCE = ROOT / "hermes" / "build" / "ish-documents-fs.c"
+BUILD_SCRIPT = ROOT / "scripts" / "hermes" / "build" / "build-ish-static.sh"
+PACKAGE_FRAMEWORK_SCRIPT = ROOT / "scripts" / "hermes" / "build" / "package-ish-framework.sh"
+PREPARE_XCODE_PROJECT = ROOT / "scripts" / "hermes" / "build" / "prepare-ish-xcode-project.py"
+REPACK_MESON_ARCHIVES = ROOT / "scripts" / "hermes" / "build" / "repack-ish-meson-archives.py"
+PATCH_ISH_PTY = ROOT / "scripts" / "hermes" / "build" / "patch-ish-pty.py"
+PATCH_ISH_DOCUMENTS_FS = ROOT / "scripts" / "hermes" / "build" / "patch-ish-documents-fs.py"
+DOCUMENTS_FS_SOURCE = ROOT / "scripts" / "hermes" / "build" / "ish-documents-fs.c"
 INSTALL_SCRIPT = ROOT / "scripts/install_ish_runtime.sh"
 PINNED_ROOTFS = ROOT / "hermes" / "build" / "external" / "ish" / "rootfs.tar.gz"
 PINNED_SOURCE = ROOT / "hermes" / "build" / "external" / "ish" / "source"
@@ -51,11 +51,11 @@ class BuildIshStaticScriptTests(unittest.TestCase):
     def test_build_patches_pty_and_session_readiness_only_for_the_host_library_build(self) -> None:
         source = BUILD_SCRIPT.read_text(encoding="utf-8")
         self.assertIn('trap restore_ish_source EXIT', source)
-        self.assertIn('python3 "$ROOT/build/patch-ish-pty.py" "$ISH_SOURCE"', source)
+        self.assertIn('python3 "$SCRIPT_DIR/patch-ish-pty.py" "$ISH_SOURCE"', source)
         self.assertIn('cp "$ISH_SOURCE/app/LinuxRoot.c" "$SOURCE_PATCH_BACKUP/LinuxRoot.c"', source)
         self.assertIn('cp "$SOURCE_PATCH_BACKUP/LinuxRoot.c" "$ISH_SOURCE/app/LinuxRoot.c"', source)
         self.assertLess(source.index('if [ "$BUILD_MODE" = "--meson-only" ]; then'),
-                        source.index('python3 "$ROOT/build/patch-ish-pty.py" "$ISH_SOURCE"'))
+                        source.index('python3 "$SCRIPT_DIR/patch-ish-pty.py" "$ISH_SOURCE"'))
 
     def test_pty_patch_lazily_resolves_the_ptmx_mount_and_handles_errors(self) -> None:
         spec = importlib.util.spec_from_file_location("patch_ish_pty", PATCH_ISH_PTY)
@@ -176,7 +176,7 @@ class BuildIshStaticScriptTests(unittest.TestCase):
         self.assertIn("i_gid_write(inode, 0)", source)
         build_script = BUILD_SCRIPT.read_text(encoding="utf-8")
         repack_script = REPACK_MESON_ARCHIVES.read_text(encoding="utf-8")
-        self.assertIn('python3 "$ROOT/build/patch-ish-documents-fs.py"', build_script)
+        self.assertIn('python3 "$SCRIPT_DIR/patch-ish-documents-fs.py"', build_script)
         self.assertIn('rm -f "$ISH_SOURCE/linux/documentsfs.c"', build_script)
         self.assertIn("libdocumentsfs_module.a", build_script)
         self.assertIn('"libdocumentsfs_module.a"', repack_script)

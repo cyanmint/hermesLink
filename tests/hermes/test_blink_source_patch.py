@@ -14,10 +14,10 @@ import yaml
 
 
 ROOT = Path(__file__).resolve().parents[2]
-PIN = ROOT / "hermes" / "blink" / "UPSTREAM_REVISION"
-PATCH_DIR = ROOT / "hermes" / "blink" / "patches"
-OVERLAY = ROOT / "hermes" / "blink" / "overlay"
-PREPARE_SCRIPT = ROOT / "hermes" / "build" / "prepare-blink-source.sh"
+PIN = ROOT / "blink" / "UPSTREAM_REVISION"
+PATCH_DIR = ROOT / "blink" / "patches"
+OVERLAY = ROOT / "blink" / "overlay"
+PREPARE_SCRIPT = ROOT / "scripts" / "blink" / "prepare-blink-source.sh"
 WORKFLOW = ROOT / ".github" / "workflows" / "build.yml"
 
 
@@ -98,6 +98,7 @@ class BlinkSourcePatchTests(unittest.TestCase):
         self.assertIn("rev-parse HEAD", self.script)
         self.assertIn("apply-patches.py", self.script)
         self.assertIn("rsync -a \"$integration_root/blink/overlay/\"", self.script)
+        self.assertIn('rsync -a "$integration_root/ishbridge/" "$source_root/ISHBridge/"', self.script)
         utility = (PATCH_DIR / "_patch_utils.py").read_text(encoding="utf-8")
         self.assertIn("ambiguous source anchors", utility)
         self.assertIn("source anchor not found", utility)

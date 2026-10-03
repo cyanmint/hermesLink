@@ -17,7 +17,7 @@ extern "C" {
  * here). It uses the standard iOS zlib and SQLite libraries and parses
  * the plain POSIX ustar container format (regular files, directories and
  * symlinks — the only entry types present in the pinned archive; see
- * hermes/tests/test_ish_bridge_c.py for host-side coverage).
+ * tests/hermes/test_ish_bridge_c.py for host-side coverage).
  *
  * Security properties:
  *  - every entry path is validated with ish_path_is_safe_entry_name()

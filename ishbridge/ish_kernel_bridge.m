@@ -3,9 +3,9 @@
 #import <Foundation/Foundation.h>
 
 /* Pulled from the pinned, unmodified upstream iSH source checkout (see
- * hermes/build/fetch-ish-source.sh / hermes/build/build-ish-static.sh); the
+ * scripts/hermes/build/fetch-ish-source.sh / scripts/hermes/build/build-ish-static.sh); the
  * header is vendored alongside the prebuilt static libraries this target
- * links against (install_ish_runtime.sh), never copied into this file. */
+ * links against (scripts/install_ish_runtime.sh), never copied into this file. */
 #include "LinuxInterop.h"
 
 #include "ish_kernel_bridge.h"
@@ -534,7 +534,7 @@ int ish_import_rootfs_archive(const char *archive_path, const char *dest_root) {
 }
 
 /* Extracts the bundled, pinned Alpine rootfs archive (packaged into the app
- * at build time by install_ish_runtime.sh) into writable, persistent app
+ * at build time by scripts/install_ish_runtime.sh) into writable, persistent app
  * storage on first use. Subsequent launches reuse the same on-disk guest
  * root as-is (this is what makes the guest "persistent": packages the user
  * installs, files they create, etc. survive app relaunches, even though the

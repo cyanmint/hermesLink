@@ -4,7 +4,7 @@
 - ISHBridge sources are registered in the project, with only the command and
   disabled-build stub compiled directly into the Blink app;
 - Ish.framework is conditionally linked and embedded by the app target;
-- hermes/build/ISHNative.xcconfig defaults to the safe stub mode;
+- ishbridge/ISHNative.xcconfig defaults to the safe stub mode;
 - Resources/blinkCommandsDictionary.plist registers the native `ish`
   command as `ish_main` (not an `ish container` subcommand).
 
@@ -21,9 +21,9 @@ from pathlib import Path
 ROOT = Path(__file__).resolve().parents[2]
 PBXPROJ = ROOT / "Blink.xcodeproj" / "project.pbxproj"
 COMMANDS_PLIST = ROOT / "Resources" / "blinkCommandsDictionary.plist"
-XCCONFIG = ROOT / "hermes" / "build" / "ISHNative.xcconfig"
+XCCONFIG = ROOT / "ishbridge" / "ISHNative.xcconfig"
 TEMPLATE_XCCONFIG = ROOT / "template_setup.xcconfig"
-ISH_DIR = ROOT / "ISHBridge"
+ISH_DIR = ROOT / "ishbridge"
 
 
 @unittest.skipUnless(
@@ -209,7 +209,7 @@ class IshNativeXcconfigTests(unittest.TestCase):
         self.assertIn("ish_rootfs_write_documents_mount_script(", bridge)
         command = (ROOT / "Blink" / "Commands" / "ish.m").read_text(encoding="utf-8")
         self.assertIn("ISHDocumentsHostPath().UTF8String", command)
-        self.assertNotIn("ish_mount_documents", (ROOT / "hermes" / "build" / "patch-ish-pty.py").read_text(encoding="utf-8"))
+        self.assertNotIn("ish_mount_documents", (ROOT / "scripts" / "hermes" / "build" / "patch-ish-pty.py").read_text(encoding="utf-8"))
         command = (ROOT / "Blink" / "Commands" / "ishfs.m").read_text(encoding="utf-8")
         self.assertNotIn('"documents"', command)
 
@@ -271,7 +271,7 @@ class IshNativeXcconfigTests(unittest.TestCase):
         self.assertIn("pthread_cond_timedwait", readiness)
         self.assertNotIn("ish_sync_do_in_workqueue", readiness)
         self.assertIn("g_kernel_panicked", readiness)
-        pty_patcher = (ROOT / "hermes" / "build" / "patch-ish-pty.py").read_text(encoding="utf-8")
+        pty_patcher = (ROOT / "scripts" / "hermes" / "build" / "patch-ish-pty.py").read_text(encoding="utf-8")
         self.assertIn("rootfs_initcall(ish_rootfs);", pty_patcher)
         self.assertIn("late_initcall(ish_session_ready);", pty_patcher)
         network_callback = source.split(
@@ -326,7 +326,7 @@ class IshNativeXcconfigTests(unittest.TestCase):
     )
     def test_template_setup_includes_the_ish_native_xcconfig(self) -> None:
         source = TEMPLATE_XCCONFIG.read_text(encoding="utf-8")
-        self.assertIn('#include "hermes/build/ISHNative.xcconfig"', source)
+        self.assertIn('#include "ISHBridge/ISHNative.xcconfig"', source)
 
     def test_both_kernel_bridge_implementation_files_exist_on_disk(self) -> None:
         self.assertTrue((ISH_DIR / "ish_kernel_bridge.m").is_file())
@@ -350,7 +350,7 @@ class IshNativeXcconfigTests(unittest.TestCase):
         project = PBXPROJ.read_text(encoding="utf-8")
         self.assertIn("Embed Ish.framework when enabled", project)
         self.assertIn('ISH_NATIVE_AVAILABLE:-NO', project)
-        package_script = (ROOT / "hermes" / "build" / "package-ish-framework.sh").read_text()
+        package_script = (ROOT / "scripts" / "hermes" / "build" / "package-ish-framework.sh").read_text()
         self.assertIn('@rpath/Ish.framework/Ish', package_script)
         for symbol in ("_ish_import_rootfs_archive", "_ish_kernel_has_booted"):
             with self.subTest(symbol=symbol):

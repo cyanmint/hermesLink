@@ -3,7 +3,8 @@
 # AI-generated content has no copyright holder and is not subject to copyright.
 set -euo pipefail
 
-ROOT=$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)
+SCRIPT_DIR=$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)
+ROOT=$(cd "$SCRIPT_DIR/../../../hermes" && pwd)
 MODE=all
 if [ "${1:-}" = "--rootfs-only" ]; then
   MODE=rootfs-only
@@ -15,7 +16,7 @@ else
 fi
 SOURCE="$DEST/source"
 ROOTFS_PARTIAL="$ROOTFS.partial"
-VERIFY="$ROOT/build/verify-ish-source.py"
+VERIFY="$SCRIPT_DIR/verify-ish-source.py"
 ISH_COMMIT=83348361fe65311f6e87ad2e1cbb0ac38d123f69
 ROOTFS_URL=https://github.com/ish-app/roots/releases/download/g00712ff0a54b2839c5aa1a8ed758003ca65357dc/appstore-apk.tar.gz
 trap 'rm -f "$ROOTFS_PARTIAL"' EXIT

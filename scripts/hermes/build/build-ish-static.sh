@@ -9,7 +9,8 @@
 # The Xcode host-interop stage requires macOS, Xcode, and Homebrew LLVM/LLD.
 set -euo pipefail
 
-ROOT=$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)
+SCRIPT_DIR=$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)
+ROOT=$(cd "$SCRIPT_DIR/../../../hermes" && pwd)
 ISH_SOURCE=${ISH_SOURCE:-$ROOT/build/external/ish/source}
 BUILD_ROOT=${BUILD_ROOT:-$ROOT/build/ish-native}
 MESON_BUILD_DIR=${MESON_BUILD_DIR:-$BUILD_ROOT/meson}
@@ -47,7 +48,7 @@ case "$BUILD_MODE" in
 esac
 
 [ -d "$ISH_SOURCE" ] || fail "pinned iSH source not found at $ISH_SOURCE; run scripts/hermes/build/fetch-ish-source.sh first"
-python3 "$ROOT/build/verify-ish-source.py" --source "$ISH_SOURCE" || fail "pinned iSH source failed integrity verification"
+python3 "$SCRIPT_DIR/verify-ish-source.py" --source "$ISH_SOURCE" || fail "pinned iSH source failed integrity verification"
 
 command -v meson >/dev/null 2>&1 || fail "requires Meson (https://mesonbuild.com); 'meson' not found on PATH"
 command -v ninja >/dev/null 2>&1 || fail "requires Ninja; 'ninja' not found on PATH"
@@ -144,8 +145,8 @@ restore_ish_source() {
 }
 trap restore_ish_source EXIT
 
-python3 "$ROOT/build/patch-ish-documents-fs.py" \
-  "$ISH_SOURCE" "$ROOT/build/ish-documents-fs.c"
+python3 "$SCRIPT_DIR/patch-ish-documents-fs.py" \
+  "$ISH_SOURCE" "$SCRIPT_DIR/ish-documents-fs.c"
 
 # app/xcode-meson.sh / app/xcode-ninja.sh are upstream's own Xcode
 # "Run Build Tool" build-phase scripts (see iSH.xcodeproj/project.pbxproj's
@@ -196,15 +197,15 @@ fi
 # The embedded kernel can reach the rootfs initcall before PTY initialization.
 # Patch the pinned host glue to resolve ptmx_path lazily and publish session
 # readiness from a late initcall. Its source is restored on every exit.
-python3 "$ROOT/build/patch-ish-pty.py" "$ISH_SOURCE"
+python3 "$SCRIPT_DIR/patch-ish-pty.py" "$ISH_SOURCE"
 
 # Build upstream's iOS host interop targets as well as its Meson kernel
 # archive. The host library contains LinuxInterop.c and the PTY/rootfs glue
 # referenced by ish_kernel_bridge.m; Meson alone does not produce it.
 # The host targets depend on liblinux in Xcode, which would rerun Ninja and
 # reconfigure the Linux cross-build tree with macOS compilers.
-python3 "$ROOT/build/prepare-ish-xcode-project.py" "$ISH_SOURCE/iSH.xcodeproj/project.pbxproj"
-python3 "$ROOT/build/repack-ish-meson-archives.py" "$MESON_BUILD_DIR"
+python3 "$SCRIPT_DIR/prepare-ish-xcode-project.py" "$ISH_SOURCE/iSH.xcodeproj/project.pbxproj"
+python3 "$SCRIPT_DIR/repack-ish-meson-archives.py" "$MESON_BUILD_DIR"
 for target in libiSHLinux libiSHLinuxUser; do
   echo "build-ish-static.sh: building upstream Xcode target $target ..."
   xcodebuild \

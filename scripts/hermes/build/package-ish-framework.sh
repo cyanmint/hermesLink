@@ -3,7 +3,7 @@
 # AI-generated content has no copyright holder and is not subject to copyright.
 set -euo pipefail
 
-ROOT=$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)
+ROOT=$(cd "$(dirname "${BASH_SOURCE[0]}")/../../.." && pwd)
 LIB_DIR=${1:?directory containing the built iSH archives and section anchors}
 OUTPUT_DIR=${2:?directory for the packaged Ish.framework}
 FRAMEWORK="$OUTPUT_DIR/Ish.framework"
@@ -47,7 +47,7 @@ COMMON_FLAGS=(
   -isysroot "$SDKROOT"
   "$MIN_VERSION_FLAG=$DEPLOYMENT_TARGET"
   -D_DARWIN_C_SOURCE=1
-  -I"$ROOT/ISHBridge"
+  -I"$ROOT/ishbridge"
 )
 
 xcrun --sdk "$SDK_NAME" clang "${COMMON_FLAGS[@]}" -fobjc-arc -fblocks \

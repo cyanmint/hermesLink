@@ -100,27 +100,27 @@ jobs:
           while IFS= read -r path; do
             [ -n "$path" ] || continue
             case "$path" in
-              hermes/build/build-hermesrt-zip.sh|hermes/build/fetch-sources.sh|hermes/build/validate-runtime-zip.py|hermes/overlay/hermes/*|hermes/overlay/patches/*|hermes/overlay/python/*|hermes/build/external/SOURCES)
+              scripts/hermes/build/build-hermesrt-zip.sh|scripts/hermes/build/fetch-sources.sh|scripts/hermes/build/validate-runtime-zip.py|hermes/overlay/hermes/*|hermes/overlay/patches/*|hermes/overlay/python/*|hermes/build/external/SOURCES)
                 python_runtime_changed=true
                 ;;
             esac
             case "$path" in
-              hermes/build/build-native-ios.sh|hermes/build/package-native-ios.sh|hermes/overlay/cpython/*|hermes/patches/*|hermes/build/generate-native-module-registry.py|hermes/build/configure_native_modules.py)
+              scripts/hermes/build/build-native-ios.sh|scripts/hermes/build/package-native-ios.sh|hermes/overlay/cpython/*|hermes/patches/*|scripts/hermes/build/generate-native-module-registry.py|scripts/hermes/build/configure_native_modules.py)
                 native_runtime_changed=true
                 ;;
             esac
             case "$path" in
-              hermes/build/build-ish-static.sh|hermes/build/fetch-ish-source.sh|hermes/build/verify-ish-source.py|hermes/build/patch-ish-pty.py|hermes/build/patch-ish-documents-fs.py|hermes/build/ish-documents-fs.c)
+              scripts/hermes/build/build-ish-static.sh|scripts/hermes/build/fetch-ish-source.sh|scripts/hermes/build/verify-ish-source.py|scripts/hermes/build/patch-ish-pty.py|scripts/hermes/build/patch-ish-documents-fs.py|scripts/hermes/build/ish-documents-fs.c)
                 ish_meson_changed=true
                 ;;
             esac
             case "$path" in
-              hermes/build/prepare-ish-xcode-project.py|hermes/build/repack-ish-meson-archives.py|hermes/build/package-ish-framework.sh|hermes/build/ISHNative.xcconfig|ishbridge/*)
+              scripts/hermes/build/prepare-ish-xcode-project.py|scripts/hermes/build/repack-ish-meson-archives.py|scripts/hermes/build/package-ish-framework.sh|ishbridge/ISHNative.xcconfig|ishbridge/*)
                 ish_xcode_changed=true
                 ;;
             esac
             case "$path" in
-              hermes/blink/*|hermes/build/prepare-blink-source.sh|ishbridge/*|hermes/build/ISHNative.xcconfig|install_ish_runtime.sh|install_hermes_runtime.sh)
+              blink/*|scripts/blink/prepare-blink-source.sh|ishbridge/*|ishbridge/ISHNative.xcconfig|scripts/install_ish_runtime.sh|scripts/install_hermes_runtime.sh)
                 app_changed=true
                 ;;
             esac
@@ -233,10 +233,10 @@ jobs:
           CPYTHON_REF: v3.13.9
         run: |
           set -euo pipefail
-          chmod +x hermes/build/*.sh
-          bash hermes/build/build-hermesrt-zip.sh
+          chmod +x scripts/hermes/build/*.sh
+          bash scripts/hermes/build/build-hermesrt-zip.sh
           test -s hermes/hermesrt.zip
-          python3 hermes/build/validate-runtime-zip.py hermes/hermesrt.zip
+          python3 scripts/hermes/build/validate-runtime-zip.py hermes/hermesrt.zip
 
       - name: Publish hermesrt.zip to fixed release
         env:
@@ -269,7 +269,7 @@ jobs:
         uses: actions/cache@v6
         with:
           path: ${{ runner.temp }}/hermes-build/native-ios
-          key: ${{ runner.os }}-hermes-ios-${{ hashFiles('hermes/build/**') }}-${{ hashFiles('hermes/overlay/**') }}-${{ hashFiles('hermes/patches/**') }}
+          key: ${{ runner.os }}-hermes-ios-${{ hashFiles('scripts/hermes/build/**') }}-${{ hashFiles('hermes/overlay/**') }}-${{ hashFiles('hermes/patches/**') }}
           restore-keys: |
             ${{ runner.os }}-hermes-ios-
 
@@ -282,8 +282,8 @@ jobs:
           HOST_PYTHON: ${{ steps.host-python.outputs.python-path }}
         run: |
           set -euo pipefail
-          chmod +x hermes/build/*.sh
-          bash hermes/build/build-native-ios.sh
+          chmod +x scripts/hermes/build/*.sh
+          bash scripts/hermes/build/build-native-ios.sh
           test -x hermes/Frameworks/HermesRuntime.framework/HermesRuntime
 
       - name: Package native framework
@@ -317,14 +317,14 @@ jobs:
       - name: Fetch pinned iSH source and Alpine rootfs
         run: |
           set -euo pipefail
-          chmod +x hermes/build/*.sh
-          bash hermes/build/fetch-ish-source.sh /tmp/hermeslink-ish
+          chmod +x scripts/hermes/build/*.sh
+          bash scripts/hermes/build/fetch-ish-source.sh /tmp/hermeslink-ish
 
       - name: Cache iSH Meson build
         uses: actions/cache@v6
         with:
           path: /tmp/hermeslink-ish/build
-          key: ${{ runner.os }}-hermes-ish-meson-ios16.5-${{ hashFiles('hermes/build/**') }}
+          key: ${{ runner.os }}-hermes-ish-meson-ios16.5-${{ hashFiles('scripts/hermes/build/**') }}
 
       - name: Build iSH Meson archives
         env:
@@ -333,7 +333,7 @@ jobs:
           ISH_SOURCE: /tmp/hermeslink-ish/source
           IOS_SDK_VERSION: '16.5'
           IPHONEOS_DEPLOYMENT_TARGET: '16.1'
-        run: bash hermes/build/build-ish-static.sh --meson-only
+        run: bash scripts/hermes/build/build-ish-static.sh --meson-only
 
       - name: Package Linux iSH build for the macOS stage
         run: |
@@ -386,7 +386,7 @@ jobs:
           MESON_BUILD_DIR: /tmp/hermeslink-ish/build/meson
           ISH_SOURCE: /tmp/hermeslink-ish/source
           IPHONEOS_DEPLOYMENT_TARGET: '16.1'
-        run: bash hermes/build/build-ish-static.sh --xcode-only
+        run: bash scripts/hermes/build/build-ish-static.sh --xcode-only
 
       - name: Compile iSH Mach-O section anchors
         run: |
@@ -402,11 +402,11 @@ jobs:
         run: |
           set -euo pipefail
           mkdir -p "$RUNNER_TEMP/ish-native-package/Frameworks"
-          bash hermes/build/package-ish-framework.sh \
+          bash scripts/hermes/build/package-ish-framework.sh \
             hermes/build/external/ish/lib \
             "$RUNNER_TEMP/ish-native-package/Frameworks"
           mkdir -p "$RUNNER_TEMP/ish-native-package/Resources"
-          bash hermes/build/fetch-ish-source.sh --rootfs-only \
+          bash scripts/hermes/build/fetch-ish-source.sh --rootfs-only \
             "$RUNNER_TEMP/ish-native-package/Resources/ish-rootfs.tar.gz"
 
       - name: Package iSH native build output
@@ -433,7 +433,7 @@ jobs:
 
       - name: Read pinned Blink revision
         id: blink_revision
-        run: echo "sha=$(tr -d '\r\n' < hermes/blink/UPSTREAM_REVISION)" >> "$GITHUB_OUTPUT"
+        run: echo "sha=$(tr -d '\r\n' < blink/UPSTREAM_REVISION)" >> "$GITHUB_OUTPUT"
 
       - name: Check out pinned Blink source
         uses: actions/checkout@v7
@@ -444,7 +444,7 @@ jobs:
           submodules: recursive
 
       - name: Apply Blink integration and stage app sources
-        run: bash hermes/build/prepare-blink-source.sh .blink-upstream "$GITHUB_WORKSPACE"
+        run: bash scripts/blink/prepare-blink-source.sh .blink-upstream "$GITHUB_WORKSPACE"
 
       - name: Install uv
         uses: astral-sh/setup-uv@v10.2.0
@@ -513,7 +513,7 @@ jobs:
           path: |
             ${{ runner.temp }}/HermesLink.xcarchive
             ${{ runner.temp }}/hermeslink-archive.log
-          key: ${{ runner.os }}-hermes-app-${{ github.sha }}-${{ steps.runtime_hash.outputs.sha256 }}-${{ hashFiles('hermes/blink/**') }}-${{ hashFiles('hermes/build/**') }}-${{ hashFiles('ishbridge/**') }}-${{ hashFiles('install_hermes_runtime.sh') }}
+          key: ${{ runner.os }}-hermes-app-${{ github.sha }}-${{ steps.runtime_hash.outputs.sha256 }}-${{ hashFiles('blink/**') }}-${{ hashFiles('scripts/hermes/build/**') }}-${{ hashFiles('ishbridge/**') }}-${{ hashFiles('scripts/install_hermes_runtime.sh') }}
 
       - name: Cache framework builds
         id: cache
@@ -522,7 +522,7 @@ jobs:
           path: |
             xcfs/.build
             Frameworks/ios_system/xcfs/.build
-          key: ${{ runner.os }}-${{ hashFiles('hermes/blink/UPSTREAM_REVISION') }}
+          key: ${{ runner.os }}-${{ hashFiles('blink/UPSTREAM_REVISION') }}
 
       - name: Get frameworks
         if: steps.cache.outputs.cache-hit != 'true'
@@ -634,7 +634,7 @@ jobs:
         run: brew install llvm lld meson ninja
 
       - name: Fetch pinned iSH source and Alpine rootfs
-        run: bash hermes/build/fetch-ish-source.sh "$RUNNER_TEMP/ish-simulator-source"
+        run: bash scripts/hermes/build/fetch-ish-source.sh "$RUNNER_TEMP/ish-simulator-source"
 
       - name: Build iSH for iOS Simulator
         env:
@@ -642,7 +642,7 @@ jobs:
           ISH_SOURCE: ${{ runner.temp }}/ish-simulator-source/source
           OUTPUT_DIR: ${{ runner.temp }}/ish-simulator-build/lib
           IPHONEOS_DEPLOYMENT_TARGET: '16.1'
-        run: bash hermes/build/build-ish-static.sh --simulator
+        run: bash scripts/hermes/build/build-ish-static.sh --simulator
 
       - name: Compile simulator iSH Mach-O section anchors
         run: |
@@ -659,12 +659,12 @@ jobs:
         run: |
           set -euo pipefail
           mkdir -p "$RUNNER_TEMP/ish-simulator-runtime/Frameworks" "$RUNNER_TEMP/ish-simulator-runtime/Resources"
-          bash hermes/build/package-ish-framework.sh \
+          bash scripts/hermes/build/package-ish-framework.sh \
             "$RUNNER_TEMP/ish-simulator-build/lib" \
             "$RUNNER_TEMP/ish-simulator-runtime/Frameworks"
           cp "$RUNNER_TEMP/ish-simulator-source/rootfs.tar.gz" \
             "$RUNNER_TEMP/ish-simulator-runtime/Resources/ish-rootfs.tar.gz"
-          python3 hermes/build/verify-ish-source.py \
+          python3 scripts/hermes/build/verify-ish-source.py \
             --rootfs "$RUNNER_TEMP/ish-simulator-runtime/Resources/ish-rootfs.tar.gz"
 
       - name: Upload simulator iSH runtime
@@ -692,7 +692,7 @@ jobs:
 
       - name: Read pinned Blink revision
         id: blink_revision
-        run: echo "sha=$(tr -d '\r\n' < hermes/blink/UPSTREAM_REVISION)" >> "$GITHUB_OUTPUT"
+        run: echo "sha=$(tr -d '\r\n' < blink/UPSTREAM_REVISION)" >> "$GITHUB_OUTPUT"
 
       - name: Check out pinned Blink source
         uses: actions/checkout@v7
@@ -703,7 +703,7 @@ jobs:
           submodules: recursive
 
       - name: Apply Blink integration and stage app sources
-        run: bash hermes/build/prepare-blink-source.sh .blink-upstream "$GITHUB_WORKSPACE"
+        run: bash scripts/blink/prepare-blink-source.sh .blink-upstream "$GITHUB_WORKSPACE"
 
       - name: Install released runtime for simulator Copilot E2E
         env:
@@ -715,12 +715,12 @@ jobs:
             --pattern hermesrt.zip \
             --pattern HermesRuntime.framework.zip \
             --dir "$RUNNER_TEMP/runtime-e2e"
-          python3 hermes/build/validate-runtime-zip.py "$RUNNER_TEMP/runtime-e2e/hermesrt.zip"
+          python3 scripts/hermes/build/validate-runtime-zip.py "$RUNNER_TEMP/runtime-e2e/hermesrt.zip"
           unzip -t "$RUNNER_TEMP/runtime-e2e/HermesRuntime.framework.zip"
           mkdir -p hermes/Frameworks
           unzip -q "$RUNNER_TEMP/runtime-e2e/HermesRuntime.framework.zip" -d hermes/Frameworks
           cp "$RUNNER_TEMP/runtime-e2e/hermesrt.zip" hermes/hermesrt.zip
-          bash install_hermes_runtime.sh hermes
+          bash scripts/install_hermes_runtime.sh hermes
 
       - name: Download simulator iSH framework and rootfs
         uses: actions/download-artifact@v7
@@ -735,7 +735,7 @@ jobs:
           path: |
             xcfs/.build
             Frameworks/ios_system/xcfs/.build
-          key: ${{ runner.os }}-${{ hashFiles('hermes/blink/UPSTREAM_REVISION') }}
+          key: ${{ runner.os }}-${{ hashFiles('blink/UPSTREAM_REVISION') }}
 
       - name: Get frameworks
         if: steps.cache.outputs.cache-hit != 'true'
@@ -748,8 +748,8 @@ jobs:
       - name: Install native iSH for simulator app
         run: |
           set -euo pipefail
-          bash install_ish_runtime.sh "$RUNNER_TEMP/ish-simulator-runtime"
-          python3 hermes/build/verify-ish-source.py --rootfs Resources/ish-rootfs.tar.gz
+          bash scripts/install_ish_runtime.sh "$RUNNER_TEMP/ish-simulator-runtime"
+          python3 scripts/hermes/build/verify-ish-source.py --rootfs Resources/ish-rootfs.tar.gz
 
       - name: Prepare Xcode configuration
         run: |
@@ -795,7 +795,7 @@ jobs:
         run: |
           set -euo pipefail
           set -o pipefail
-          python hermes/tests/ci_simulator_copilot_e2e.py 2>&1 | tee "$RUNNER_TEMP/hermeslink-simulator-copilot-e2e.log"
+          python tests/hermes/ci_simulator_copilot_e2e.py 2>&1 | tee "$RUNNER_TEMP/hermeslink-simulator-copilot-e2e.log"
 
       - name: Upload simulator Copilot E2E logs
         if: always()
@@ -846,7 +846,7 @@ jobs:
             test -s "$RUNNER_TEMP/hermeslink-components/$asset"
           done
           unzip -t "$RUNNER_TEMP/hermeslink-components/HermesLink.app.zip"
-          python3 hermes/build/validate-runtime-zip.py "$RUNNER_TEMP/hermeslink-components/hermesrt.zip"
+          python3 scripts/hermes/build/validate-runtime-zip.py "$RUNNER_TEMP/hermeslink-components/hermesrt.zip"
           unzip -t "$RUNNER_TEMP/hermeslink-components/HermesRuntime.framework.zip"
           unzip -t "$RUNNER_TEMP/hermeslink-components/ISHLinuxNative.zip"
           ditto -x -k "$RUNNER_TEMP/hermeslink-components/HermesLink.app.zip" \
@@ -872,7 +872,7 @@ jobs:
           test -x "$RUNNER_TEMP/Payload/HermesLink.app/Frameworks/Ish.framework/Ish"
           test -x "$RUNNER_TEMP/Payload/HermesLink.app/Frameworks/HermesRuntime.framework/HermesRuntime"
           test -s "$RUNNER_TEMP/Payload/HermesLink.app/hermesrt.zip"
-          python3 hermes/build/verify-ish-source.py \
+          python3 scripts/hermes/build/verify-ish-source.py \
             --rootfs "$RUNNER_TEMP/Payload/HermesLink.app/ish-rootfs.tar.gz"
 
       - name: Sign and package IPA

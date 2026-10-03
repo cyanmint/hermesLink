@@ -73,7 +73,7 @@ class AiGeneratedFilesInventoryTests(unittest.TestCase):
         self.assertEqual(missing, [])
 
     def test_all_blink_patch_scripts_are_in_the_inventory(self) -> None:
-        patch_dir = ROOT / "hermes" / "blink" / "patches"
+        patch_dir = ROOT / "blink" / "patches"
         patch_paths = {
             path.relative_to(ROOT).as_posix() for path in patch_dir.glob("patch-*.py")
         }
@@ -81,7 +81,7 @@ class AiGeneratedFilesInventoryTests(unittest.TestCase):
         self.assertEqual(patch_paths - self.listed_paths, set())
 
     def test_all_ishbridge_sources_are_listed(self) -> None:
-        ish_bridge_dir = ROOT / "ISHBridge"
+        ish_bridge_dir = ROOT / "ishbridge"
         on_disk = {
             path.relative_to(ROOT).as_posix() for path in ish_bridge_dir.glob("*")
             if path.is_file()

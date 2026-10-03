@@ -8,7 +8,7 @@ from pathlib import Path
 
 
 ROOT = Path(__file__).resolve().parents[2]
-VERIFY_PATH = ROOT / "hermes" / "build" / "verify-ish-source.py"
+VERIFY_PATH = ROOT / "scripts" / "hermes" / "build" / "verify-ish-source.py"
 SPEC = importlib.util.spec_from_file_location("verify_ish_source", VERIFY_PATH)
 verify = importlib.util.module_from_spec(SPEC)
 SPEC.loader.exec_module(verify)
@@ -36,7 +36,7 @@ class IshSourceTests(unittest.TestCase):
             verify.require_sha256(digest, "0" * 64, "fixture")
 
     def test_fetch_script_checks_source_asset_and_submodule_pins(self):
-        script = (ROOT / "hermes" / "build" / "fetch-ish-source.sh").read_text(
+        script = (ROOT / "scripts" / "hermes" / "build" / "fetch-ish-source.sh").read_text(
             encoding="utf-8"
         )
         self.assertIn(verify.ISH_COMMIT, script)

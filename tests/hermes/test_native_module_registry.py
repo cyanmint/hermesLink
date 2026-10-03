@@ -5,12 +5,12 @@ from pathlib import Path
 import yaml
 
 
-SCRIPT_PATH = Path(__file__).resolve().parents[1] / "build" / "generate-native-module-registry.py"
+SCRIPT_PATH = Path(__file__).resolve().parents[2] / "scripts" / "hermes" / "build" / "generate-native-module-registry.py"
 SPEC = importlib.util.spec_from_file_location("native_module_registry", SCRIPT_PATH)
 registry = importlib.util.module_from_spec(SPEC)
 SPEC.loader.exec_module(registry)
 
-CONFIG_PATH = Path(__file__).resolve().parents[1] / "build" / "configure_native_modules.py"
+CONFIG_PATH = Path(__file__).resolve().parents[2] / "scripts" / "hermes" / "build" / "configure_native_modules.py"
 CONFIG_SPEC = importlib.util.spec_from_file_location("native_module_config", CONFIG_PATH)
 module_config = importlib.util.module_from_spec(CONFIG_SPEC)
 CONFIG_SPEC.loader.exec_module(module_config)
@@ -18,11 +18,11 @@ CONFIG_SPEC.loader.exec_module(module_config)
 
 class NativeModuleRegistryTests(unittest.TestCase):
     def test_native_build_explicitly_compiles_required_posix_subprocess_object(self):
-        build_script = (Path(__file__).resolve().parents[1] / "build" / "build-native-ios.sh")
+        build_script = (Path(__file__).resolve().parents[2] / "scripts" / "hermes" / "build" / "build-native-ios.sh")
         self.assertIn("Modules/_posixsubprocess.o", build_script.read_text(encoding="utf-8"))
 
     def test_native_build_compiles_and_registers_ios_async_system_module(self):
-        build_root = Path(__file__).resolve().parents[1] / "build"
+        build_root = Path(__file__).resolve().parents[2] / "scripts" / "hermes" / "build"
         build_script = (build_root / "build-native-ios.sh").read_text(encoding="utf-8")
         self.assertIn("ios_async_system.c", build_script)
         self.assertIn(("_hermesios", "_hermesiosmodule.c"), module_config.REQUIRED_STATIC_MODULES)
@@ -30,7 +30,7 @@ class NativeModuleRegistryTests(unittest.TestCase):
 
     def test_native_build_archives_hacl_and_expat_for_native_runtime(self):
         build_script = (
-            Path(__file__).resolve().parents[1] / "build" / "build-native-ios.sh"
+            Path(__file__).resolve().parents[2] / "scripts" / "hermes" / "build" / "build-native-ios.sh"
         ).read_text(encoding="utf-8")
 
         self.assertIn("--enable-framework", build_script)
@@ -92,7 +92,7 @@ class NativeModuleRegistryTests(unittest.TestCase):
 
     def test_ios_async_system_module_streams_output_and_cancels_native_thread(self):
         source_path = (
-            Path(__file__).resolve().parents[1] / "overlay" / "cpython" / "ios_async_system.c"
+            Path(__file__).resolve().parents[2] / "hermes" / "overlay" / "cpython" / "ios_async_system.c"
         )
         source = source_path.read_text(encoding="utf-8")
         self.assertIn("pipe(fds)", source)
@@ -185,7 +185,7 @@ class NativeModuleRegistryTests(unittest.TestCase):
         registry.require_native_modules(["_ssl", "_hashlib", "_posixsubprocess", "_hermesios"])
 
     def test_ios_async_system_module_owns_async_pipe_and_cancel_api(self):
-        source = (Path(__file__).resolve().parents[1] / "overlay" / "cpython" / "ios_async_system.c").read_text(
+        source = (Path(__file__).resolve().parents[2] / "hermes" / "overlay" / "cpython" / "ios_async_system.c").read_text(
             encoding="utf-8"
         )
         for symbol in ("PyInit__hermesios", "pthread_create", "pthread_cancel", "ios_setStreams", "pipe(fds)"):
@@ -194,7 +194,7 @@ class NativeModuleRegistryTests(unittest.TestCase):
         self.assertNotIn("mkstemp", source)
 
     def test_ios_async_runner_separates_pipe_stream_ownership_and_pid_startup(self):
-        source = (Path(__file__).resolve().parents[1] / "overlay" / "cpython" / "ios_async_system.c").read_text(
+        source = (Path(__file__).resolve().parents[2] / "hermes" / "overlay" / "cpython" / "ios_async_system.c").read_text(
             encoding="utf-8"
         )
         self.assertIn('"ios_getThreadId"', source)

@@ -4,8 +4,16 @@ from pathlib import Path
 
 
 ROOT = Path(__file__).resolve().parents[2]
+BLINK_SOURCE_AVAILABLE = (
+    (ROOT / "Blink" / "AppDelegate.m").is_file()
+    and (ROOT / "Resources" / "blinkCommandsDictionary.plist").is_file()
+)
 
 
+@unittest.skipUnless(
+    BLINK_SOURCE_AVAILABLE,
+    "Blink source is materialized from the pinned upstream checkout during builds",
+)
 class IosShellRegistrationTests(unittest.TestCase):
     def test_sh_is_registered_to_ios_system_shell_handler(self):
         plist_path = ROOT / "Resources" / "blinkCommandsDictionary.plist"

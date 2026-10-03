@@ -3,7 +3,8 @@
 # AI-generated content has no copyright holder and is not subject to copyright.
 set -euo pipefail
 
-ROOT=$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)
+SCRIPT_DIR=$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)
+ROOT=$(cd "$SCRIPT_DIR/../../../hermes" && pwd)
 BUILD_ROOT=${BUILD_ROOT:-/root/hermes-build/native-ios}
 SDK_VERSION=${IOS_SDK_VERSION:-16.5}
 DEPLOYMENT_TARGET=${IPHONEOS_DEPLOYMENT_TARGET:-13.0}
@@ -137,7 +138,7 @@ int __isPlatformVersionAtLeast(uint32_t platform, uint32_t major, uint32_t minor
 }
 EOF
 clang --target=arm64-apple-ios${DEPLOYMENT_TARGET} -isysroot "$SDK_ROOT" -c "$TARGET_ROOT/ios_compat.c" -o "$TARGET_ROOT/ios_compat.o"
-python3 - "$ROOT/build" "$TARGET_ROOT/Modules/Setup.stdlib.in" <<'PY'
+python3 - "$SCRIPT_DIR" "$TARGET_ROOT/Modules/Setup.stdlib.in" <<'PY'
 import sys
 from pathlib import Path
 sys.path.insert(0, sys.argv[1])
@@ -160,7 +161,7 @@ PY
     --with-openssl="$OPENSSL_INSTALL" --with-openssl-rpath=no \
     --without-ensurepip --disable-test-modules --disable-ipv6 --with-lto=no \
     --enable-framework)
-python3 - "$ROOT/build" "$TARGET_ROOT/Modules/Setup.stdlib" "$TARGET_ROOT/Modules/Setup.local" "$TARGET_ROOT/Makefile" <<'PY'
+python3 - "$SCRIPT_DIR" "$TARGET_ROOT/Modules/Setup.stdlib" "$TARGET_ROOT/Modules/Setup.local" "$TARGET_ROOT/Makefile" <<'PY'
 import pathlib, sys
 sys.path.insert(0, sys.argv[1])
 from configure_native_modules import ensure_required_static_modules
@@ -186,7 +187,7 @@ PY
 (cd "$TARGET_ROOT" && \
   PATH="$TOOLBIN:/usr/bin:/bin" \
     make -n -o Makefile -o Python.framework/Python libpython3.13.a > native-libpython-dryrun.txt)
-python3 - "$ROOT/build" "$TARGET_ROOT/native-libpython-dryrun.txt" "$TARGET_ROOT/native-module-objects.txt" <<'PY'
+python3 - "$SCRIPT_DIR" "$TARGET_ROOT/native-libpython-dryrun.txt" "$TARGET_ROOT/native-module-objects.txt" <<'PY'
 from pathlib import Path
 import shlex, sys
 import re
@@ -246,7 +247,7 @@ PY
   printf '%s\n' Modules/arraymodule.o >> native-module-objects.filtered && \
   printf '%s\n' Modules/_randommodule.o >> native-module-objects.filtered && \
   sort -u native-module-objects.filtered > native-module-objects.txt)
-python3 "$ROOT/build/generate-native-module-registry.py" \
+python3 "$SCRIPT_DIR/generate-native-module-registry.py" \
   "$TARGET_ROOT/native-module-objects.txt" "$TARGET_ROOT" "$BUILD_ROOT/native_modules.c" \
   --nm "$NATIVE_NM"
 (cd "$TARGET_ROOT" && \
@@ -260,7 +261,7 @@ python3 "$ROOT/build/generate-native-module-registry.py" \
 
 mkdir -p "$BUILD_ROOT/artifact"
 CC=arm64-apple-ios-clang PATH="$TOOLBIN:$PATH" \
-  bash "$ROOT/build/package-native-ios.sh" \
+  bash "$SCRIPT_DIR/package-native-ios.sh" \
   "$TARGET_ROOT" "$BUILD_ROOT/artifact"
 rm -f "$ROOT/hermes"
 mkdir -p "$ROOT/Frameworks"

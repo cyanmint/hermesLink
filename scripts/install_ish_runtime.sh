@@ -6,7 +6,7 @@
 # HermesLink Xcode build tree, matching scripts/install_hermes_runtime.sh's role.
 set -euo pipefail
 
-ROOT=$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)
+ROOT=$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)
 BLINK_ROOT=${BLINK_ROOT:-$ROOT}
 INPUT_ROOT=${1:-${ISH_NATIVE_BUILD_ROOT:-$ROOT/hermes/build/external/ish}}
 SOURCE_FRAMEWORK=${ISH_FRAMEWORK:-$INPUT_ROOT/Frameworks/Ish.framework}

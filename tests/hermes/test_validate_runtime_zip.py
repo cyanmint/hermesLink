@@ -9,7 +9,7 @@ from pathlib import Path
 
 
 ROOT = Path(__file__).resolve().parents[2]
-MODULE_PATH = ROOT / "hermes" / "build" / "validate-runtime-zip.py"
+MODULE_PATH = ROOT / "scripts" / "hermes" / "build" / "validate-runtime-zip.py"
 SPEC = importlib.util.spec_from_file_location("validate_runtime_zip_test", MODULE_PATH)
 validator = importlib.util.module_from_spec(SPEC)
 SPEC.loader.exec_module(validator)

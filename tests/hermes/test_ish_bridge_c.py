@@ -25,8 +25,8 @@ from pathlib import Path
 
 
 ROOT = Path(__file__).resolve().parents[2]
-BRIDGE_DIR = ROOT / "ISHBridge"
-HARNESS_SOURCE = ROOT / "hermes" / "tests" / "ish_bridge" / "ish_bridge_test_main.c"
+BRIDGE_DIR = ROOT / "ishbridge"
+HARNESS_SOURCE = ROOT / "tests" / "hermes" / "ish_bridge" / "ish_bridge_test_main.c"
 PINNED_ROOTFS = ROOT / "hermes" / "build" / "external" / "ish" / "rootfs.tar.gz"
 
 

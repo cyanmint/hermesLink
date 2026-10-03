@@ -3,7 +3,7 @@
 # AI-generated content has no copyright holder and is not subject to copyright.
 set -euo pipefail
 
-ROOT=$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)
+ROOT=$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)
 BLINK_ROOT=${BLINK_ROOT:-$ROOT}
 INPUT_ROOT=${1:-${NATIVE_IOS_BUILD_ROOT:-$ROOT/hermes}}
 SOURCE_FRAMEWORK=${HERMES_RUNTIME_FRAMEWORK:-$INPUT_ROOT/Frameworks/HermesRuntime.framework}
