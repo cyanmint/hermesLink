@@ -7,12 +7,12 @@ application source or its framework dependencies.
 
 ## Source model
 
-- `hermes/blink/UPSTREAM_REVISION` pins the Blink source revision.
-- `hermes/blink/overlay/` contains HermesLink-specific app glue and resources.
-- `hermes/blink/patches/` contains small, source-anchored Python scripts for
+- `blink/UPSTREAM_REVISION` pins the Blink source revision.
+- `blink/overlay/` contains HermesLink-specific app glue and resources.
+- `blink/patches/` contains small, source-anchored Python scripts for
   modifying existing Blink files. They stop with an error when the expected
   source context is missing or ambiguous.
-- `hermes/` and `ISHBridge/` contain the Hermes and iSH build/runtime
+- `hermes/` and `ishbridge/` contain the Hermes and iSH build/runtime
   integration.
 
 The CI workflow checks out the pinned Blink revision and its submodules,

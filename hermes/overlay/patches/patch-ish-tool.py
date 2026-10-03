@@ -7,7 +7,7 @@ every standard Hermes bundle (hermes-cli, hermes-telegram, the `coding`
 posture, etc.) includes it the same way those bundles already include
 `terminal`/`process_manage`. Applied to a staged copy of hermes-agent's
 toolsets.py (never the pinned, ignored checkout under
-hermes/build/external/hermes-agent) by hermes/build/build-hermesrt-zip.sh."""
+hermes/build/external/hermes-agent) by scripts/hermes/build/build-hermesrt-zip.sh."""
 from __future__ import annotations
 
 import sys

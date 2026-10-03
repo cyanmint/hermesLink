@@ -2,7 +2,7 @@
 # AI-generated content has no copyright holder and is not subject to copyright.
 """`ish` tool: run a shell command in HermesLink's persistent Alpine Linux
 guest (the iSH-based kernel booted once per app process; see BUILD.md and
-ISHBridge/ish_kernel_bridge.m), alongside the existing `terminal` tool which
+ishbridge/ish_kernel_bridge.m), alongside the existing `terminal` tool which
 runs commands in the host ios_system environment.
 
 This is a thin wrapper: it does not reimplement process execution. It

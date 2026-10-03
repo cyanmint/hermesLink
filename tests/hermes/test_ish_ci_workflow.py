@@ -102,7 +102,7 @@ class IshRuntimeWorkflowTests(unittest.TestCase):
         self.assertIn("inputs.run_tests == true", simulator_job["if"])
         simulator_steps = str(simulator_job["steps"])
         self.assertIn("actions/download-artifact@v7", simulator_steps)
-        self.assertIn("install_ish_runtime.sh", simulator_steps)
+        self.assertIn("scripts/install_ish_runtime.sh", simulator_steps)
         self.assertIn("ISH_NATIVE_AVAILABLE = YES", simulator_steps)
         self.assertIn("Run HermesLink tests", simulator_steps)
         self.assertIn("ci_simulator_copilot_e2e.py", simulator_steps)
@@ -157,32 +157,32 @@ class IshRuntimeWorkflowTests(unittest.TestCase):
 
     def test_decide_path_filter_covers_every_new_ish_build_input(self) -> None:
         for marker in (
-            "ISHBridge/*", "hermes/build/build-ish-static.sh",
-            "hermes/build/fetch-ish-source.sh", "hermes/build/verify-ish-source.py",
-            "hermes/build/patch-ish-pty.py", "hermes/build/patch-ish-documents-fs.py",
-            "hermes/build/ish-documents-fs.c",
-            "hermes/build/prepare-ish-xcode-project.py",
-            "hermes/build/repack-ish-meson-archives.py",
-            "hermes/build/package-ish-framework.sh",
-            "hermes/build/ISHNative.xcconfig", "install_ish_runtime.sh",
+            "ISHBridge/*", "scripts/hermes/build/build-ish-static.sh",
+            "scripts/hermes/build/fetch-ish-source.sh", "scripts/hermes/build/verify-ish-source.py",
+            "scripts/hermes/build/patch-ish-pty.py", "scripts/hermes/build/patch-ish-documents-fs.py",
+            "scripts/hermes/build/ish-documents-fs.c",
+            "scripts/hermes/build/prepare-ish-xcode-project.py",
+            "scripts/hermes/build/repack-ish-meson-archives.py",
+            "scripts/hermes/build/package-ish-framework.sh",
+            "ishbridge/ISHNative.xcconfig", "scripts/install_ish_runtime.sh",
         ):
             with self.subTest(marker=marker):
                 self.assertIn(marker, self.text)
 
     def test_ish_bridge_changes_also_trigger_app_builds(self) -> None:
-        self.assertIn("hermes/build/ISHNative.xcconfig|ISHBridge/*)", self.text)
+        self.assertIn("ishbridge/ISHNative.xcconfig|ISHBridge/*)", self.text)
         self.assertIn(
-            "hermes/blink/*|hermes/build/prepare-blink-source.sh|ISHBridge/*|",
+            "blink/*|scripts/blink/prepare-blink-source.sh|ISHBridge/*|",
             self.text,
         )
-        self.assertGreaterEqual(self.text.count("hermes/build/ISHNative.xcconfig"), 1)
-        self.assertGreaterEqual(self.text.count("install_ish_runtime.sh"), 1)
+        self.assertGreaterEqual(self.text.count("ishbridge/ISHNative.xcconfig"), 1)
+        self.assertGreaterEqual(self.text.count("scripts/install_ish_runtime.sh"), 1)
 
     def test_app_archive_excludes_runtime_frameworks_and_rootfs(self) -> None:
         job = self.workflow["jobs"]["build-app"]
         steps_text = str(job["steps"])
         self.assertNotIn("ISHLinuxNative.zip", steps_text)
-        self.assertNotIn("install_ish_runtime.sh", steps_text)
+        self.assertNotIn("scripts/install_ish_runtime.sh", steps_text)
         self.assertIn("ISH_NATIVE_AVAILABLE = YES", steps_text)
         self.assertIn("ish_kernel_bridge_stub.m", steps_text)
         self.assertIn("ish_rootfs.c", steps_text)
@@ -237,7 +237,7 @@ class IshRuntimeWorkflowTests(unittest.TestCase):
 
     def test_ish_linker_configuration_changes_only_the_macos_ish_stage(self) -> None:
         case = self.text.split('case "$path" in')[4].split("esac", 1)[0]
-        self.assertIn("hermes/build/ISHNative.xcconfig", case)
+        self.assertIn("ishbridge/ISHNative.xcconfig", case)
         meson_case = self.text.split('case "$path" in')[3].split("esac", 1)[0]
         self.assertNotIn("ISHNative.xcconfig", meson_case)
 

@@ -97,7 +97,7 @@ class BlinkSourcePatchTests(unittest.TestCase):
     def test_preparation_script_checks_revision_and_runs_patch_scripts_before_staging(self) -> None:
         self.assertIn("rev-parse HEAD", self.script)
         self.assertIn("apply-patches.py", self.script)
-        self.assertIn("rsync -a \"$integration_root/hermes/blink/overlay/\"", self.script)
+        self.assertIn("rsync -a \"$integration_root/blink/overlay/\"", self.script)
         utility = (PATCH_DIR / "_patch_utils.py").read_text(encoding="utf-8")
         self.assertIn("ambiguous source anchors", utility)
         self.assertIn("source anchor not found", utility)
@@ -126,7 +126,7 @@ class BlinkSourcePatchTests(unittest.TestCase):
                 )
                 prepare = next(step for step in steps if step.get("name") == "Apply Blink integration and stage app sources")
                 build = next(step for step in steps if step.get("name") == build_step)
-                self.assertIn("hermes/blink/UPSTREAM_REVISION", revision_step["run"])
+                self.assertIn("blink/UPSTREAM_REVISION", revision_step["run"])
                 self.assertEqual(source_checkout["with"]["ref"], "${{ steps.blink_revision.outputs.sha }}")
                 self.assertEqual(source_checkout["with"]["path"], ".blink-upstream")
                 self.assertEqual(source_checkout["with"]["submodules"], "recursive")
@@ -134,9 +134,9 @@ class BlinkSourcePatchTests(unittest.TestCase):
                 self.assertLess(steps.index(prepare), steps.index(build))
 
     def test_app_cache_and_path_filter_include_blink_integration_inputs(self) -> None:
-        self.assertIn("hermes/blink/*", self.workflow_text)
-        self.assertIn("hermes/blink/**", self.workflow_text)
-        self.assertIn("hermes/build/prepare-blink-source.sh", self.workflow_text)
+        self.assertIn("blink/*", self.workflow_text)
+        self.assertIn("blink/**", self.workflow_text)
+        self.assertIn("scripts/blink/prepare-blink-source.sh", self.workflow_text)
 
 
 if __name__ == "__main__":

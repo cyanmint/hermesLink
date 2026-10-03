@@ -51,10 +51,10 @@ COMMON_FLAGS=(
 )
 
 xcrun --sdk "$SDK_NAME" clang "${COMMON_FLAGS[@]}" -fobjc-arc -fblocks \
-  -I"$LIB_DIR" -c "$ROOT/ISHBridge/ish_kernel_bridge.m" -o "$BUILD_DIR/ish_kernel_bridge.o"
+  -I"$LIB_DIR" -c "$ROOT/ishbridge/ish_kernel_bridge.m" -o "$BUILD_DIR/ish_kernel_bridge.o"
 for source in ish_rootfs ish_path_safety ish_exit_protocol; do
   xcrun --sdk "$SDK_NAME" clang "${COMMON_FLAGS[@]}" \
-    -c "$ROOT/ISHBridge/$source.c" -o "$BUILD_DIR/$source.o"
+    -c "$ROOT/ishbridge/$source.c" -o "$BUILD_DIR/$source.o"
 done
 
 # Match arch/ish/Makefile: Mach-O per-CPU anchors require page alignment.
@@ -86,7 +86,7 @@ xcrun --sdk "$SDK_NAME" clang "${COMMON_FLAGS[@]}" -dynamiclib \
   -o "$FRAMEWORK/Ish"
 chmod 755 "$FRAMEWORK/Ish"
 
-cp "$ROOT/ISHBridge/ish_kernel_bridge.h" "$FRAMEWORK/Headers/ish_kernel_bridge.h"
+cp "$ROOT/ishbridge/ish_kernel_bridge.h" "$FRAMEWORK/Headers/ish_kernel_bridge.h"
 cat > "$FRAMEWORK/Info.plist" <<PLIST
 <?xml version="1.0" encoding="UTF-8"?>
 <!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">

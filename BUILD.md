@@ -2,9 +2,9 @@
 
 This repository stores Hermes/iSH integration code and Blink customization
 scripts, not Blink app or framework source. The upstream Blink revision is pinned in
-`hermes/blink/UPSTREAM_REVISION`; app glue and assets are in
-`hermes/blink/overlay/`, and changes to upstream files are applied by small
-per-file Python scripts in `hermes/blink/patches/`.
+`blink/UPSTREAM_REVISION`; app glue and assets are in
+`blink/overlay/`, and changes to upstream files are applied by small
+per-file Python scripts in `blink/patches/`.
 
 ## Prepare Blink locally
 
@@ -13,9 +13,9 @@ required by the upstream Blink build.
 
 ```sh
 git clone https://github.com/blinksh/blink.git /tmp/blink-source
-git -C /tmp/blink-source checkout "$(tr -d '\r\n' < hermes/blink/UPSTREAM_REVISION)"
+git -C /tmp/blink-source checkout "$(tr -d '\r\n' < blink/UPSTREAM_REVISION)"
 git -C /tmp/blink-source submodule update --init --recursive
-bash hermes/build/prepare-blink-source.sh /tmp/blink-source "$PWD"
+bash scripts/blink/prepare-blink-source.sh /tmp/blink-source "$PWD"
 ./get_frameworks.sh
 ./get_resources.sh
 cp template_setup.xcconfig developer_setup.xcconfig
@@ -33,7 +33,7 @@ and build the `Blink` scheme. Refer to the Xcode and dependency requirements of
 the pinned upstream Blink revision.
 
 ## iSH integration status
-`bash hermes/build/fetch-ish-source.sh` fetches the pinned upstream iSH source
+`bash scripts/hermes/build/fetch-ish-source.sh` fetches the pinned upstream iSH source
 and Alpine root filesystem into the ignored `hermes/build/external/ish`
 directory, then verifies their checksums. HermesLink boots this iSH Linux
 kernel once per app process and exposes it as a native `ish <command>` shell
@@ -45,7 +45,7 @@ registered alongside `terminal` in the standard Hermes bundles. The design:
   shell command, bridges the guest's pty to the calling ios_system command's
   own `thread_stdin`/`thread_stdout`, and returns the guest command's real
   exit status.
-- **Kernel bridge** — `ISHBridge/ish_kernel_bridge.m` boots the pinned
+- **Kernel bridge** — `ishbridge/ish_kernel_bridge.m` boots the pinned
   upstream kernel exactly once (`actuate_kernel()`'s `run_kernel()` never
   returns, so it runs on its own dedicated background thread) and implements
   the "call into iOS from the kernel" side of `LinuxInterop.h`
@@ -62,7 +62,7 @@ registered alongside `terminal` in the standard Hermes bundles. The design:
 - **Exit status** — upstream's `linux_start_session()` only reports that a
   guest process *started*, not how it exited, and upstream's own GUI never
   needed that (interactive sessions end when the user closes them, or the
-  pty simply hangs up). `ISHBridge/ish_exit_protocol.{h,c}` is original
+  pty simply hangs up). `ishbridge/ish_exit_protocol.{h,c}` is original
   protocol/implementation that wraps every guest command in a `trap ... EXIT`
   trailer (so it still fires even if the command calls `exit` itself) that
   emits a short binary sentinel carrying the real exit status, and a
@@ -70,7 +70,7 @@ registered alongside `terminal` in the standard Hermes bundles. The design:
   it reaches the user. The one case this cannot recover a status for is the
   command replacing the shell via `exec(2)` — an inherent limitation of any
   wrapper-script approach, documented and handled as its own error case.
-- **Guest root / fakefs** — `ISHBridge/ish_rootfs.{h,c}` is an original,
+- **Guest root / fakefs** — `ishbridge/ish_rootfs.{h,c}` is an original,
   from-scratch gzip+ustar extractor (zlib + a minimal ustar parser; no
   upstream code reused) that unpacks the pinned, build-time-bundled Alpine
   rootfs archive directly into `Documents/iSH/Alpine/` on first use, then
@@ -89,7 +89,7 @@ registered alongside `terminal` in the standard Hermes bundles. The design:
   import a valid rootfs; they are never silently overwritten. Profiles are
   checked for the required init program before boot so a missing fakefs root
   cannot escalate into the kernel's panic/trap path,
-  validating every entry with `ISHBridge/ish_path_safety.{h,c}` (rejects
+  validating every entry with `ishbridge/ish_path_safety.{h,c}` (rejects
   absolute paths and `..` components, and refuses to traverse through an
   existing non-directory/symlink path component) before touching the
   filesystem. The persistent, on-disk result is what makes the guest
@@ -141,10 +141,10 @@ registered alongside `terminal` in the standard Hermes bundles. The design:
   HermesRuntime.framework link/embed path while keeping the guest kernel out
   of Blink's own linker inputs. Native HermesRuntime.framework is also
   cross-compiled on Linux; the app archive and IPA assembly remain macOS jobs.
-- **Switchable link, safe default** — `hermes/build/ISHNative.xcconfig`
+- **Switchable link, safe default** — `ishbridge/ISHNative.xcconfig`
   (included from `template_setup.xcconfig`) defaults
   `ISH_NATIVE_AVAILABLE` to `NO`, which compiles
-  `ISHBridge/ish_kernel_bridge_stub.m` (keeps `ish` registered everywhere,
+  `ishbridge/ish_kernel_bridge_stub.m` (keeps `ish` registered everywhere,
   reporting the guest kernel as unavailable) instead of linking
   `Ish.framework`. CI app builds explicitly set `ISH_NATIVE_AVAILABLE=YES`
   only after installing the real framework and pinned rootfs; standalone

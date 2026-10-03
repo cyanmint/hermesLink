@@ -2,13 +2,13 @@
  * AI-generated content has no copyright holder and is not subject to copyright.
  *
  * Small CLI test harness that exercises the portable (non-iOS-specific)
- * ISHBridge modules directly, so hermes/tests/test_ish_bridge_c.py can
+ * ISHBridge modules directly, so tests/hermes/test_ish_bridge_c.py can
  * validate the real glue logic — rootfs path-traversal defenses and the
  * guest exit-status sentinel protocol — without an iOS toolchain. This
  * harness itself is test infrastructure, not part of the shipped app. */
-#include "../../../ISHBridge/ish_path_safety.h"
-#include "../../../ISHBridge/ish_rootfs.h"
-#include "../../../ISHBridge/ish_exit_protocol.h"
+#include "../../../ishbridge/ish_path_safety.h"
+#include "../../../ishbridge/ish_rootfs.h"
+#include "../../../ishbridge/ish_exit_protocol.h"
 
 #include <stdio.h>
 #include <stdlib.h>

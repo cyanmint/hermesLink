@@ -115,12 +115,12 @@ jobs:
                 ;;
             esac
             case "$path" in
-              hermes/build/prepare-ish-xcode-project.py|hermes/build/repack-ish-meson-archives.py|hermes/build/package-ish-framework.sh|hermes/build/ISHNative.xcconfig|ISHBridge/*)
+              hermes/build/prepare-ish-xcode-project.py|hermes/build/repack-ish-meson-archives.py|hermes/build/package-ish-framework.sh|hermes/build/ISHNative.xcconfig|ishbridge/*)
                 ish_xcode_changed=true
                 ;;
             esac
             case "$path" in
-              hermes/blink/*|hermes/build/prepare-blink-source.sh|ISHBridge/*|hermes/build/ISHNative.xcconfig|install_ish_runtime.sh|install_hermes_runtime.sh)
+              hermes/blink/*|hermes/build/prepare-blink-source.sh|ishbridge/*|hermes/build/ISHNative.xcconfig|install_ish_runtime.sh|install_hermes_runtime.sh)
                 app_changed=true
                 ;;
             esac
@@ -513,7 +513,7 @@ jobs:
           path: |
             ${{ runner.temp }}/HermesLink.xcarchive
             ${{ runner.temp }}/hermeslink-archive.log
-          key: ${{ runner.os }}-hermes-app-${{ github.sha }}-${{ steps.runtime_hash.outputs.sha256 }}-${{ hashFiles('hermes/blink/**') }}-${{ hashFiles('hermes/build/**') }}-${{ hashFiles('ISHBridge/**') }}-${{ hashFiles('install_hermes_runtime.sh') }}
+          key: ${{ runner.os }}-hermes-app-${{ github.sha }}-${{ steps.runtime_hash.outputs.sha256 }}-${{ hashFiles('hermes/blink/**') }}-${{ hashFiles('hermes/build/**') }}-${{ hashFiles('ishbridge/**') }}-${{ hashFiles('install_hermes_runtime.sh') }}
 
       - name: Cache framework builds
         id: cache

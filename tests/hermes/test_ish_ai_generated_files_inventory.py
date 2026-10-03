@@ -3,7 +3,7 @@
 """Every wholly-new authored file this iSH integration adds must be listed
 in AI-GENERATED-FILES.md (the project's attribution policy), and every
 listed path must actually exist. This also guards against the inventory
-silently drifting out of sync with the ISHBridge/ and related directories
+silently drifting out of sync with the ishbridge/ and related directories
 as files are added or renamed."""
 
 from __future__ import annotations
@@ -17,39 +17,39 @@ ROOT = Path(__file__).resolve().parents[2]
 INVENTORY = ROOT / "AI-GENERATED-FILES.md"
 
 NEW_FILES_FROM_THIS_CHANGE = [
-    "hermes/blink/overlay/Blink/Commands/hermes.m",
-    "hermes/blink/overlay/Blink/Commands/ish.m",
-    "hermes/blink/overlay/Blink/Commands/ishfs.m",
-    "hermes/blink/overlay/Settings/ISHRootfsSettingsView.swift",
-    "hermes/blink/apply-patches.py",
-    "hermes/blink/patches/_patch_utils.py",
-    "ISHBridge/ish_exit_protocol.c",
-    "ISHBridge/ish_exit_protocol.h",
-    "ISHBridge/ish_kernel_bridge.h",
-    "ISHBridge/ish_kernel_bridge.m",
-    "ISHBridge/ish_kernel_bridge_stub.m",
-    "ISHBridge/ish_path_safety.c",
-    "ISHBridge/ish_path_safety.h",
-    "ISHBridge/ish_rootfs.c",
-    "ISHBridge/ish_rootfs.h",
-    "hermes/build/ISHNative.xcconfig",
-    "hermes/build/build-ish-static.sh",
-    "hermes/build/ish-documents-fs.c",
-    "hermes/build/patch-ish-pty.py",
-    "hermes/build/patch-ish-documents-fs.py",
-    "hermes/build/package-ish-framework.sh",
-    "hermes/build/prepare-blink-source.sh",
+    "blink/overlay/Blink/Commands/hermes.m",
+    "blink/overlay/Blink/Commands/ish.m",
+    "blink/overlay/Blink/Commands/ishfs.m",
+    "blink/overlay/Settings/ISHRootfsSettingsView.swift",
+    "blink/apply-patches.py",
+    "blink/patches/_patch_utils.py",
+    "ishbridge/ish_exit_protocol.c",
+    "ishbridge/ish_exit_protocol.h",
+    "ishbridge/ish_kernel_bridge.h",
+    "ishbridge/ish_kernel_bridge.m",
+    "ishbridge/ish_kernel_bridge_stub.m",
+    "ishbridge/ish_path_safety.c",
+    "ishbridge/ish_path_safety.h",
+    "ishbridge/ish_rootfs.c",
+    "ishbridge/ish_rootfs.h",
+    "ishbridge/ISHNative.xcconfig",
+    "scripts/hermes/build/build-ish-static.sh",
+    "scripts/hermes/build/ish-documents-fs.c",
+    "scripts/hermes/build/patch-ish-pty.py",
+    "scripts/hermes/build/patch-ish-documents-fs.py",
+    "scripts/hermes/build/package-ish-framework.sh",
+    "scripts/blink/prepare-blink-source.sh",
     "hermes/overlay/hermes/tools/ish_tool.py",
     "hermes/overlay/patches/patch-ish-tool.py",
-    "hermes/tests/ish_bridge/ish_bridge_test_main.c",
-    "hermes/tests/test_blink_source_patch.py",
-    "hermes/tests/test_ish_bridge_c.py",
-    "hermes/tests/test_ish_ci_workflow.py",
-    "hermes/tests/test_ish_ai_generated_files_inventory.py",
-    "hermes/tests/test_ish_native_build_scripts.py",
-    "hermes/tests/test_ish_tool_registration.py",
-    "hermes/tests/test_ish_xcode_project_wiring.py",
-    "install_ish_runtime.sh",
+    "tests/hermes/ish_bridge/ish_bridge_test_main.c",
+    "tests/hermes/test_blink_source_patch.py",
+    "tests/hermes/test_ish_bridge_c.py",
+    "tests/hermes/test_ish_ci_workflow.py",
+    "tests/hermes/test_ish_ai_generated_files_inventory.py",
+    "tests/hermes/test_ish_native_build_scripts.py",
+    "tests/hermes/test_ish_tool_registration.py",
+    "tests/hermes/test_ish_xcode_project_wiring.py",
+    "scripts/install_ish_runtime.sh",
 ]
 
 
@@ -86,7 +86,7 @@ class AiGeneratedFilesInventoryTests(unittest.TestCase):
             path.relative_to(ROOT).as_posix() for path in ish_bridge_dir.glob("*")
             if path.is_file()
         }
-        self.assertTrue(on_disk, "expected ISHBridge/ to contain at least one file")
+        self.assertTrue(on_disk, "expected ishbridge/ to contain at least one file")
         missing_from_inventory = on_disk - self.listed_paths
         self.assertEqual(missing_from_inventory, set())
 

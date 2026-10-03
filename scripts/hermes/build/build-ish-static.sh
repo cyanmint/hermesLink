@@ -46,7 +46,7 @@ case "$BUILD_MODE" in
   *) fail "unknown build mode: $BUILD_MODE" ;;
 esac
 
-[ -d "$ISH_SOURCE" ] || fail "pinned iSH source not found at $ISH_SOURCE; run hermes/build/fetch-ish-source.sh first"
+[ -d "$ISH_SOURCE" ] || fail "pinned iSH source not found at $ISH_SOURCE; run scripts/hermes/build/fetch-ish-source.sh first"
 python3 "$ROOT/build/verify-ish-source.py" --source "$ISH_SOURCE" || fail "pinned iSH source failed integrity verification"
 
 command -v meson >/dev/null 2>&1 || fail "requires Meson (https://mesonbuild.com); 'meson' not found on PATH"

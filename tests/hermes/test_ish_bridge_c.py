@@ -4,11 +4,11 @@
 ish_rootfs, ish_exit_protocol). These modules contain no iOS-specific code,
 so they can be built and run with the host C compiler and validated here,
 including against the real pinned Alpine rootfs archive when it has been
-fetched by hermes/build/fetch-ish-source.sh.
+fetched by scripts/hermes/build/fetch-ish-source.sh.
 
 This is the one part of the native iSH integration that can be exercised
 end-to-end in a Linux CI/dev environment: the Objective-C kernel-boot and
-PTY-bridging glue under ISHBridge/*.m requires an iOS toolchain and the
+PTY-bridging glue under ishbridge/*.m requires an iOS toolchain and the
 compiled upstream Linux-kernel-as-library target, neither of which is
 available here (see BUILD.md)."""
 
@@ -504,7 +504,7 @@ class IshBridgeCTests(unittest.TestCase):
         # exec(1) replaces the shell process image outright; nothing we
         # register can run afterward. The native glue must treat a
         # hangup-without-sentinel as this known, documented case rather than
-        # hanging forever (see ISHBridge/ish_kernel_bridge.m).
+        # hanging forever (see ishbridge/ish_kernel_bridge.m).
         result = self._run_wrapped_through_shell("exec true", chunk_size=0)
         self.assertIn(b"NOMATCH", result.stderr)
 

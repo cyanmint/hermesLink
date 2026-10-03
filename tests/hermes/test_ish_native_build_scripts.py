@@ -1,9 +1,9 @@
 # HermesLink AI-generated glue code; created by cyanmint's coding agent.
 # AI-generated content has no copyright holder and is not subject to copyright.
 """Validates the iSH native build/install scripts: preflight robustness of
-hermes/build/build-ish-static.sh (it must fail clearly when Xcode/Meson/Ninja
+scripts/hermes/build/build-ish-static.sh (it must fail clearly when Xcode/Meson/Ninja
 are unavailable, as in this Linux sandbox, rather than attempt a broken
-partial build) and the install/copy behavior of install_ish_runtime.sh,
+partial build) and the install/copy behavior of scripts/install_ish_runtime.sh,
 exercised end-to-end against the real pinned rootfs archive when present."""
 
 from __future__ import annotations
@@ -25,7 +25,7 @@ REPACK_MESON_ARCHIVES = ROOT / "hermes" / "build" / "repack-ish-meson-archives.p
 PATCH_ISH_PTY = ROOT / "hermes" / "build" / "patch-ish-pty.py"
 PATCH_ISH_DOCUMENTS_FS = ROOT / "hermes" / "build" / "patch-ish-documents-fs.py"
 DOCUMENTS_FS_SOURCE = ROOT / "hermes" / "build" / "ish-documents-fs.c"
-INSTALL_SCRIPT = ROOT / "install_ish_runtime.sh"
+INSTALL_SCRIPT = ROOT / "scripts/install_ish_runtime.sh"
 PINNED_ROOTFS = ROOT / "hermes" / "build" / "external" / "ish" / "rootfs.tar.gz"
 PINNED_SOURCE = ROOT / "hermes" / "build" / "external" / "ish" / "source"
 

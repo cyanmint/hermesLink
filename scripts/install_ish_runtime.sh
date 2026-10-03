@@ -3,7 +3,7 @@
 # AI-generated content has no copyright holder and is not subject to copyright.
 #
 # Installs the prebuilt Ish.framework and pinned Alpine rootfs into the
-# HermesLink Xcode build tree, matching install_hermes_runtime.sh's role.
+# HermesLink Xcode build tree, matching scripts/install_hermes_runtime.sh's role.
 set -euo pipefail
 
 ROOT=$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)
@@ -25,7 +25,7 @@ DEST_ROOTFS="$BLINK_ROOT/Resources/ish-rootfs.tar.gz"
 [ -f "$SOURCE_FRAMEWORK/Headers/ish_kernel_bridge.h" ] || { echo "missing iSH framework public header: $SOURCE_FRAMEWORK/Headers/ish_kernel_bridge.h" >&2; exit 2; }
 
 [ -f "$SOURCE_ROOTFS" ] || { echo "missing pinned iSH Alpine rootfs archive: $SOURCE_ROOTFS" >&2; exit 2; }
-python3 "$ROOT/hermes/build/verify-ish-source.py" --rootfs "$SOURCE_ROOTFS"
+python3 "$ROOT/scripts/hermes/build/verify-ish-source.py" --rootfs "$SOURCE_ROOTFS"
 
 mkdir -p "$(dirname "$DEST_FRAMEWORK")" "$(dirname "$DEST_ROOTFS")"
 rm -rf "$DEST_FRAMEWORK.tmp"

@@ -8,7 +8,7 @@
 // Configuration settings file format documentation can be found at:
 // https://help.apple.com/xcode/#/dev745c5c974
 
-#include "hermes/build/ISHNative.xcconfig"
+#include "ISHBridge/ISHNative.xcconfig"
 
 // update TEAM_ID with your apple developer id
 TEAM_ID = A2H2CL32AG
