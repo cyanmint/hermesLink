@@ -195,6 +195,9 @@ class IshNativeXcconfigTests(unittest.TestCase):
         self.assertIn('stringByAppendingPathComponent:@"Alpine"', bridge)
         self.assertIn("int *session_error_out", bridge)
         self.assertIn("upstream error %d; see diagnostics log", command)
+        self.assertIn("#define ISH_SESSION_START_ENODEV_RETRIES 2", bridge)
+        self.assertIn("start_retval != -ENODEV || start_terminal != NULL", bridge)
+        self.assertIn("usleep(ISH_SESSION_START_RETRY_DELAY_MICROSECONDS * (attempt + 1))", bridge)
 
     def test_kernel_readiness_waits_for_rootfs_init_instead_of_probing_workqueue(self) -> None:
         source = (ISH_DIR / "ish_kernel_bridge.m").read_text(encoding="utf-8")

@@ -536,6 +536,8 @@ int ish_kernel_has_booted(void) {
  * yet been created by call_block_init. FsInitialize runs after the guest root
  * is mounted, so it is the first safe readiness signal. */
 #define ISH_BOOT_READY_TIMEOUT_SECONDS 30
+#define ISH_SESSION_START_ENODEV_RETRIES 2
+#define ISH_SESSION_START_RETRY_DELAY_MICROSECONDS 100000
 
 static int ish_wait_for_kernel_ready(void) {
   struct timespec deadline;
@@ -655,14 +657,24 @@ int ish_run_command(const char *command, int input_fd, int output_fd, int cols, 
    * does for its own (interactive) sessions; ish_sync_do_in_workqueue()
    * blocks this calling (ios_system command) thread until that start has
    * actually completed or failed. */
-  ish_sync_do_in_workqueue(^(void (^done)(void)) {
-    linux_start_session(argv[0], argv, envp, ^(int retval, int pid, nsobj_t terminal) {
-      (void) pid;
-      start_retval = retval;
-      start_terminal = terminal;
-      done();
+  for (int attempt = 0;; attempt++) {
+    start_retval = -1;
+    start_terminal = NULL;
+    ish_sync_do_in_workqueue(^(void (^done)(void)) {
+      linux_start_session(argv[0], argv, envp, ^(int retval, int pid, nsobj_t terminal) {
+        (void) pid;
+        start_retval = retval;
+        start_terminal = terminal;
+        done();
+      });
     });
-  });
+    if (start_retval != -ENODEV || start_terminal != NULL ||
+        attempt >= ISH_SESSION_START_ENODEV_RETRIES) {
+      break;
+    }
+    ISHLog("ish: guest session startup returned ENODEV; retrying after kernel initialization");
+    usleep(ISH_SESSION_START_RETRY_DELAY_MICROSECONDS * (attempt + 1));
+  }
   free(script);
 
   if (start_retval < 0 || start_terminal == NULL) {
