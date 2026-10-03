@@ -12,7 +12,7 @@ from pathlib import Path
 PTY_SOURCE = Path("app/LinuxPTY.c")
 INTEROP_SOURCE = Path("app/LinuxInterop.c")
 
-PTY_INIT = """static int __init ios_pty_init(void) {
+PTY_INIT = """static __init int ios_pty_init(void) {
     init_mkdir("/dev/pts", 0755);
     int err = do_mount("devpts", "/dev/pts", "devpts", MS_SILENT, NULL);
     if (err < 0) {
@@ -24,6 +24,7 @@ PTY_INIT = """static int __init ios_pty_init(void) {
     }
     return 0;
 }
+
 device_initcall(ios_pty_init);"""
 
 PTY_INIT_PATCHED = """static int ios_pty_ensure_initialized(void) {

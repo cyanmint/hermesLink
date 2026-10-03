@@ -85,6 +85,11 @@ class BuildIshStaticScriptTests(unittest.TestCase):
         self.assertIn("if (IS_ERR(session->tty))", patched_interop)
         self.assertIn("done(err, 0, NULL);", patched_interop)
 
+    def test_pty_patcher_matches_pinned_initcall_declaration(self) -> None:
+        source = PATCH_ISH_PTY.read_text(encoding="utf-8")
+        self.assertIn("PTY_INIT = \"\"\"static __init int ios_pty_init(void)", source)
+        self.assertNotIn("PTY_INIT = \"\"\"static int __init ios_pty_init(void)", source)
+
     def test_script_builds_upstream_kernel_and_host_interop_targets(self) -> None:
         source = BUILD_SCRIPT.read_text(encoding="utf-8")
         self.assertIn("app/xcode-meson.sh", source)
