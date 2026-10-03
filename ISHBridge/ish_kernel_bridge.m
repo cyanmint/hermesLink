@@ -38,6 +38,7 @@ static pthread_cond_t g_kernel_ready_cond = PTHREAD_COND_INITIALIZER;
 static int g_kernel_ready;
 static int g_kernel_panicked;
 static char g_documents_host_path[1024];
+static char g_rootfs_path[1024];
 
 static void ISHLog(const char *message) {
   pthread_mutex_lock(&g_configuration_lock);
@@ -424,7 +425,6 @@ int Terminal_roomForOutput(nsobj_t _self) {
 
 static pthread_once_t g_boot_once = PTHREAD_ONCE_INIT;
 static _Atomic int g_boot_result = ISH_RUN_ERR_INVALID_ARGUMENT; /* overwritten by ish_boot_once_body */
-static char g_rootfs_path[1024];
 
 const char *DefaultRootPath(void) {
   return g_rootfs_path;
