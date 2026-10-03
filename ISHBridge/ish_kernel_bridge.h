@@ -38,6 +38,7 @@ typedef enum {
    * checkout). See ISHBridge/ish_kernel_bridge_stub.m. */
   ISH_RUN_ERR_NOT_AVAILABLE = -6,
   ISH_RUN_ERR_KERNEL_PANIC = -7,
+  ISH_RUN_ERR_MOUNT_FAILED = -8,
 } ish_run_status;
 
 typedef void (*ish_log_handler)(const char *message);
@@ -60,6 +61,11 @@ int ish_import_rootfs_archive(const char *archive_path, const char *dest_root);
  * background thread. */
 int ish_kernel_ensure_booted(void);
 int ish_kernel_has_booted(void);
+
+/* Mounts the app's Files-visible Documents directory at an existing guest
+ * directory. On ISH_RUN_ERR_MOUNT_FAILED, mount_error_out receives the
+ * negative iSH errno for the failed mount. */
+int ish_mount_documents(const char *mount_path, int *mount_error_out);
 
 /* Runs `command` to completion as `/bin/sh -c <command>` inside the
  * persistent guest, bridging the guest pty to `input_fd`/`output_fd`

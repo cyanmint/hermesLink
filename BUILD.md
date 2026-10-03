@@ -140,6 +140,13 @@ registered alongside `terminal` in the standard Hermes bundles. The design:
   provides the same profile operations. Selecting another profile takes
   effect on the next kernel start; force-quit and reopen Blink if `ish` has
   already started in the current app process.
+- **Documents mount and networking** — run `ish mkdir -p /mnt/documents`, then
+  `ish mount-documents /mnt/documents` to mount the app's Files-visible
+  Documents directory there. The mount is read-write and lasts for the current
+  guest kernel; use the guest's `umount` command to remove it. iSH guest
+  sockets use iOS networking, and the bridge writes iOS DNS servers into
+  `/etc/resolv.conf` at startup and refreshes them when network reachability
+  changes.
 - **Hermes Agent tool** — `hermes/overlay/hermes/tools/ish_tool.py` registers
   an `ish` tool that reuses the exact same native `_hermesios` async-process
   bridge the `terminal` tool's iOS backend uses, just pointed at the native

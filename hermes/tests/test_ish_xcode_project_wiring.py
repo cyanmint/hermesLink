@@ -40,6 +40,29 @@ class CommandRegistrationTests(unittest.TestCase):
         self.assertIn("int ish_main(int argc, char *argv[])", source)
         self.assertIn('#include "ish_kernel_bridge.h"', source)
 
+    def test_ish_mounts_documents_at_a_guest_selected_path(self) -> None:
+        command = (ROOT / "Blink" / "Commands" / "ish.m").read_text(encoding="utf-8")
+        bridge = (ISH_DIR / "ish_kernel_bridge.m").read_text(encoding="utf-8")
+        header = (ISH_DIR / "ish_kernel_bridge.h").read_text(encoding="utf-8")
+        stub = (ISH_DIR / "ish_kernel_bridge_stub.m").read_text(encoding="utf-8")
+        self.assertIn('"mount-documents"', command)
+        self.assertIn("ish_mount_documents(argv[2], &mount_error)", command)
+        self.assertIn("NSSearchPathForDirectoriesInDomains(", bridge)
+        self.assertIn("path_normalize(AT_PWD, mount_path", bridge)
+        self.assertIn("do_mount(&realfs, documents_path, normalized_path", bridge)
+        self.assertIn("ish_sync_do_in_workqueue", bridge)
+        self.assertIn("ish_mount_documents", header)
+        self.assertIn("ish_mount_documents", stub)
+
+    def test_ish_populates_and_refreshes_guest_dns(self) -> None:
+        bridge = (ISH_DIR / "ish_kernel_bridge.m").read_text(encoding="utf-8")
+        self.assertIn("res_ninit(&resolver)", bridge)
+        self.assertIn("res_getservers(&resolver", bridge)
+        self.assertIn('generic_open("/etc/resolv.conf"', bridge)
+        self.assertIn("SCNetworkReachabilitySetCallback", bridge)
+        self.assertIn("ish_network_reachability_changed", bridge)
+        self.assertIn("ish_configure_guest_dns();", bridge)
+
     def test_ishfs_is_registered_with_profile_lifecycle_operations(self) -> None:
         with COMMANDS_PLIST.open("rb") as handle:
             commands = plistlib.load(handle)
@@ -252,7 +275,7 @@ class IshNativeXcconfigTests(unittest.TestCase):
         header = (ISH_DIR / "ish_kernel_bridge.h").read_text(encoding="utf-8")
         stub = (ISH_DIR / "ish_kernel_bridge_stub.m").read_text(encoding="utf-8")
         for symbol in ("ish_configure", "ish_import_rootfs_archive", "ish_kernel_ensure_booted",
-                       "ish_kernel_has_booted", "ish_run_command"):
+                       "ish_kernel_has_booted", "ish_mount_documents", "ish_run_command"):
             with self.subTest(symbol=symbol):
                 self.assertIn(symbol, header)
                 self.assertIn(symbol, stub)

@@ -11,15 +11,27 @@
 #include "ish_kernel_bridge.h"
 #include "ish_rootfs.h"
 #include "ish_exit_protocol.h"
+#include "kernel/errno.h"
+#include "kernel/fs.h"
+#include "kernel/task.h"
+#include "fs/fd.h"
+#include "fs/path.h"
+#include "fs/real.h"
 
 #include <dispatch/dispatch.h>
 #include <errno.h>
+#include <netdb.h>
+#include <netinet/in.h>
 #include <pthread.h>
+#include <resolv.h>
+#include <stdarg.h>
 #include <stdatomic.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
+#include <sys/socket.h>
 #include <sys/stat.h>
+#include <SystemConfiguration/SystemConfiguration.h>
 #include <time.h>
 #include <unistd.h>
 
@@ -93,6 +105,116 @@ static void ish_sync_do_in_workqueue(void (^block)(void (^done)(void))) {
 
 void async_do_in_ios(void (^block)(void)) {
   dispatch_async(dispatch_get_main_queue(), block);
+}
+
+static SCNetworkReachabilityRef g_network_reachability;
+
+static void ish_append_dns_text(char *buffer, size_t capacity, size_t *length,
+                                const char *format, ...) {
+  if (*length >= capacity) {
+    return;
+  }
+  va_list arguments;
+  va_start(arguments, format);
+  int written = vsnprintf(buffer + *length, capacity - *length, format, arguments);
+  va_end(arguments);
+  if (written < 0) {
+    return;
+  }
+  size_t remaining = capacity - *length;
+  *length += (size_t) written < remaining ? (size_t) written : remaining - 1;
+}
+
+/* Upstream iSH performs this in AppDelegate.configureDns(). The HermesLink
+ * bridge has no upstream app delegate, so populate the guest resolver directly
+ * after its fakefs root is mounted and refresh it whenever iOS network
+ * reachability changes. */
+static void ish_configure_guest_dns(void) {
+  struct __res_state resolver = {0};
+  if (res_ninit(&resolver) != 0) {
+    ISHLog("ish: could not read the iOS DNS configuration");
+    return;
+  }
+
+  char resolv_conf[4096] = {0};
+  size_t length = 0;
+  if (resolver.dnsrch[0] != NULL) {
+    ish_append_dns_text(resolv_conf, sizeof(resolv_conf), &length, "search");
+    for (int i = 0; resolver.dnsrch[i] != NULL; i++) {
+      ish_append_dns_text(resolv_conf, sizeof(resolv_conf), &length, " %s", resolver.dnsrch[i]);
+    }
+    ish_append_dns_text(resolv_conf, sizeof(resolv_conf), &length, "\n");
+  }
+
+  union res_sockaddr_union servers[NI_MAXSERV];
+  int server_count = res_getservers(&resolver, servers, NI_MAXSERV);
+  char address[NI_MAXHOST];
+  for (int i = 0; i < server_count; i++) {
+    if (servers[i].sin.sin_len == 0 ||
+        getnameinfo((struct sockaddr *) &servers[i].sin, servers[i].sin.sin_len,
+                    address, sizeof(address), NULL, 0, NI_NUMERICHOST) != 0) {
+      continue;
+    }
+    ish_append_dns_text(resolv_conf, sizeof(resolv_conf), &length, "nameserver %s\n", address);
+  }
+  res_ndestroy(&resolver);
+
+  struct task *previous_task = current;
+  struct task *init_task = pid_get_task(1);
+  if (init_task == NULL) {
+    ISHLog("ish: guest init task was unavailable while configuring DNS");
+    return;
+  }
+  current = init_task;
+  struct fd *file = generic_open("/etc/resolv.conf", O_WRONLY_ | O_CREAT_ | O_TRUNC_, 0666);
+  if (IS_ERR(file)) {
+    ISHLog("ish: could not open guest /etc/resolv.conf");
+  } else {
+    size_t offset = 0;
+    while (offset < length) {
+      ssize_t written = file->ops->write(file, resolv_conf + offset, length - offset);
+      if (written <= 0) {
+        ISHLog("ish: could not write guest /etc/resolv.conf");
+        break;
+      }
+      offset += (size_t) written;
+    }
+    fd_close(file);
+  }
+  current = previous_task;
+}
+
+static void ish_network_reachability_changed(SCNetworkReachabilityRef target,
+                                              SCNetworkReachabilityFlags flags,
+                                              void *context) {
+  (void) target;
+  (void) flags;
+  (void) context;
+  async_do_in_workqueue(^{
+    ish_configure_guest_dns();
+  });
+}
+
+static void ish_start_network_monitor(void) {
+  struct sockaddr_in address = {
+    .sin_len = sizeof(address),
+    .sin_family = AF_INET,
+  };
+  g_network_reachability =
+      SCNetworkReachabilityCreateWithAddress(kCFAllocatorDefault, (struct sockaddr *) &address);
+  if (g_network_reachability == NULL ||
+      !SCNetworkReachabilitySetCallback(g_network_reachability,
+                                        ish_network_reachability_changed, NULL) ||
+      !SCNetworkReachabilityScheduleWithRunLoop(g_network_reachability,
+                                                CFRunLoopGetMain(), kCFRunLoopCommonModes)) {
+    if (g_network_reachability != NULL) {
+      SCNetworkReachabilityUnscheduleFromRunLoop(g_network_reachability,
+                                                  CFRunLoopGetMain(), kCFRunLoopCommonModes);
+      CFRelease(g_network_reachability);
+      g_network_reachability = NULL;
+    }
+    ISHLog("ish: could not start iOS network reachability monitoring");
+  }
 }
 
 #pragma mark - Diagnostics (ReportPanic / ConsoleLog)
@@ -313,6 +435,10 @@ const char *DefaultRootPath(void) {
 void FsInitialize(void) {
   /* Upstream's CurrentRoot.m only performs app-specific version and
    * repository bookkeeping here; HermesLink owns rootfs provisioning. */
+  ish_configure_guest_dns();
+  async_do_in_ios(^{
+    ish_start_network_monitor();
+  });
   pthread_mutex_lock(&g_kernel_ready_lock);
   g_kernel_ready = 1;
   pthread_cond_broadcast(&g_kernel_ready_cond);
@@ -562,6 +688,94 @@ static int ish_wait_for_kernel_ready(void) {
   if (!ready) {
     ISHLog("ish: guest kernel was not ready to start a session within the boot timeout");
     return ISH_RUN_ERR_BOOT_TIMEOUT;
+  }
+  return ISH_RUN_OK;
+}
+
+static int ish_mount_documents_on_kernel_thread(const char *documents_path,
+                                                const char *mount_path) {
+  struct task *previous_task = current;
+  struct task *init_task = pid_get_task(1);
+  if (init_task == NULL) {
+    return -_ESRCH;
+  }
+  current = init_task;
+
+  char normalized_path[MAX_PATH];
+  int error = path_normalize(AT_PWD, mount_path, normalized_path, N_SYMLINK_FOLLOW);
+  if (error < 0) {
+    goto done;
+  }
+  if (strcmp(normalized_path, "/") == 0) {
+    error = -_EBUSY;
+    goto done;
+  }
+
+  struct statbuf mount_stat;
+  error = generic_statat(AT_PWD, normalized_path, &mount_stat, true);
+  if (error < 0) {
+    goto done;
+  }
+  if (!S_ISDIR(mount_stat.mode)) {
+    error = -_ENOTDIR;
+    goto done;
+  }
+
+  lock(&mounts_lock);
+  struct mount *existing;
+  list_for_each_entry(&mounts, existing, mounts) {
+    if (strcmp(existing->point, normalized_path) == 0) {
+      error = -_EBUSY;
+      unlock(&mounts_lock);
+      goto done;
+    }
+  }
+  error = do_mount(&realfs, documents_path, normalized_path, "", 0);
+  unlock(&mounts_lock);
+
+done:
+  current = previous_task;
+  return error;
+}
+
+int ish_mount_documents(const char *mount_path, int *mount_error_out) {
+  if (mount_error_out != NULL) {
+    *mount_error_out = 0;
+  }
+  if (mount_path == NULL || mount_path[0] == '\0' ||
+      strnlen(mount_path, MAX_PATH) >= MAX_PATH || mount_error_out == NULL) {
+    return ISH_RUN_ERR_INVALID_ARGUMENT;
+  }
+
+  int boot_status = ish_kernel_ensure_booted();
+  if (boot_status != ISH_RUN_OK) {
+    return boot_status;
+  }
+  int ready_status = ish_wait_for_kernel_ready();
+  if (ready_status != ISH_RUN_OK) {
+    return ready_status;
+  }
+
+  NSString *documents_path = [NSSearchPathForDirectoriesInDomains(
+      NSDocumentDirectory, NSUserDomainMask, YES) firstObject];
+  if (documents_path.length == 0) {
+    *mount_error_out = -_ENOENT;
+    return ISH_RUN_ERR_MOUNT_FAILED;
+  }
+  NSString *guest_mount_path = [NSString stringWithUTF8String:mount_path];
+  if (guest_mount_path == nil) {
+    return ISH_RUN_ERR_INVALID_ARGUMENT;
+  }
+
+  __block int mount_error = -_EIO;
+  ish_sync_do_in_workqueue(^(void (^done)(void)) {
+    mount_error = ish_mount_documents_on_kernel_thread(
+        documents_path.fileSystemRepresentation, guest_mount_path.UTF8String);
+    done();
+  });
+  if (mount_error < 0) {
+    *mount_error_out = mount_error;
+    return ISH_RUN_ERR_MOUNT_FAILED;
   }
   return ISH_RUN_OK;
 }

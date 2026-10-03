@@ -30,6 +30,14 @@ int ish_kernel_has_booted(void) {
   return 0;
 }
 
+int ish_mount_documents(const char *mount_path, int *mount_error_out) {
+  (void) mount_path;
+  if (mount_error_out != NULL) {
+    *mount_error_out = 0;
+  }
+  return ISH_RUN_ERR_NOT_AVAILABLE;
+}
+
 int ish_import_rootfs_archive(const char *archive_path, const char *dest_root) {
   (void) archive_path;
   (void) dest_root;

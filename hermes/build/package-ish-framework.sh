@@ -48,6 +48,7 @@ COMMON_FLAGS=(
   "$MIN_VERSION_FLAG=$DEPLOYMENT_TARGET"
   -D_DARWIN_C_SOURCE=1
   -I"$ROOT/ISHBridge"
+  -I"$ROOT/hermes/build/external/ish/source"
 )
 
 xcrun --sdk "$SDK_NAME" clang "${COMMON_FLAGS[@]}" -fobjc-arc -fblocks \
@@ -71,13 +72,14 @@ xcrun --sdk "$SDK_NAME" clang "${COMMON_FLAGS[@]}" -dynamiclib \
   "$LIB_DIR/libiSHLinuxUser.a" \
   "$LIB_DIR/libfakefs.a" \
   "$LIB_DIR/libish_emu.a" \
-  -framework Foundation -lsqlite3 -lz \
+  -framework Foundation -framework SystemConfiguration -lsqlite3 -lz \
   -Wl,-install_name,@rpath/Ish.framework/Ish \
   -Wl,-exported_symbol,_ish_configure \
   -Wl,-exported_symbol,_ish_import_rootfs_archive \
   -Wl,-exported_symbol,_ish_rootfs_prepare_fakefs \
   -Wl,-exported_symbol,_ish_kernel_ensure_booted \
   -Wl,-exported_symbol,_ish_kernel_has_booted \
+  -Wl,-exported_symbol,_ish_mount_documents \
   -Wl,-exported_symbol,_ish_run_command \
   -o "$FRAMEWORK/Ish"
 chmod 755 "$FRAMEWORK/Ish"
