@@ -567,7 +567,7 @@ jobs:
           test ! -e "$app/hermesrt.zip"
           test ! -e "$app/ish-rootfs.tar.gz"
 
-      - name: Package app with the real iSH runtime
+      - name: Package runtime-free app archive
         run: |
           set -euo pipefail
           app="$(find "$RUNNER_TEMP/HermesLink.xcarchive/Products/Applications" -maxdepth 1 -type d -name '*.app' -print -quit)"

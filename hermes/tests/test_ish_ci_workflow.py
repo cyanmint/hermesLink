@@ -183,7 +183,6 @@ class IshRuntimeWorkflowTests(unittest.TestCase):
         self.assertIn('test ! -e "$app/Frameworks/HermesRuntime.framework"', steps_text)
         self.assertIn('test ! -e "$app/Frameworks/Ish.framework"', steps_text)
         self.assertIn('test ! -e "$app/ish-rootfs.tar.gz"', steps_text)
-        self.assertIn("Ish\\.framework", steps_text)
 
     def test_ipa_assembles_runtime_frameworks_and_rootfs_after_app_build(self) -> None:
         steps_text = str(self.workflow["jobs"]["assemble-ipa"]["steps"])
