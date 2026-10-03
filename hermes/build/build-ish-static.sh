@@ -129,6 +129,26 @@ export PATH="$TOOLCHAIN_BIN:$PATH"
 
 mkdir -p "$MESON_BUILD_DIR" "$OUTPUT_DIR"
 
+SOURCE_PATCH_BACKUP=$(mktemp -d "$BUILD_ROOT/ish-source-patch.XXXXXX")
+cp "$ISH_SOURCE/meson.build" "$SOURCE_PATCH_BACKUP/meson.build"
+cp "$ISH_SOURCE/app/LinuxPTY.c" "$SOURCE_PATCH_BACKUP/LinuxPTY.c"
+cp "$ISH_SOURCE/app/LinuxInterop.c" "$SOURCE_PATCH_BACKUP/LinuxInterop.c"
+cp "$ISH_SOURCE/app/LinuxRoot.c" "$SOURCE_PATCH_BACKUP/LinuxRoot.c"
+restore_ish_source() {
+  cp "$SOURCE_PATCH_BACKUP/meson.build" "$ISH_SOURCE/meson.build"
+  cp "$SOURCE_PATCH_BACKUP/LinuxPTY.c" "$ISH_SOURCE/app/LinuxPTY.c"
+  cp "$SOURCE_PATCH_BACKUP/LinuxInterop.c" "$ISH_SOURCE/app/LinuxInterop.c"
+  cp "$SOURCE_PATCH_BACKUP/LinuxRoot.c" "$ISH_SOURCE/app/LinuxRoot.c"
+  rm -f "$ISH_SOURCE/linux/documentsfs.c"
+  rm -rf "$SOURCE_PATCH_BACKUP"
+}
+trap restore_ish_source EXIT
+
+if [ "$BUILD_MODE" != "--xcode-only" ]; then
+  python3 "$ROOT/build/patch-ish-documents-fs.py" \
+    "$ISH_SOURCE" "$ROOT/build/ish-documents-fs.c"
+fi
+
 # app/xcode-meson.sh / app/xcode-ninja.sh are upstream's own Xcode
 # "Run Build Tool" build-phase scripts (see iSH.xcodeproj/project.pbxproj's
 # libiSHLinux / libiSHLinuxUser targets); they read these exact environment
@@ -176,18 +196,7 @@ fi
 
 # The embedded kernel can reach the rootfs initcall before PTY initialization.
 # Patch the pinned host glue to resolve ptmx_path lazily and publish session
-# readiness from a late initcall; restore the verified checkout on every exit.
-SOURCE_PATCH_BACKUP=$(mktemp -d "$BUILD_ROOT/ish-source-patch.XXXXXX")
-cp "$ISH_SOURCE/app/LinuxPTY.c" "$SOURCE_PATCH_BACKUP/LinuxPTY.c"
-cp "$ISH_SOURCE/app/LinuxInterop.c" "$SOURCE_PATCH_BACKUP/LinuxInterop.c"
-cp "$ISH_SOURCE/app/LinuxRoot.c" "$SOURCE_PATCH_BACKUP/LinuxRoot.c"
-restore_ish_source() {
-  cp "$SOURCE_PATCH_BACKUP/LinuxPTY.c" "$ISH_SOURCE/app/LinuxPTY.c"
-  cp "$SOURCE_PATCH_BACKUP/LinuxInterop.c" "$ISH_SOURCE/app/LinuxInterop.c"
-  cp "$SOURCE_PATCH_BACKUP/LinuxRoot.c" "$ISH_SOURCE/app/LinuxRoot.c"
-  rm -rf "$SOURCE_PATCH_BACKUP"
-}
-trap restore_ish_source EXIT
+# readiness from a late initcall. Its source is restored on every exit.
 python3 "$ROOT/build/patch-ish-pty.py" "$ISH_SOURCE"
 
 # Build upstream's iOS host interop targets as well as its Meson kernel

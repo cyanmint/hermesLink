@@ -10,6 +10,9 @@
 
 static NSString *const ISHDefaultProfileName = @"Alpine";
 static NSString *const ISHActiveProfileDefaultsKey = @"HermesLinkISHActiveProfile";
+static NSString *const ISHDocumentsAutoMountDefaultsKey = @"HermesLinkISHDocumentsAutoMount";
+static NSString *const ISHDocumentsMountPathDefaultsKey = @"HermesLinkISHDocumentsMountPath";
+static NSString *const ISHDocumentsMountMaskDefaultsKey = @"HermesLinkISHDocumentsMountMask";
 static NSString *const ISHProfilesErrorDomain = @"com.hermeslink.ish-rootfs";
 static NSRecursiveLock *ISHProfilesLock;
 
@@ -19,6 +22,62 @@ static NSFileManager *ISHFileManager(void) {
 
 static NSString *ISHDocumentsRoot(void) {
   return [[BlinkPaths documentsPath] stringByAppendingPathComponent:@"iSH"];
+}
+
+static BOOL ISHSetError(NSError **error, NSInteger code, NSString *message);
+
+NSString *ISHDocumentsHostPath(void) {
+  return BlinkPaths.documentsPath;
+}
+
+BOOL ISHDocumentsAutoMountEnabled(void) {
+  return [NSUserDefaults.standardUserDefaults boolForKey:ISHDocumentsAutoMountDefaultsKey];
+}
+
+NSString *ISHDocumentsGuestMountPath(void) {
+  NSString *path = [NSUserDefaults.standardUserDefaults
+      stringForKey:ISHDocumentsMountPathDefaultsKey];
+  return path.length > 0 ? path : @"/mnt/documents";
+}
+
+NSUInteger ISHDocumentsMountMask(void) {
+  NSNumber *mask = [NSUserDefaults.standardUserDefaults
+      objectForKey:ISHDocumentsMountMaskDefaultsKey];
+  return mask != nil ? mask.unsignedIntegerValue : 0022;
+}
+
+static BOOL ISHValidDocumentsGuestMountPath(NSString *path) {
+  if (![path isKindOfClass:NSString.class] || path.length < 2 ||
+      path.length > 255 || ![path hasPrefix:@"/mnt/"] ||
+      [path hasSuffix:@"/"] || [path containsString:@"//"]) {
+    return NO;
+  }
+  for (NSString *component in [path componentsSeparatedByString:@"/"]) {
+    if ([component isEqualToString:@"."] || [component isEqualToString:@".."] ||
+        component.length > 255) {
+      return NO;
+    }
+    for (NSUInteger index = 0; index < component.length; index++) {
+      unichar character = [component characterAtIndex:index];
+      if (character < 0x20 || character == 0x7f) {
+        return NO;
+      }
+    }
+  }
+  return YES;
+}
+
+BOOL ISHDocumentsMountConfigure(BOOL enabled, NSString *guestPath,
+                               NSUInteger mask, NSError **error) {
+  if (!ISHValidDocumentsGuestMountPath(guestPath) || mask > 0777) {
+    return ISHSetError(error, 11,
+        @"Use a mount path below /mnt and a permission mask from 0000 to 0777.");
+  }
+  NSUserDefaults *defaults = NSUserDefaults.standardUserDefaults;
+  [defaults setBool:enabled forKey:ISHDocumentsAutoMountDefaultsKey];
+  [defaults setObject:guestPath forKey:ISHDocumentsMountPathDefaultsKey];
+  [defaults setObject:@(mask) forKey:ISHDocumentsMountMaskDefaultsKey];
+  return YES;
 }
 
 static NSString *ISHLegacyProfilesRoot(void) {

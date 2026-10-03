@@ -22,6 +22,14 @@ int ish_configure(const char *root_path, ish_log_handler log_handler) {
   return ISH_RUN_OK;
 }
 
+int ish_configure_documents(const char *host_path, const char *guest_mount_path,
+                            unsigned int mask) {
+  (void) host_path;
+  (void) guest_mount_path;
+  (void) mask;
+  return ISH_RUN_OK;
+}
+
 int ish_kernel_ensure_booted(void) {
   return ISH_RUN_ERR_NOT_AVAILABLE;
 }
