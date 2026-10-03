@@ -112,11 +112,11 @@ registered alongside `terminal` in the standard Hermes bundles. The design:
 - **Guest root / fakefs** — `ISHBridge/ish_rootfs.{h,c}` is an original,
   from-scratch gzip+ustar extractor (zlib + a minimal ustar parser; no
   upstream code reused) that unpacks the pinned, build-time-bundled Alpine
-  rootfs archive into `Documents/iSH/Profiles/Alpine/` on first use, then
+  rootfs archive directly into `Documents/iSH/` on first use, then
   converts it to upstream fakefs's required `data/` plus `meta.db` layout.
-  Existing rootfs files at `Documents/iSH/` are migrated into that default
-  profile. Other named profiles remain Files-visible below
-  `Documents/iSH/Profiles/`. The converter preserves guest modes in iSH's
+  Existing installations at `Documents/iSH/Profiles/Alpine/` are migrated to
+  that direct location. Other named profiles remain Files-visible below the
+  sibling directory `Documents/iSH-Profiles/`. The converter preserves guest modes in iSH's
   metadata database while making host-backed data writable and encodes
   symlinks in the representation fakefs expects. The extractor leaves
   directories writable while extracting their contents, then restores the

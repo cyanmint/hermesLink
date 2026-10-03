@@ -325,10 +325,10 @@ static NSString *ISHRootfsStorageDirectory(void) {
   NSString *root = g_configured_root[0] != '\0'
       ? [NSString stringWithUTF8String:g_configured_root]
       : [NSSearchPathForDirectoriesInDomains(NSDocumentDirectory, NSUserDomainMask, YES).firstObject
-          stringByAppendingPathComponent:@"iSH/Profiles/Alpine"];
+          stringByAppendingPathComponent:@"iSH"];
   pthread_mutex_unlock(&g_configuration_lock);
   if (root == nil) {
-    root = [NSHomeDirectory() stringByAppendingPathComponent:@"Documents/iSH/Profiles/Alpine"];
+    root = [NSHomeDirectory() stringByAppendingPathComponent:@"Documents/iSH"];
   }
   [[NSFileManager defaultManager] createDirectoryAtPath:root withIntermediateDirectories:YES attributes:nil error:nil];
   return root;

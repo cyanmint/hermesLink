@@ -174,10 +174,11 @@ class IshNativeXcconfigTests(unittest.TestCase):
 
         self.assertIn("ISHRootfsActiveProfilePath", command)
         self.assertIn('stringByAppendingPathComponent:@"iSH"', profiles)
+        self.assertIn('stringByAppendingPathComponent:@"iSH-Profiles"', profiles)
         self.assertIn('stringByAppendingPathComponent:@"Profiles"', profiles)
         self.assertIn('ISHDefaultProfileName = @"Alpine"', profiles)
         self.assertIn("NSDocumentDirectory", bridge)
-        self.assertIn('stringByAppendingPathComponent:@"iSH/Profiles/Alpine"', bridge)
+        self.assertIn('stringByAppendingPathComponent:@"iSH"', bridge)
         self.assertIn("Files-visible Documents/iSH", header)
         self.assertIn('@"data"', bridge)
         self.assertIn('@"bin/busybox"', bridge)

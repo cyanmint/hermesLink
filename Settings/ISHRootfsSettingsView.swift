@@ -59,7 +59,7 @@ struct ISHRootfsSettingsView: View {
       } header: {
         Text("Rootfs profiles")
       } footer: {
-        Text("Rootfs files are stored in Documents/iSH/Profiles and are visible in Files.")
+        Text("The active Alpine rootfs is stored in Documents/iSH. Other profiles are stored in Documents/iSH-Profiles; both locations are visible in Files.")
       }
 
       Section {
