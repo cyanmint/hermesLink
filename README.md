@@ -5,12 +5,23 @@ version 3 (GPLv3); the complete license text is in [`COPYING`](COPYING).
 HermesLink uses Blink Shell as a dependency. Blink and all other third-party
 components retain their own license terms and notices.
 
+## Blink app source
+
+The Blink app source is not stored in this repository. The upstream revision is
+pinned in [`hermes/blink/UPSTREAM_REVISION`](hermes/blink/UPSTREAM_REVISION),
+and HermesLink's app glue and resources are maintained in
+[`hermes/blink/overlay/`](hermes/blink/overlay/) with small per-file patches in
+[`hermes/blink/patches/`](hermes/blink/patches/).
+CI checks out that exact revision, applies the patch, and stages the resulting
+Blink source for the app build. See [BUILD.md](BUILD.md) to prepare the same
+source tree locally.
+
 ## Bundled Hermes Agent
 
 This fork can ship the arm64 native Hermes runtime as two app resources:
 `Resources/hermes` and `Resources/hermesrt.zip`. Build the native runtime from
-the checked-in Hermes build scripts, then install it before opening
-`Blink.xcodeproj`:
+the checked-in Hermes build scripts, then install it in the materialized Blink
+source tree before opening `Blink.xcodeproj`:
 
 ```sh
 ./hermes/build/build-native-ios.sh
@@ -114,37 +125,10 @@ Bugs should be reported here on GitHub. If you have any questions or want to mak
 We can't wait to receive your valuable feedback. Enjoy!
 
 ## Build
-![CI](https://github.com/blinksh/blink/workflows/CI/badge.svg)
-
-We made a ton easier to build and install Blink yourself on your iOS devices through XCode. We provide a precompiled package with all the libraries for the master branch. Here are the steps:
-
-0. Check `xcode-select -p` is pointing to Xcode.app (`/Applications/Xcode.app/Contents/Developer`) not command tools.
-
-1. Run the following command:
-```bash
-git clone --recursive https://github.com/blinksh/blink.git && \
-    cd blink && ./get_frameworks.sh && ./get_resources.sh && \
-    rm -rf Blink.xcodeproj/project.xcworkspace/xcshareddata/
-```
-
-2. Change developer ids
-
-```bash
-cp template_setup.xcconfig developer_setup.xcconfig
-```
-
-edit developer_setup.xcconfig (change apple developer id etc).
-
-3. Open the project in XCode
-
-3a. If you want to build without iCloud, Push Notificationa and/or Keychain sharing, Before doing anything else, go into the capabilities for the project and turn off Push Notifications, iCloud, and Keychain Sharing
-
-4. Connect the device you want to build for and select it in Product -> Destination
-5. Build and run on the device
-
-This will download Blink and the associated frameworks: `libssh2`, `OpenSSL`, `libmoshios`, `protobuf` and `ios_system`. 
-
-Although this is the quickest method to get you up and running, if you would like to compile all libraries and resources yourself, refer to the [BUILD.md](BUILD.md) file. Please let us know if you find any issues. Blink is a complex project with multiple low level dependencies and we are still looking for ways to simplify and automate the full compilation process.
+Prepare the pinned Blink source and its HermesLink patch as described in
+[BUILD.md](BUILD.md), then open `Blink.xcodeproj` and build the `Blink` scheme.
+The CI workflow performs the same source preparation before building the
+runtime-free app component and assembling the IPA.
 
 # Using Blink
 Our UI is very straightforward and optimizes the experience on touch devices for the really important part, the terminal. You will jump right into a very simple shell, so you will know what to do. Here are a few more tricks:

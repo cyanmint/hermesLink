@@ -170,7 +170,11 @@ class IshRuntimeWorkflowTests(unittest.TestCase):
                 self.assertIn(marker, self.text)
 
     def test_ish_bridge_changes_also_trigger_app_builds(self) -> None:
-        self.assertEqual(self.text.count("ISHBridge/*"), 2)
+        self.assertIn("hermes/build/ISHNative.xcconfig|ISHBridge/*)", self.text)
+        self.assertIn(
+            "hermes/blink/*|hermes/build/prepare-blink-source.sh|ISHBridge/*|",
+            self.text,
+        )
         self.assertGreaterEqual(self.text.count("hermes/build/ISHNative.xcconfig"), 1)
         self.assertGreaterEqual(self.text.count("install_ish_runtime.sh"), 1)
 

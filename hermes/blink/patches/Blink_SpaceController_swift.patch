@@ -1,0 +1,217 @@
+diff --git a/Blink/SpaceController.swift b/Blink/SpaceController.swift
+index 750cb04d82ceb85c2d80a6e1992e47ef3af21b5c..38c3e59f105ae11c2aa885fa63ebacbe90119bb1 100644
+--- a/Blink/SpaceController.swift
++++ b/Blink/SpaceController.swift
+@@ -36,10 +36,11 @@
+ 
+ import MBProgressHUD
+ import SwiftUI
++import Network
+ 
+ 
+ // MARK: UIViewController
+-class SpaceController: UIViewController {
++class SpaceController: UIViewController, UIGestureRecognizerDelegate {
+   
+   struct UIState: UserActivityCodable {
+     var keys: [UUID] = []
+@@ -68,6 +69,7 @@ class SpaceController: UIViewController {
+   private var _snippetsVC: SnippetsViewController? = nil
+   private var _blinkMenu: BlinkMenu? = nil
+   private var _bottomTapAreaView = UIView()
++  private var _threeFingerPan: UIPanGestureRecognizer!
+ 
+   // Snips Input Mode tracking
+   private var _isSnipsInputModeActive: Bool = false {
+@@ -230,6 +232,7 @@ class SpaceController: UIViewController {
+   }
+   
+   public override func viewDidLoad() {
++    HermesLinkAppendLog("SpaceController viewDidLoad")
+     super.viewDidLoad()
+     
+     _setupAppearance()
+@@ -275,6 +278,17 @@ class SpaceController: UIViewController {
+     doubleTap.numberOfTapsRequired = 2
+     doubleTap.numberOfTouchesRequired = 1
+     _bottomTapAreaView.addGestureRecognizer(doubleTap)
++
++    // A pan recognizer is used instead of two UISwipeRecognizers. UISwipe can
++    // lose the gesture to the terminal/WebView scroll recognizers before it
++    // decides on a direction, which made the down gesture (and other gestures
++    // on an interactive terminal) disappear on iPadOS.
++    _threeFingerPan = UIPanGestureRecognizer(target: self, action: #selector(_handleThreeFingerPan(_:)))
++    _threeFingerPan.minimumNumberOfTouches = 3
++    _threeFingerPan.maximumNumberOfTouches = 3
++    _threeFingerPan.cancelsTouchesInView = false
++    _threeFingerPan.delegate = self
++    view.addGestureRecognizer(_threeFingerPan)
+     
+     NotificationCenter.default.addObserver(self, selector: #selector(_geoTrackStateChanged), name: NSNotification.Name.BLGeoTrackStateChange, object: nil)
+     
+@@ -774,7 +788,7 @@ extension SpaceController {
+     currentTerm()?.scaleWithPich(pinch)
+   }
+   
+-  private func _newShellAction(command: String = "", animated: Bool = true) {
++  func _newShellAction(command: String = "", animated: Bool = true) {
+     let params = MCPParams()
+     if !command.isEmpty {
+       params.initialCommand = command
+@@ -783,6 +797,118 @@ extension SpaceController {
+     _createTerminal(userActivity: nil, animated: animated, sessionPayload: payload)
+   }
+ 
++  private static let hermesWebUIDefaultPort = 8787
++  private static var hermesWebUIPort: Int?
++  private static var hermesWebUIStartInFlight = false
++  private static var hermesWebUIWaiters: [(Int, Bool) -> Void] = []
++
++  private static func portIsOccupied(_ port: Int, completion: @escaping (Bool) -> Void) {
++    guard let endpointPort = NWEndpoint.Port(rawValue: UInt16(port)) else {
++      completion(true)
++      return
++    }
++
++    let connection = NWConnection(host: "127.0.0.1", port: endpointPort, using: .tcp)
++    let lock = NSLock()
++    var finished = false
++    let finish: (Bool) -> Void = { occupied in
++      lock.lock()
++      guard !finished else {
++        lock.unlock()
++        return
++      }
++      finished = true
++      lock.unlock()
++      connection.cancel()
++      completion(occupied)
++    }
++
++    connection.stateUpdateHandler = { state in
++      switch state {
++      case .ready:
++        finish(true)
++      case .failed, .cancelled:
++        finish(false)
++      default:
++        break
++      }
++    }
++    connection.start(queue: DispatchQueue.global(qos: .utility))
++    DispatchQueue.global(qos: .utility).asyncAfter(deadline: .now() + 0.5) {
++      finish(false)
++    }
++  }
++
++  private static func findHermesWebUIPort(_ port: Int, completion: @escaping (Int, Bool) -> Void) {
++    // A successful WebUI API response means another HermesLink window (or a
++    // previously launched app instance) already owns this port.
++    let url = URL(string: "http://127.0.0.1:\(port)/api/config")!
++    URLSession.shared.dataTask(with: url) { _, response, _ in
++      if response is HTTPURLResponse {
++        completion(port, false)
++        return
++      }
++
++      portIsOccupied(port) { occupied in
++        completion(port, !occupied)
++      }
++    }.resume()
++  }
++
++  private func openHermesWebUI(at port: Int, launchServer: Bool) {
++    HermesLinkAppendLog("opening Hermes WebUI")
++    let webUITerm = currentTerm()
++    if launchServer {
++      // Keep the server in the terminal that owns it. Do not background or
++      // silence it: this is the diagnostic shell for the WebUI.
++      webUITerm?.enqueueCommand("hermes webui --host 127.0.0.1 --port \(port)")
++    }
++    if UserDefaults.standard.object(forKey: "HermesLinkOpenWebUIInForeground") == nil ||
++       UserDefaults.standard.bool(forKey: "HermesLinkOpenWebUIInForeground") {
++      DispatchQueue.main.asyncAfter(deadline: .now() + (launchServer ? 2.0 : 0.0)) {
++        guard let webUITerm,
++              let webURL = URL(string: "http://127.0.0.1:8787") else { return }
++        webUITerm.termView.showBrowserWebView(webURL)
++      }
++    }
++  }
++
++  @objc func startHermesWebUI() {
++    Self.hermesWebUIWaiters.append { [weak self] port, launchServer in
++      guard let self else { return }
++      self.openHermesWebUI(at: port, launchServer: launchServer)
++    }
++    guard !Self.hermesWebUIStartInFlight else { return }
++    Self.hermesWebUIStartInFlight = true
++
++    if let port = Self.hermesWebUIPort {
++      Self.hermesWebUIStartInFlight = false
++      let waiters = Self.hermesWebUIWaiters
++      Self.hermesWebUIWaiters.removeAll()
++      waiters.forEach { $0(port, false) }
++      return
++    }
++
++    Self.findHermesWebUIPort(Self.hermesWebUIDefaultPort) { port, shouldLaunch in
++      DispatchQueue.main.async {
++        Self.hermesWebUIPort = port
++        Self.hermesWebUIStartInFlight = false
++        let waiters = Self.hermesWebUIWaiters
++        Self.hermesWebUIWaiters.removeAll()
++        waiters.forEach { $0(port, shouldLaunch) }
++      }
++    }
++  }
++
++  @objc private func _openHermesWebUI() {
++    guard let term = currentTerm(),
++          let url = URL(string: "http://127.0.0.1:8787") else { return }
++    if Self.hermesWebUIPort == nil {
++      startHermesWebUI()
++    }
++    term.termView.showBrowserWebView(url)
++  }
++
+   @objc func newShellAction() {
+     _newShellAction()
+   }
+@@ -1048,7 +1174,28 @@ extension SpaceController {
+     _interactiveSpaceController()
+       ._toggleQuickActionActionWith(receiver: self)
+   }
+-  
++
++  @objc private func _openTermSettings() {
++    guard presentedViewController == nil else { return }
++    showConfigAction()
++  }
++
++  @objc private func _handleThreeFingerPan(_ recognizer: UIPanGestureRecognizer) {
++    guard recognizer.state == .ended else { return }
++    let translation = recognizer.translation(in: view)
++    guard abs(translation.y) > abs(translation.x), abs(translation.y) >= 40 else { return }
++    if translation.y < 0 {
++      _openTermSettings()
++    } else {
++      _openHermesWebUI()
++    }
++  }
++
++  func gestureRecognizer(_ gestureRecognizer: UIGestureRecognizer,
++                         shouldRecognizeSimultaneouslyWith otherGestureRecognizer: UIGestureRecognizer) -> Bool {
++    gestureRecognizer === _threeFingerPan || otherGestureRecognizer === _threeFingerPan
++  }
++
+   @objc func toggleGeoTrack() {
+     if GeoManager.shared().traking {
+       GeoManager.shared().stop()
+@@ -1165,6 +1312,7 @@ extension SpaceController {
+     _viewportsController.setViewControllers([term], direction: direction, animated: animated) { (didComplete) in
+       term.resumeIfNeeded()
+       self._currentKey = term.meta.key
++      term.termView.moveSharedBrowserWebViewIfPresent()
+       self._displayHUD()
+       self._attachInputToCurrentTerm()
+       self._spaceControllerAnimating = false

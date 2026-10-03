@@ -1,0 +1,264 @@
+diff --git a/Blink/AppDelegate.m b/Blink/AppDelegate.m
+index 25b16715f345447f8482f04badab644423946656..3e18aca4b1d49e28f339d593bce21c832ba22f3a 100644
+--- a/Blink/AppDelegate.m
++++ b/Blink/AppDelegate.m
+@@ -40,6 +40,14 @@
+ #include <libssh/callbacks.h>
+ #include "xcall.h"
+ #include "Blink-Swift.h"
++#include <errno.h>
++#include <limits.h>
++#include <stdint.h>
++#include <stdio.h>
++#include <stdlib.h>
++#include <string.h>
++#include <unistd.h>
++#include <zlib.h>
+ 
+ #ifdef BLINK_BUILD_ENABLED
+ extern void build_auto_start_wg_ports(void);
+@@ -49,6 +57,197 @@ extern void rebind_ports(void);
+ 
+ @import CloudKit;
+ 
++static uint16_t HermesReadLE16(const uint8_t *bytes) {
++  return (uint16_t)(bytes[0] | ((uint16_t)bytes[1] << 8));
++}
++
++static uint32_t HermesReadLE32(const uint8_t *bytes) {
++  return (uint32_t)bytes[0] | ((uint32_t)bytes[1] << 8) |
++         ((uint32_t)bytes[2] << 16) | ((uint32_t)bytes[3] << 24);
++}
++
++static BOOL HermesCRCMatches(const uint8_t *bytes, uint32_t length, uint32_t expected) {
++  uLong crc = crc32(0L, Z_NULL, 0);
++  uint32_t offset = 0;
++  while (offset < length) {
++    uint32_t chunkLength = MIN((uint32_t)UINT_MAX, length - offset);
++    crc = crc32(crc, bytes + offset, (uInt)chunkLength);
++    offset += chunkLength;
++  }
++  return (uint32_t)crc == expected;
++}
++
++static int64_t HermesRuntimeTimestamp(NSString *archivePath, BOOL verifyPayloads) {
++  NSData *archive = [NSData dataWithContentsOfFile:archivePath
++                                           options:NSDataReadingMappedIfSafe
++                                             error:nil];
++  if (archive.length < 22 || archive.length > UINT32_MAX) {
++    return -1;
++  }
++
++  const uint8_t *bytes = archive.bytes;
++  NSUInteger tailLength = MIN(archive.length, (NSUInteger)(22 + UINT16_MAX));
++  NSUInteger tailStart = archive.length - tailLength;
++  NSUInteger eocd = NSNotFound;
++  for (NSUInteger cursor = tailLength - 22 + 1; cursor > 0;) {
++    cursor--;
++    const uint8_t *candidate = bytes + tailStart + cursor;
++    if (HermesReadLE32(candidate) == 0x06054b50 &&
++        cursor + 22 + HermesReadLE16(candidate + 20) == tailLength) {
++      eocd = tailStart + cursor;
++      break;
++    }
++  }
++  if (eocd == NSNotFound) {
++    return -1;
++  }
++
++  const uint8_t *endRecord = bytes + eocd;
++  uint16_t entriesOnDisk = HermesReadLE16(endRecord + 8);
++  uint16_t totalEntries = HermesReadLE16(endRecord + 10);
++  uint32_t centralSize = HermesReadLE32(endRecord + 12);
++  uint32_t centralOffset = HermesReadLE32(endRecord + 16);
++  if (HermesReadLE16(endRecord + 4) != 0 || HermesReadLE16(endRecord + 6) != 0 ||
++      entriesOnDisk != totalEntries || totalEntries == UINT16_MAX ||
++      centralOffset > eocd || centralSize != eocd - centralOffset) {
++    return -1;
++  }
++
++  NSUInteger cursor = centralOffset;
++  NSUInteger centralEnd = cursor + centralSize;
++  NSUInteger timestampCount = 0;
++  NSUInteger entryCount = 0;
++  int64_t timestampValue = -1;
++  NSMutableSet<NSString *> *entryNames = [NSMutableSet setWithCapacity:totalEntries];
++  while (cursor < centralEnd) {
++    if (centralEnd - cursor < 46 || HermesReadLE32(bytes + cursor) != 0x02014b50) {
++      return -1;
++    }
++    const uint8_t *entry = bytes + cursor;
++    uint16_t flags = HermesReadLE16(entry + 8);
++    uint16_t method = HermesReadLE16(entry + 10);
++    uint32_t crc = HermesReadLE32(entry + 16);
++    uint32_t compressedSize = HermesReadLE32(entry + 20);
++    uint32_t uncompressedSize = HermesReadLE32(entry + 24);
++    uint16_t filenameLength = HermesReadLE16(entry + 28);
++    uint16_t extraLength = HermesReadLE16(entry + 30);
++    uint16_t commentLength = HermesReadLE16(entry + 32);
++    uint32_t localOffset = HermesReadLE32(entry + 42);
++    NSUInteger recordLength = 46 + filenameLength + extraLength + commentLength;
++    if (recordLength > centralEnd - cursor || filenameLength == 0 ||
++        method != 0 || compressedSize != uncompressedSize ||
++        (flags & 0x0009) != 0 || localOffset >= centralOffset ||
++        centralOffset - localOffset < 30 ||
++        HermesReadLE32(bytes + localOffset) != 0x04034b50) {
++      return -1;
++    }
++
++    NSString *name = [[NSString alloc] initWithBytes:entry + 46
++                                               length:filenameLength
++                                             encoding:NSUTF8StringEncoding];
++    if (name.length == 0 || [entryNames containsObject:name]) {
++      return -1;
++    }
++    [entryNames addObject:name];
++
++    const uint8_t *local = bytes + localOffset;
++    uint16_t localNameLength = HermesReadLE16(local + 26);
++    uint16_t localExtraLength = HermesReadLE16(local + 28);
++    NSUInteger localDataStart = (NSUInteger)localOffset + 30;
++    NSUInteger localHeaderRemainder = archive.length - localDataStart;
++    if (localNameLength != filenameLength ||
++        localNameLength > localHeaderRemainder ||
++        localExtraLength > localHeaderRemainder - localNameLength ||
++        memcmp(bytes + localDataStart, entry + 46, filenameLength) != 0 ||
++        HermesReadLE16(local + 6) != flags || HermesReadLE16(local + 8) != method ||
++        HermesReadLE32(local + 14) != crc ||
++        HermesReadLE32(local + 18) != compressedSize ||
++        HermesReadLE32(local + 22) != uncompressedSize) {
++      return -1;
++    }
++
++    NSUInteger dataOffset = localDataStart + localNameLength + localExtraLength;
++    if (dataOffset > centralOffset || compressedSize > centralOffset - dataOffset) {
++      return -1;
++    }
++    BOOL isTimestamp = [name isEqualToString:@"timestamp.txt"];
++    if (isTimestamp) {
++      timestampCount++;
++      if (timestampCount != 1 || uncompressedSize == 0 || uncompressedSize > 64) {
++        return -1;
++      }
++    }
++    if ((verifyPayloads || isTimestamp) &&
++        !HermesCRCMatches(bytes + dataOffset, uncompressedSize, crc)) {
++      return -1;
++    }
++    if (isTimestamp) {
++      NSString *text = [[NSString alloc] initWithBytes:bytes + dataOffset
++                                                length:uncompressedSize
++                                              encoding:NSASCIIStringEncoding];
++      NSString *trimmed = [text stringByTrimmingCharactersInSet:
++        [NSCharacterSet whitespaceAndNewlineCharacterSet]];
++      NSCharacterSet *nonDigits = [[NSCharacterSet characterSetWithCharactersInString:@"0123456789"] invertedSet];
++      if (trimmed.length == 0 || [trimmed rangeOfCharacterFromSet:nonDigits].location != NSNotFound) {
++        return -1;
++      }
++      unsigned long long parsed = strtoull(trimmed.UTF8String, NULL, 10);
++      if (parsed == 0 || parsed > INT64_MAX) {
++        return -1;
++      }
++      timestampValue = (int64_t)parsed;
++    }
++    cursor += recordLength;
++    entryCount++;
++  }
++  return entryCount == totalEntries && timestampCount == 1 ? timestampValue : -1;
++}
++
++static void InstallBundledHermesRuntime(void) {
++  NSBundle *bundle = [NSBundle mainBundle];
++  NSString *bundledPath = [bundle pathForResource:@"hermesrt" ofType:@"zip"];
++  NSString *homePath = [BlinkPaths hermesHomePath];
++  NSString *installedPath = [homePath stringByAppendingPathComponent:@"hermesrt.zip"];
++  if (bundledPath.length == 0) {
++    NSLog(@"Hermes runtime update skipped: bundled hermesrt.zip is missing");
++    return;
++  }
++
++  int64_t bundledTimestamp = HermesRuntimeTimestamp(bundledPath, NO);
++  int64_t installedTimestamp = HermesRuntimeTimestamp(installedPath, YES);
++  if (bundledTimestamp <= 0) {
++    NSLog(@"Hermes runtime update skipped: bundled timestamp.txt is invalid");
++    return;
++  }
++  if (installedTimestamp >= bundledTimestamp) {
++    NSLog(@"Hermes runtime kept: Documents/HermesHome/hermesrt.zip timestamp=%lld bundled=%lld",
++          (long long)installedTimestamp, (long long)bundledTimestamp);
++    return;
++  }
++
++  NSString *temporaryPath = [homePath stringByAppendingPathComponent:
++    [NSString stringWithFormat:@"hermesrt.zip.%@.tmp", NSUUID.UUID.UUIDString]];
++  NSError *error = nil;
++  NSFileManager *fileManager = [NSFileManager defaultManager];
++  if (![fileManager copyItemAtPath:bundledPath toPath:temporaryPath error:&error]) {
++    [fileManager removeItemAtPath:temporaryPath error:nil];
++    NSLog(@"Hermes runtime update failed while staging: %@", error.localizedDescription);
++    return;
++  }
++  if (HermesRuntimeTimestamp(temporaryPath, NO) != bundledTimestamp) {
++    [fileManager removeItemAtPath:temporaryPath error:nil];
++    NSLog(@"Hermes runtime update failed: staged ZIP timestamp does not match bundle");
++    return;
++  }
++  if (rename(temporaryPath.fileSystemRepresentation, installedPath.fileSystemRepresentation) != 0) {
++    int savedErrno = errno;
++    [fileManager removeItemAtPath:temporaryPath error:nil];
++    NSLog(@"Hermes runtime update failed while replacing archive: %s", strerror(savedErrno));
++    return;
++  }
++  NSLog(@"Hermes runtime installed from IPA: timestamp=%lld", (long long)bundledTimestamp);
++}
++
+ @interface AppDelegate () <UNUserNotificationCenterDelegate>
+ @end
+ 
+@@ -81,6 +280,7 @@ void __setupProcessEnv(void) {
+ }
+ 
+ - (BOOL)application:(UIApplication *)application didFinishLaunchingWithOptions:(NSDictionary *)launchOptions {
++  HermesLinkAppendLog("application didFinishLaunching");
+   
+   [Migrator perform];
+ 
+@@ -98,16 +298,37 @@ void __setupProcessEnv(void) {
+ 
+   sideLoading = false; // Turn off extra commands from iOS system
+   initializeEnvironment(); // initialize environment variables for iOS system
++  addCommandList([[NSBundle mainBundle] pathForResource:@"blinkCommandsDictionary" ofType:@"plist"]); // Register app commands before Hermes can dispatch tools
+   dispatch_async(bgQueue, ^{
+-    addCommandList([[NSBundle mainBundle] pathForResource:@"blinkCommandsDictionary" ofType:@"plist"]); // Load blink commands to ios_system
+     __setupProcessEnv(); // we should call this after ios_system initializeEnvironment to override its defaults.
+     [AppDelegate _loadProfileVars];
+   });
+   
++  // Use the real app Documents directory, which is exposed through Files and
++  // file sharing. Do not route Hermes through homePath/Documents: that path is
++  // a symlink created asynchronously and can become a private shadow folder.
++  NSString *documentsPath = [BlinkPaths documentsPath];
++  NSString *workspacePath = [documentsPath stringByAppendingPathComponent:@"workspace"];
++  [[NSFileManager defaultManager] createDirectoryAtPath:documentsPath
++                             withIntermediateDirectories:YES
++                                              attributes:nil
++                                                   error:nil];
++  [[NSFileManager defaultManager] createDirectoryAtPath:workspacePath
++                             withIntermediateDirectories:YES
++                                              attributes:nil
++                                                   error:nil];
++  NSString *hermesHomePath = [BlinkPaths hermesHomePath];
++  InstallBundledHermesRuntime();
+   NSString *homePath = BlinkPaths.homePath;
+   setenv("HOME", homePath.UTF8String, 1);
+   setenv("SSH_HOME", homePath.UTF8String, 1);
+   setenv("CURL_HOME", homePath.UTF8String, 1);
++  setenv("HERMES_HOME", hermesHomePath.UTF8String, 1);
++  setenv("HERMES_RUNTIME_ROOT", hermesHomePath.UTF8String, 1);
++  setenv("HERMES_WEBUI_DEFAULT_WORKSPACE", workspacePath.UTF8String, 1);
++  setenv("TERMINAL_CWD", workspacePath.UTF8String, 1);
++  setenv("PWD", workspacePath.UTF8String, 1);
++  chdir(workspacePath.UTF8String);
+   
+   NSNotificationCenter *nc = NSNotificationCenter.defaultCenter;
+   [nc addObserver:self

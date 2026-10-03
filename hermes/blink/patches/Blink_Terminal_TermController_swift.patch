@@ -1,0 +1,80 @@
+diff --git a/Blink/Terminal/TermController.swift b/Blink/Terminal/TermController.swift
+index cef620e715d4228b2c6f30cedfcfccdeda3472d5..57a8769926117ed2ac2d97079b7a56a1c62f9305 100644
+--- a/Blink/Terminal/TermController.swift
++++ b/Blink/Terminal/TermController.swift
+@@ -75,7 +75,12 @@ private class ProxyView: UIView {
+       else {
+         return
+       }
+-      controlledView.frame = frame
++      guard let proxy = self else { return }
++      if controlledView.superview === proxy {
++        controlledView.frame = proxy.bounds
++      } else if controlledView.superview === parent {
++        controlledView.frame = frame
++      }
+     }
+ 
+     placeControlledView()
+@@ -89,7 +94,15 @@ private class ProxyView: UIView {
+     else {
+       return
+     }
+-    controlledView.frame = parent.frame
++    if controlledView.superview === self {
++      controlledView.frame = bounds
++    } else if controlledView.superview === parent {
++      // The controlled terminal is temporarily reparented beside this proxy.
++      // Use the proxy's frame in that container's coordinate space; using
++      // parent.frame here uses the container's coordinates twice and can
++      // collapse the terminal to the two-row startup height.
++      controlledView.frame = frame
++    }
+   }
+ 
+   func removeControlledView() {
+@@ -193,6 +206,10 @@ class TermController: UIViewController {
+ 
+   @objc var termView: TermView { _termView }
+ 
++  @objc func enqueueCommand(_ command: String) {
++    (_session as? MCPSession)?.enqueueCommand(command, skipHistoryRecord: true)
++  }
++
+   private var _sessionPayload: TermSessionPayload? = nil
+   private var _session: Session? { _sessionPayload?.session }
+ 
+@@ -237,6 +254,7 @@ class TermController: UIViewController {
+   }
+ 
+   public override func loadView() {
++    HermesLinkAppendLog("TermController loadView")
+     super.loadView()
+     _termDevice.delegate = self
+     _termDevice.attachView(_termView)
+@@ -248,6 +266,7 @@ class TermController: UIViewController {
+   }
+ 
+   public override func viewDidLoad() {
++    HermesLinkAppendLog("TermController viewDidLoad")
+     super.viewDidLoad()
+     viewIsLoaded = true
+ 
+@@ -270,7 +289,16 @@ class TermController: UIViewController {
+ 
+   public override func viewDidLayoutSubviews() {
+     super.viewDidLayoutSubviews()
+-    _termView.termUIState.viewSize = view.bounds.size
++    let newSize = view.bounds.size
++    let didChangeSize = _termView.termUIState.viewSize != newSize
++    _termView.termUIState.viewSize = newSize
++
++    // Session startup can precede the proxy view's final bounds. hterm then
++    // reports a temporary size (often two rows) and keeps using it until the
++    // next resize. Re-send SIGWINCH after every real bounds change.
++    if didChangeSize {
++      _session?.sigwinch()
++    }
+   }
+ 
+   @objc public func terminate() {

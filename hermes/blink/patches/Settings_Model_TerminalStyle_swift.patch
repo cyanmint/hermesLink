@@ -1,0 +1,12 @@
+diff --git a/Settings/Model/TerminalStyle.swift b/Settings/Model/TerminalStyle.swift
+index 376b4219ca8a2421e43c0e462bfc2314f4020f6a..ca8d53be6eb31b8d22103b30b0a32ee3a5f9468f 100644
+--- a/Settings/Model/TerminalStyle.swift
++++ b/Settings/Model/TerminalStyle.swift
+@@ -45,6 +45,7 @@ struct TerminalStyle: Codable, Identifiable, Equatable {
+   var themeName: String
+   var fontName: String
+   var fontSize: CGFloat
++  var externalDisplayFontSize: CGFloat = 24
+   var cursorBlink: Bool
+   var boldMode: BoldMode
+   var boldAsBright: Bool

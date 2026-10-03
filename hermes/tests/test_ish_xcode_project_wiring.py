@@ -26,6 +26,10 @@ TEMPLATE_XCCONFIG = ROOT / "template_setup.xcconfig"
 ISH_DIR = ROOT / "ISHBridge"
 
 
+@unittest.skipUnless(
+    (ROOT / "Resources" / "blinkCommandsDictionary.plist").is_file(),
+    "Blink source is materialized from the pinned upstream checkout during builds",
+)
 class CommandRegistrationTests(unittest.TestCase):
     def test_ish_is_registered_as_a_top_level_native_command_not_a_subcommand(self) -> None:
         with COMMANDS_PLIST.open("rb") as handle:
@@ -73,6 +77,10 @@ class CommandRegistrationTests(unittest.TestCase):
         self.assertNotIn("do_mount(", bridge)
 
 
+@unittest.skipUnless(
+    PBXPROJ.is_file(),
+    "Blink source is materialized from the pinned upstream checkout during builds",
+)
 class PbxprojWiringTests(unittest.TestCase):
     @classmethod
     def setUpClass(cls) -> None:
@@ -185,6 +193,10 @@ class IshNativeXcconfigTests(unittest.TestCase):
         self.assertNotIn("#import <BlinkConfig/BlinkPaths.h>", source)
         self.assertNotIn("extern void HermesLinkAppendLog", source)
 
+    @unittest.skipUnless(
+        (ROOT / "Settings" / "ISHRootfsSettingsView.swift").is_file(),
+        "Blink source is materialized from the pinned upstream checkout during builds",
+    )
     def test_documents_mount_is_manual_and_script_is_written_for_profiles(self) -> None:
         view = (ROOT / "Settings" / "ISHRootfsSettingsView.swift").read_text(encoding="utf-8")
         self.assertIn("Run /ish/mount-documents.sh inside iSH", view)
@@ -208,6 +220,10 @@ class IshNativeXcconfigTests(unittest.TestCase):
         self.assertIn("const char **argv = argv_values", source)
         self.assertIn("const char **envp = envp_values", source)
 
+    @unittest.skipUnless(
+        (ROOT / "Blink" / "Commands" / "ish.m").is_file(),
+        "Blink source is materialized from the pinned upstream checkout during builds",
+    )
     def test_guest_rootfs_uses_files_visible_documents_iSH_directory(self) -> None:
         command = (ROOT / "Blink" / "Commands" / "ish.m").read_text(encoding="utf-8")
         bridge = (ISH_DIR / "ish_kernel_bridge.m").read_text(encoding="utf-8")
@@ -289,6 +305,10 @@ class IshNativeXcconfigTests(unittest.TestCase):
         self.assertIn("names.count < 2", source)
         self.assertIn("Could not reset the only rootfs profile", source)
 
+    @unittest.skipUnless(
+        (ROOT / "Settings" / "ISHRootfsSettingsView.swift").is_file(),
+        "Blink source is materialized from the pinned upstream checkout during builds",
+    )
     def test_settings_exposes_rootfs_profiles(self) -> None:
         settings = (ROOT / "Settings" / "SettingsView.swift").read_text(encoding="utf-8")
         profile_view = (ROOT / "Settings" / "ISHRootfsSettingsView.swift").read_text(encoding="utf-8")
@@ -300,6 +320,10 @@ class IshNativeXcconfigTests(unittest.TestCase):
                 self.assertIn(operation, profile_view)
         self.assertIn("Force-quit and reopen Blink", profile_view)
 
+    @unittest.skipUnless(
+        (ROOT / "template_setup.xcconfig").is_file(),
+        "Blink source is materialized from the pinned upstream checkout during builds",
+    )
     def test_template_setup_includes_the_ish_native_xcconfig(self) -> None:
         source = TEMPLATE_XCCONFIG.read_text(encoding="utf-8")
         self.assertIn('#include "hermes/build/ISHNative.xcconfig"', source)
@@ -318,6 +342,10 @@ class IshNativeXcconfigTests(unittest.TestCase):
                 self.assertIn(symbol, stub)
         self.assertIn("ISH_RUN_ERR_NOT_AVAILABLE", stub)
 
+    @unittest.skipUnless(
+        PBXPROJ.is_file(),
+        "Blink source is materialized from the pinned upstream checkout during builds",
+    )
     def test_app_conditionally_embeds_the_dynamic_ish_framework(self) -> None:
         project = PBXPROJ.read_text(encoding="utf-8")
         self.assertIn("Embed Ish.framework when enabled", project)

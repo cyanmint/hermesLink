@@ -3,14 +3,13 @@
 The following files are HermesLink glue code created by cyanmint's coding agent. A coding agent was used to create the complete contents of these files; they are not copied from Blink or from the upstream Hermes projects.
 
 This inventory intentionally excludes `AI-GENERATED-FILES.md` itself; it is attribution documentation, not a glue file.
+Blink app glue and resources are carried under `hermes/blink/overlay/`; changes to existing upstream files use small per-file patches under `hermes/blink/patches/`. They are materialized only in the build workspace.
 
 Under the project's stated attribution policy, AI-generated content has no copyright holder and is not subject to copyright. These files are therefore provided as non-copyrightable glue code. This statement does not remove or alter the licenses and copyright notices of Blink, Hermes Agent, Hermes WebUI, CPython, or any other third-party material incorporated by the build.
 
 ## Files
 
 - `.github/workflows/build.yml`
-- `Blink/Commands/hermes.m`
-- `Blink/Commands/ish.m`
 - `ISHBridge/ISHRootfsProfiles.h`
 - `ISHBridge/ISHRootfsProfiles.m`
 - `ISHBridge/ish_exit_protocol.c`
@@ -22,6 +21,10 @@ Under the project's stated attribution policy, AI-generated content has no copyr
 - `ISHBridge/ish_path_safety.h`
 - `ISHBridge/ish_rootfs.c`
 - `ISHBridge/ish_rootfs.h`
+- `hermes/blink/overlay/Blink/Commands/hermes.m`
+- `hermes/blink/overlay/Blink/Commands/ish.m`
+- `hermes/blink/overlay/Blink/Commands/ishfs.m`
+- `hermes/blink/overlay/Settings/ISHRootfsSettingsView.swift`
 - `hermes/build/ISHNative.xcconfig`
 - `hermes/build/build-hermesrt-zip.sh`
 - `hermes/build/build-ish-static.sh`
@@ -36,6 +39,7 @@ Under the project's stated attribution policy, AI-generated content has no copyr
 - `hermes/build/generate-native-module-registry.py`
 - `hermes/build/package-native-ios.sh`
 - `hermes/build/package-ish-framework.sh`
+- `hermes/build/prepare-blink-source.sh`
 - `hermes/build/prepare-ish-xcode-project.py`
 - `hermes/build/repack-ish-meson-archives.py`
 - `hermes/build/validate-runtime-zip.py`
@@ -53,6 +57,7 @@ Under the project's stated attribution policy, AI-generated content has no copyr
 - `hermes/overlay/patches/patch-webui-zip.py`
 - `hermes/overlay/python/sitecustomize.py`
 - `hermes/tests/ci_simulator_copilot_e2e.py`
+- `hermes/tests/test_blink_source_patch.py`
 - `hermes/tests/ish_bridge/ish_bridge_test_main.c`
 - `hermes/tests/test_ci_simulator_copilot_e2e.py`
 - `hermes/tests/test_cpython_ios_system_patch.py`

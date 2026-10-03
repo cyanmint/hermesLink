@@ -1,0 +1,19 @@
+diff --git a/Blink/SmarterKeys/SmarterTermInput.swift b/Blink/SmarterKeys/SmarterTermInput.swift
+index 23591db454596e90c6d45017bc3070d467aa2c79..eb3cccd71c6db894a469a003cbc850c42939f27d 100644
+--- a/Blink/SmarterKeys/SmarterTermInput.swift
++++ b/Blink/SmarterKeys/SmarterTermInput.swift
+@@ -246,10 +246,10 @@ import Combine
+       return
+     }
+     
+-    if traitCollection.userInterfaceIdiom != .pad {
+-//      needToReload = (_inputAccessoryView as? KBAccessoryView) == nil
+-      _setupAccessoryView()
+-    }
++    // The custom smart-key bar is also required above the iPad software
++    // keyboard. The old phone-only guard left iPad without an input accessory
++    // after the terminal was reattached.
++    _setupAccessoryView()
+     
+   }
+   

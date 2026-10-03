@@ -1,0 +1,48 @@
+diff --git a/BlinkConfig/BlinkPaths.m b/BlinkConfig/BlinkPaths.m
+index 43bb159b93850106db9366b8a45d7e8de55ddc7d..dbe1b2e25191c1684818ee558b6aec77542bce4c 100644
+--- a/BlinkConfig/BlinkPaths.m
++++ b/BlinkConfig/BlinkPaths.m
+@@ -64,6 +64,13 @@ NSString *__iCloudsDriveDocumentsPath = nil;
+   return __documentsPath;
+ }
+ 
+++ (NSString *)hermesHomePath
++{
++  NSString *path = [[self documentsPath] stringByAppendingPathComponent:@"HermesHome"];
++  [self _ensureFolderAtPath:path];
++  return path;
++}
++
+ + (NSString *)groupContainerPath {
+   if (__groupContainerPath == nil) {
+ 
+@@ -71,6 +78,17 @@ NSString *__iCloudsDriveDocumentsPath = nil;
+ 
+     NSFileManager *fm = [NSFileManager defaultManager];
+     NSString *path = [fm containerURLForSecurityApplicationGroupIdentifier:groupID].path;
++    if (path.length == 0) {
++      // TrollStore/ad-hoc installs may not receive a provisioned App Group.
++      // Never pass nil to URL(fileURLWithPath:): Migrator runs before the
++      // first scene and would trap during launch. Use an app-local durable
++      // directory until a real App Group becomes available.
++      NSString *applicationSupport = [NSSearchPathForDirectoriesInDomains(
++        NSApplicationSupportDirectory, NSUserDomainMask, YES) firstObject];
++      path = [applicationSupport stringByAppendingPathComponent:@"HermesLink"];
++      [self _ensureFolderAtPath:path];
++      NSLog(@"App Group %@ unavailable; using app-local container %@", groupID, path);
++    }
+     __groupContainerPath = path;
+   }
+   return __groupContainerPath;
+@@ -102,6 +120,11 @@ NSString *__iCloudsDriveDocumentsPath = nil;
+ 
+ + (void)_linkAtPath:(NSString *)path destinationPath:(NSString *)destinationPath {
+   NSFileManager *fm = [NSFileManager defaultManager];
++
++  if (path.length == 0 || destinationPath.length == 0) {
++    NSLog(@"Skipping link with unavailable path (source=%@, destination=%@)", path, destinationPath);
++    return;
++  }
+   
+   // Don't use fileExists as that would traverse the symlink.
+   if ([fm attributesOfItemAtPath:path error:nil]) {

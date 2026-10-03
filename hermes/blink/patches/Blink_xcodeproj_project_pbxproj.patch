@@ -1,0 +1,363 @@
+diff --git a/Blink.xcodeproj/project.pbxproj b/Blink.xcodeproj/project.pbxproj
+index 1d418119be3f1df3cec877df591763c4d2405a04..0631f8135c3a23016104ab02768ee2e8f06dda7c 100644
+--- a/Blink.xcodeproj/project.pbxproj
++++ b/Blink.xcodeproj/project.pbxproj
+@@ -466,6 +466,16 @@
+ 		D2ECBF4929645814004E95C4 /* BuildApi.swift in Sources */ = {isa = PBXBuildFile; fileRef = D2ECBF4829645814004E95C4 /* BuildApi.swift */; };
+ 		D2ED4A6F239BB12E000DC67F /* KeyCaptureView.swift in Sources */ = {isa = PBXBuildFile; fileRef = D2ED4A6E239BB12E000DC67F /* KeyCaptureView.swift */; };
+ 		D2F30EAD205009CD008C5F35 /* base64js.min.js in Resources */ = {isa = PBXBuildFile; fileRef = D2F30EAC205009CD008C5F35 /* base64js.min.js */; };
++		F10000010000000000000001 /* hermes.m in Sources */ = {isa = PBXBuildFile; fileRef = F10000020000000000000001 /* hermes.m */; };
++		F10000070000000000000001 /* HermesRuntime.framework in Frameworks */ = {isa = PBXBuildFile; fileRef = F10000090000000000000001 /* HermesRuntime.framework */; };
++		F10000080000000000000001 /* HermesRuntime.framework in Embed Frameworks */ = {isa = PBXBuildFile; fileRef = F10000090000000000000001 /* HermesRuntime.framework */; settings = {ATTRIBUTES = (CodeSignOnCopy, RemoveHeadersOnCopy, ); }; };
++		F10000050000000000000001 /* hermesrt.zip in Resources */ = {isa = PBXBuildFile; fileRef = F10000060000000000000001 /* hermesrt.zip */; };
++		F1A1CE560000000000000001 /* ish.m in Sources */ = {isa = PBXBuildFile; fileRef = F1A1CE550000000000000001 /* ish.m */; };
++		F1A1CE570000000000000001 /* ishfs.m in Sources */ = {isa = PBXBuildFile; fileRef = F1A1CE5A0000000000000001 /* ishfs.m */; };
++		F1A1CE580000000000000001 /* ISHRootfsProfiles.m in Sources */ = {isa = PBXBuildFile; fileRef = F1A1CE5B0000000000000001 /* ISHRootfsProfiles.m */; };
++		F1A1CE590000000000000001 /* ISHRootfsSettingsView.swift in Sources */ = {isa = PBXBuildFile; fileRef = F1A1CE5D0000000000000001 /* ISHRootfsSettingsView.swift */; };
++		3EC2EABECFB079180991531B /* ish_kernel_bridge_stub.m in Sources */ = {isa = PBXBuildFile; fileRef = 1E3F68EDDDED7F8AAF6CD86C /* ish_kernel_bridge_stub.m */; };
++		DCA2F5F653C2C3F9662E8822 /* ish-rootfs.tar.gz in Resources */ = {isa = PBXBuildFile; fileRef = 314E2F04FE0F5B60CB0D4E61 /* ish-rootfs.tar.gz */; };
+ 		D2F330CA20A6CB840074ADD7 /* help.m in Sources */ = {isa = PBXBuildFile; fileRef = D2F330C920A6CB840074ADD7 /* help.m */; };
+ 		D2F330CC20A6D98C0074ADD7 /* config.m in Sources */ = {isa = PBXBuildFile; fileRef = D2F330CB20A6D98C0074ADD7 /* config.m */; };
+ 		D2F330D220A6EF030074ADD7 /* showkey.m in Sources */ = {isa = PBXBuildFile; fileRef = D2F330D120A6EF020074ADD7 /* showkey.m */; };
+@@ -717,6 +727,7 @@
+ 			dstPath = "";
+ 			dstSubfolderSpec = 10;
+ 			files = (
++				F10000080000000000000001 /* HermesRuntime.framework in Embed Frameworks */,
+ 				D2A9B2F8272E6F26009FCBDE /* BlinkCode.framework in Embed Frameworks */,
+ 				D2C7710826EA49AA001B5659 /* openssl.xcframework in Embed Frameworks */,
+ 				BDF2B8D32BC480CC00B9C7EA /* vim.xcframework in Embed Frameworks */,
+@@ -756,6 +767,26 @@
+ 		};
+ /* End PBXCopyFilesBuildPhase section */
+ 
++/* Begin PBXShellScriptBuildPhase section */
++		F100000A0000000000000001 /* Embed Ish.framework when enabled */ = {
++			isa = PBXShellScriptBuildPhase;
++			alwaysOutOfDate = 1;
++			buildActionMask = 2147483647;
++			files = (
++			);
++			inputPaths = (
++				"$(PROJECT_DIR)/Frameworks/Ish.framework",
++			);
++			name = "Embed Ish.framework when enabled";
++			outputPaths = (
++				"$(TARGET_BUILD_DIR)/$(FRAMEWORKS_FOLDER_PATH)/Ish.framework/Ish",
++			);
++			runOnlyForDeploymentPostprocessing = 0;
++			shellPath = /bin/sh;
++			shellScript = "set -e\nif [ \"${ISH_NATIVE_AVAILABLE:-NO}\" != YES ]; then\n  exit 0\nfi\nsource=\"$PROJECT_DIR/Frameworks/Ish.framework\"\ndestination=\"$TARGET_BUILD_DIR/$FRAMEWORKS_FOLDER_PATH/Ish.framework\"\nif [ ! -x \"$source/Ish\" ]; then\n  echo \"missing Ish.framework/Ish at $source\" >&2\n  exit 1\nfi\nmkdir -p \"$(dirname \"$destination\")\"\nrm -rf \"$destination\"\n/usr/bin/ditto \"$source\" \"$destination\"\nif [ \"${CODE_SIGNING_ALLOWED:-NO}\" = YES ]; then\n  /usr/bin/codesign --force --sign \"${EXPANDED_CODE_SIGN_IDENTITY:--}\" --timestamp=none \"$destination\"\nfi\n";
++		};
++/* End PBXShellScriptBuildPhase section */
++
+ /* Begin PBXFileReference section */
+ 		0716B5291CFFAB9300268B5B /* AppDelegate.h */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.c.h; path = AppDelegate.h; sourceTree = "<group>"; };
+ 		0716B52A1CFFAB9300268B5B /* AppDelegate.m */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.c.objc; path = AppDelegate.m; sourceTree = "<group>"; };
+@@ -1218,6 +1249,24 @@
+ 		D2ECBF4829645814004E95C4 /* BuildApi.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = BuildApi.swift; sourceTree = "<group>"; };
+ 		D2ED4A6E239BB12E000DC67F /* KeyCaptureView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = KeyCaptureView.swift; sourceTree = "<group>"; };
+ 		D2F30EAC205009CD008C5F35 /* base64js.min.js */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.javascript; path = base64js.min.js; sourceTree = "<group>"; };
++		F10000020000000000000001 /* hermes.m */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.objc; path = hermes.m; sourceTree = "<group>"; };
++		F10000090000000000000001 /* HermesRuntime.framework */ = {isa = PBXFileReference; lastKnownFileType = wrapper.framework; path = HermesRuntime.framework; sourceTree = "<group>"; };
++		F10000060000000000000001 /* hermesrt.zip */ = {isa = PBXFileReference; lastKnownFileType = archive.zip; path = hermesrt.zip; sourceTree = "<group>"; };
++		F1A1CE550000000000000001 /* ish.m */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.objc; path = ish.m; sourceTree = "<group>"; };
++		F1A1CE5A0000000000000001 /* ishfs.m */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.objc; path = ishfs.m; sourceTree = "<group>"; };
++		F1A1CE5B0000000000000001 /* ISHRootfsProfiles.m */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.objc; path = ISHRootfsProfiles.m; sourceTree = "<group>"; };
++		F1A1CE5C0000000000000001 /* ISHRootfsProfiles.h */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.h; path = ISHRootfsProfiles.h; sourceTree = "<group>"; };
++		F1A1CE5D0000000000000001 /* ISHRootfsSettingsView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ISHRootfsSettingsView.swift; sourceTree = "<group>"; };
++		314E2F04FE0F5B60CB0D4E61 /* ish-rootfs.tar.gz */ = {isa = PBXFileReference; lastKnownFileType = archive.gzip; path = "ish-rootfs.tar.gz"; sourceTree = "<group>"; };
++		165BD920B521DB9E8903D82D /* ish_path_safety.h */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.h; path = ish_path_safety.h; sourceTree = "<group>"; };
++		7D974064786F253981F25015 /* ish_path_safety.c */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.c; path = ish_path_safety.c; sourceTree = "<group>"; };
++		79DE6581D7BAC48AAD1ECC0B /* ish_rootfs.h */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.h; path = ish_rootfs.h; sourceTree = "<group>"; };
++		34208DB0A0A73B1BACFEE7CE /* ish_rootfs.c */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.c; path = ish_rootfs.c; sourceTree = "<group>"; };
++		191ABC14FEED1E0274186220 /* ish_exit_protocol.h */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.h; path = ish_exit_protocol.h; sourceTree = "<group>"; };
++		6B7C99FC5893913D822D64FD /* ish_exit_protocol.c */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.c; path = ish_exit_protocol.c; sourceTree = "<group>"; };
++		2E4F976EA6332326BB0C5C05 /* ish_kernel_bridge.h */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.h; path = ish_kernel_bridge.h; sourceTree = "<group>"; };
++		F8AA606AEC0B09E8279F79DF /* ish_kernel_bridge.m */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.objc; path = ish_kernel_bridge.m; sourceTree = "<group>"; };
++		1E3F68EDDDED7F8AAF6CD86C /* ish_kernel_bridge_stub.m */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.objc; path = ish_kernel_bridge_stub.m; sourceTree = "<group>"; };
+ 		D2F330C920A6CB840074ADD7 /* help.m */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.objc; path = help.m; sourceTree = "<group>"; };
+ 		D2F330CB20A6D98C0074ADD7 /* config.m */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.objc; path = config.m; sourceTree = "<group>"; };
+ 		D2F330D120A6EF020074ADD7 /* showkey.m */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.objc; path = showkey.m; sourceTree = "<group>"; };
+@@ -1228,7 +1277,7 @@
+ 		D2F64C9525CA99AD00F2225D /* libssh2.xcframework */ = {isa = PBXFileReference; lastKnownFileType = wrapper.xcframework; name = libssh2.xcframework; path = xcfs/.build/artifacts/xcfs/libssh2/libssh2.xcframework; sourceTree = SOURCE_ROOT; };
+ 		D2FBEC0727CF505D00FD974A /* browse.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = browse.swift; sourceTree = "<group>"; };
+ 		D2FCB4DC2339F9DB00A88108 /* UIScrollView+Paging.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "UIScrollView+Paging.swift"; sourceTree = "<group>"; };
+-		EA0BA18B1C0CC57B00719C1A /* Blink.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = Blink.app; sourceTree = BUILT_PRODUCTS_DIR; };
++		EA0BA18B1C0CC57B00719C1A /* HermesLink.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = HermesLink.app; sourceTree = BUILT_PRODUCTS_DIR; };
+ /* End PBXFileReference section */
+ 
+ /* Begin PBXFileSystemSynchronizedBuildFileExceptionSet section */
+@@ -1435,6 +1484,7 @@
+ 				D2C7710726EA49AA001B5659 /* openssl.xcframework in Frameworks */,
+ 				D222780C2A26216900D4C708 /* TreeSitterBashRunestone in Frameworks */,
+ 				D2334EF425C1C28F00385378 /* ios_system.xcframework in Frameworks */,
++				F10000070000000000000001 /* HermesRuntime.framework in Frameworks */,
+ 				07FABBC425C9AECF00E1CC2C /* BlinkFiles.framework in Frameworks */,
+ 				BD7AFC4128E8E98C004BCDA4 /* Base32Kit in Frameworks */,
+ 				0732F1291D06324200AB5438 /* libcurses.tbd in Frameworks */,
+@@ -1533,6 +1583,8 @@
+ 				C94437641D838ABF0096F84E /* Fonts */,
+ 				C944375F1D831CD30096F84E /* Themes */,
+ 				0732F04A1D062B9A00AB5438 /* locales.bundle */,
++				F10000060000000000000001 /* hermesrt.zip */,
++				314E2F04FE0F5B60CB0D4E61 /* ish-rootfs.tar.gz */,
+ 			);
+ 			path = Resources;
+ 			sourceTree = "<group>";
+@@ -1551,6 +1603,7 @@
+ 				D2334F0A25C1C3A000385378 /* OpenSSH.xcframework */,
+ 				D2334ECA25C1C04700385378 /* files.xcframework */,
+ 				D2334ED025C1C04700385378 /* ios_system.xcframework */,
++				F10000090000000000000001 /* HermesRuntime.framework */,
+ 				D2334EC425C1C04700385378 /* LibSSH.xcframework */,
+ 				D2334EC525C1C04700385378 /* mosh.xcframework */,
+ 				D2334EC625C1C04700385378 /* network_ios.xcframework */,
+@@ -2000,6 +2053,7 @@
+ 			isa = PBXGroup;
+ 			children = (
+ 				D2AD8E8327A2C80C00DED28D /* SettingsView.swift */,
++				F1A1CE5D0000000000000001 /* ISHRootfsSettingsView.swift */,
+ 				C94E9B611D6BA21C00DA4DD6 /* DismissSegue.h */,
+ 				C94E9B621D6BA21C00DA4DD6 /* DismissSegue.m */,
+ 				C9B2E0041D6B612300B89F69 /* Settings.storyboard */,
+@@ -2383,6 +2437,9 @@
+ 				D2334D1221495DAE00D26AC3 /* udptunnel */,
+ 				D2F330D320A6F1DF0074ADD7 /* clear.m */,
+ 				D2F330CB20A6D98C0074ADD7 /* config.m */,
++				F10000020000000000000001 /* hermes.m */,
++				F1A1CE550000000000000001 /* ish.m */,
++				F1A1CE5A0000000000000001 /* ishfs.m */,
+ 				D264D2B528F84724002B1B14 /* whatsnew.m */,
+ 				D2F330C920A6CB840074ADD7 /* help.m */,
+ 				D263A7672AA9AFE7001C6CFC /* device_info.m */,
+@@ -2440,16 +2497,35 @@
+ 				07F670621D05EEE200C0A53C /* Sessions */,
+ 				0716B5231CFFAB9300268B5B /* Blink */,
+ 				BDEC856B2E8397520096BF4C /* Common */,
++				F027E8B0C7B7ACEAE2E693F1 /* ISHBridge */,
+ 				EA0BA18C1C0CC57B00719C1A /* Products */,
+ 			);
+ 			indentWidth = 2;
+ 			sourceTree = "<group>";
+ 			tabWidth = 2;
+ 		};
++		F027E8B0C7B7ACEAE2E693F1 /* ISHBridge */ = {
++			isa = PBXGroup;
++			children = (
++				165BD920B521DB9E8903D82D /* ish_path_safety.h */,
++				7D974064786F253981F25015 /* ish_path_safety.c */,
++				79DE6581D7BAC48AAD1ECC0B /* ish_rootfs.h */,
++				34208DB0A0A73B1BACFEE7CE /* ish_rootfs.c */,
++				191ABC14FEED1E0274186220 /* ish_exit_protocol.h */,
++				6B7C99FC5893913D822D64FD /* ish_exit_protocol.c */,
++				2E4F976EA6332326BB0C5C05 /* ish_kernel_bridge.h */,
++				F8AA606AEC0B09E8279F79DF /* ish_kernel_bridge.m */,
++				1E3F68EDDDED7F8AAF6CD86C /* ish_kernel_bridge_stub.m */,
++				F1A1CE5B0000000000000001 /* ISHRootfsProfiles.m */,
++				F1A1CE5C0000000000000001 /* ISHRootfsProfiles.h */,
++			);
++			path = ISHBridge;
++			sourceTree = "<group>";
++		};
+ 		EA0BA18C1C0CC57B00719C1A /* Products */ = {
+ 			isa = PBXGroup;
+ 			children = (
+-				EA0BA18B1C0CC57B00719C1A /* Blink.app */,
++				EA0BA18B1C0CC57B00719C1A /* HermesLink.app */,
+ 				D265FBBA2317DD3C0017EAC4 /* BlinkTests.xctest */,
+ 				07FABB8425C9AEC000E1CC2C /* SSH.framework */,
+ 				07FABB8C25C9AEC100E1CC2C /* SSHTests.xctest */,
+@@ -2851,6 +2927,7 @@
+ 				EA0BA1871C0CC57B00719C1A /* Sources */,
+ 				EA0BA1881C0CC57B00719C1A /* Frameworks */,
+ 				EA0BA1891C0CC57B00719C1A /* Resources */,
++				F100000A0000000000000001 /* Embed Ish.framework when enabled */,
+ 				07A06D8C1D0618FC00ABEAFA /* Embed Frameworks */,
+ 				D218069F25CC27C100B98902 /* Embed PlugIns */,
+ 			);
+@@ -2883,7 +2960,7 @@
+ 				BDFA97312D7F49EF0020BBF2 /* ConfettiSwiftUI */,
+ 			);
+ 			productName = Blink;
+-			productReference = EA0BA18B1C0CC57B00719C1A /* Blink.app */;
++			productReference = EA0BA18B1C0CC57B00719C1A /* HermesLink.app */;
+ 			productType = "com.apple.product-type.application";
+ 		};
+ /* End PBXNativeTarget section */
+@@ -3229,6 +3306,8 @@
+ 				07E3AED11D9191B4007BC086 /* blink.png in Resources */,
+ 				D21A3FE721943BE200269705 /* dark-app-ipad-76pt@2x.png in Resources */,
+ 				BDE84C3C2BAE335100457391 /* vim in Resources */,
++				F10000050000000000000001 /* hermesrt.zip in Resources */,
++				DCA2F5F653C2C3F9662E8822 /* ish-rootfs.tar.gz in Resources */,
+ 				C9B2E02F1D6B612400B89F69 /* Settings.storyboard in Resources */,
+ 				D2496F3F20038B3300E75FE9 /* hterm_all.min.js in Resources */,
+ 				D21A3FDB21943BE200269705 /* dark-settings-ipad-29pt@2x.png in Resources */,
+@@ -3570,6 +3649,12 @@
+ 				D2C24418238E44AB0082C69C /* KBConfigView.swift in Sources */,
+ 				D2BF5F7F265BA0A80070F839 /* UserDefaults.swift in Sources */,
+ 				D2F330CA20A6CB840074ADD7 /* help.m in Sources */,
++				F10000010000000000000001 /* hermes.m in Sources */,
++				F1A1CE560000000000000001 /* ish.m in Sources */,
++				F1A1CE570000000000000001 /* ishfs.m in Sources */,
++				3EC2EABECFB079180991531B /* ish_kernel_bridge_stub.m in Sources */,
++				F1A1CE580000000000000001 /* ISHRootfsProfiles.m in Sources */,
++				F1A1CE590000000000000001 /* ISHRootfsSettingsView.swift in Sources */,
+ 				D28C357626A56DDF00202C4D /* FileProviderDomain.swift in Sources */,
+ 				D241CBD223040734003D64A5 /* KBDevice.swift in Sources */,
+ 				D23B4C6E2A6FCAC2002E689B /* SearchTextInput.swift in Sources */,
+@@ -4148,7 +4233,7 @@
+ 				SWIFT_OPTIMIZATION_LEVEL = "-Onone";
+ 				SWIFT_VERSION = 5.0;
+ 				TARGETED_DEVICE_FAMILY = "1,2";
+-				TEST_HOST = "$(BUILT_PRODUCTS_DIR)/Blink.app/Blink";
++				TEST_HOST = "$(BUILT_PRODUCTS_DIR)/HermesLink.app/HermesLink";
+ 			};
+ 			name = Debug;
+ 		};
+@@ -4180,7 +4265,7 @@
+ 				PRODUCT_NAME = "$(TARGET_NAME)";
+ 				SWIFT_VERSION = 5.0;
+ 				TARGETED_DEVICE_FAMILY = "1,2";
+-				TEST_HOST = "$(BUILT_PRODUCTS_DIR)/Blink.app/Blink";
++				TEST_HOST = "$(BUILT_PRODUCTS_DIR)/HermesLink.app/HermesLink";
+ 			};
+ 			name = Release;
+ 		};
+@@ -4421,7 +4506,7 @@
+ 				SWIFT_OPTIMIZATION_LEVEL = "-Onone";
+ 				SWIFT_VERSION = 5.0;
+ 				TARGETED_DEVICE_FAMILY = "1,2";
+-				TEST_HOST = "$(BUILT_PRODUCTS_DIR)/Blink.app/$(BUNDLE_EXECUTABLE_FOLDER_PATH)/Blink";
++				TEST_HOST = "$(BUILT_PRODUCTS_DIR)/HermesLink.app/$(BUNDLE_EXECUTABLE_FOLDER_PATH)/HermesLink";
+ 			};
+ 			name = Debug;
+ 		};
+@@ -4455,7 +4540,7 @@
+ 				SWIFT_EMIT_LOC_STRINGS = NO;
+ 				SWIFT_VERSION = 5.0;
+ 				TARGETED_DEVICE_FAMILY = "1,2";
+-				TEST_HOST = "$(BUILT_PRODUCTS_DIR)/Blink.app/$(BUNDLE_EXECUTABLE_FOLDER_PATH)/Blink";
++				TEST_HOST = "$(BUILT_PRODUCTS_DIR)/HermesLink.app/$(BUNDLE_EXECUTABLE_FOLDER_PATH)/HermesLink";
+ 			};
+ 			name = Release;
+ 		};
+@@ -5080,7 +5165,7 @@
+ 				SWIFT_OPTIMIZATION_LEVEL = "-Onone";
+ 				SWIFT_VERSION = 5.0;
+ 				TARGETED_DEVICE_FAMILY = "1,2";
+-				TEST_HOST = "$(BUILT_PRODUCTS_DIR)/Blink.app/$(BUNDLE_EXECUTABLE_FOLDER_PATH)/Blink";
++				TEST_HOST = "$(BUILT_PRODUCTS_DIR)/HermesLink.app/$(BUNDLE_EXECUTABLE_FOLDER_PATH)/HermesLink";
+ 			};
+ 			name = Debug;
+ 		};
+@@ -5111,7 +5196,7 @@
+ 				SWIFT_EMIT_LOC_STRINGS = NO;
+ 				SWIFT_VERSION = 5.0;
+ 				TARGETED_DEVICE_FAMILY = "1,2";
+-				TEST_HOST = "$(BUILT_PRODUCTS_DIR)/Blink.app/$(BUNDLE_EXECUTABLE_FOLDER_PATH)/Blink";
++				TEST_HOST = "$(BUILT_PRODUCTS_DIR)/HermesLink.app/$(BUNDLE_EXECUTABLE_FOLDER_PATH)/HermesLink";
+ 			};
+ 			name = Release;
+ 		};
+@@ -5148,9 +5233,10 @@
+ 				PRODUCT_BUNDLE_IDENTIFIER = "$(BUNDLE_ID).BlinkTests";
+ 				PRODUCT_NAME = "$(TARGET_NAME)";
+ 				SWIFT_ACTIVE_COMPILATION_CONDITIONS = DEBUG;
++				SWIFT_OBJC_BRIDGING_HEADER = "Blink/Blink-bridge.h";
+ 				SWIFT_OPTIMIZATION_LEVEL = "-Onone";
+ 				SWIFT_VERSION = 5.0;
+-				TEST_HOST = "$(BUILT_PRODUCTS_DIR)/Blink.app/Blink";
++				TEST_HOST = "$(BUILT_PRODUCTS_DIR)/HermesLink.app/HermesLink";
+ 			};
+ 			name = Debug;
+ 		};
+@@ -5181,8 +5267,9 @@
+ 				MTL_FAST_MATH = YES;
+ 				PRODUCT_BUNDLE_IDENTIFIER = "$(BUNDLE_ID).BlinkTests";
+ 				PRODUCT_NAME = "$(TARGET_NAME)";
++				SWIFT_OBJC_BRIDGING_HEADER = "Blink/Blink-bridge.h";
+ 				SWIFT_VERSION = 5.0;
+-				TEST_HOST = "$(BUILT_PRODUCTS_DIR)/Blink.app/Blink";
++				TEST_HOST = "$(BUILT_PRODUCTS_DIR)/HermesLink.app/HermesLink";
+ 			};
+ 			name = Release;
+ 		};
+@@ -5304,7 +5391,7 @@
+ 				CODE_SIGN_IDENTITY = "iPhone Developer";
+ 				"CODE_SIGN_IDENTITY[sdk=iphoneos*]" = "iPhone Developer";
+ 				CODE_SIGN_STYLE = Automatic;
+-				CURRENT_PROJECT_VERSION = 1097;
++				CURRENT_PROJECT_VERSION = 1098;
+ 				DEAD_CODE_STRIPPING = NO;
+ 				DEBUG_INFORMATION_FORMAT = "dwarf-with-dsym";
+ 				DEFINES_MODULE = YES;
+@@ -5316,7 +5403,7 @@
+ 					"$(inherited)",
+ 				);
+ 				INFOPLIST_FILE = Blink/Info.plist;
+-				INFOPLIST_KEY_CFBundleDisplayName = "Blink Shell";
++				INFOPLIST_KEY_CFBundleDisplayName = HermesLink;
+ 				INFOPLIST_KEY_LSApplicationCategoryType = "public.app-category.developer-tools";
+ 				IPHONEOS_DEPLOYMENT_TARGET = 17.6;
+ 				LD_RUNPATH_SEARCH_PATHS = (
+@@ -5327,6 +5414,10 @@
+ 					"$(inherited)",
+ 					"$(PROJECT_DIR)/Frameworks",
+ 				);
++				FRAMEWORK_SEARCH_PATHS = (
++					"$(inherited)",
++					"$(PROJECT_DIR)/Frameworks",
++				);
+ 				MARKETING_VERSION = 18.7.0;
+ 				NEW_SETTING = "";
+ 				OTHER_CFLAGS = "$(BLINK_OTHER_CFLAGS)";
+@@ -5336,6 +5427,9 @@
+ 				);
+ 				PRODUCT_BUNDLE_IDENTIFIER = "$(BUNDLE_ID)";
+ 				PRODUCT_NAME = Blink;
++				EXECUTABLE_NAME = HermesLink;
++				PRODUCT_MODULE_NAME = Blink;
++				WRAPPER_NAME = HermesLink.app;
+ 				PROVISIONING_PROFILE_SPECIFIER = "";
+ 				RUN_CLANG_STATIC_ANALYZER = YES;
+ 				STRIP_STYLE = "non-global";
+@@ -5357,14 +5451,14 @@
+ 				CODE_SIGN_IDENTITY = "iPhone Developer";
+ 				"CODE_SIGN_IDENTITY[sdk=iphoneos*]" = "iPhone Developer";
+ 				CODE_SIGN_STYLE = Automatic;
+-				CURRENT_PROJECT_VERSION = 1097;
++				CURRENT_PROJECT_VERSION = 1098;
+ 				DEAD_CODE_STRIPPING = NO;
+ 				DEFINES_MODULE = YES;
+ 				DEVELOPMENT_TEAM = A2H2CL32AG;
+ 				ENABLE_BITCODE = NO;
+ 				GCC_PREPROCESSOR_DEFINITIONS = "";
+ 				INFOPLIST_FILE = Blink/Info.plist;
+-				INFOPLIST_KEY_CFBundleDisplayName = "Blink Shell";
++				INFOPLIST_KEY_CFBundleDisplayName = HermesLink;
+ 				INFOPLIST_KEY_LSApplicationCategoryType = "public.app-category.developer-tools";
+ 				IPHONEOS_DEPLOYMENT_TARGET = 17.6;
+ 				LD_RUNPATH_SEARCH_PATHS = (
+@@ -5375,6 +5469,10 @@
+ 					"$(inherited)",
+ 					"$(PROJECT_DIR)/Frameworks",
+ 				);
++				FRAMEWORK_SEARCH_PATHS = (
++					"$(inherited)",
++					"$(PROJECT_DIR)/Frameworks",
++				);
+ 				MARKETING_VERSION = 18.7.0;
+ 				NEW_SETTING = "";
+ 				OTHER_CFLAGS = "$(BLINK_OTHER_CFLAGS)";
+@@ -5384,6 +5482,9 @@
+ 				);
+ 				PRODUCT_BUNDLE_IDENTIFIER = "$(BUNDLE_ID)";
+ 				PRODUCT_NAME = Blink;
++				EXECUTABLE_NAME = HermesLink;
++				PRODUCT_MODULE_NAME = Blink;
++				WRAPPER_NAME = HermesLink.app;
+ 				PROVISIONING_PROFILE_SPECIFIER = "";
+ 				STRIP_STYLE = "non-global";
+ 				STRIP_SWIFT_SYMBOLS = NO;

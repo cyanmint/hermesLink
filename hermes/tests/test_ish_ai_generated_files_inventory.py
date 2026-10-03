@@ -17,7 +17,10 @@ ROOT = Path(__file__).resolve().parents[2]
 INVENTORY = ROOT / "AI-GENERATED-FILES.md"
 
 NEW_FILES_FROM_THIS_CHANGE = [
-    "Blink/Commands/ish.m",
+    "hermes/blink/overlay/Blink/Commands/hermes.m",
+    "hermes/blink/overlay/Blink/Commands/ish.m",
+    "hermes/blink/overlay/Blink/Commands/ishfs.m",
+    "hermes/blink/overlay/Settings/ISHRootfsSettingsView.swift",
     "ISHBridge/ish_exit_protocol.c",
     "ISHBridge/ish_exit_protocol.h",
     "ISHBridge/ish_kernel_bridge.h",
@@ -33,9 +36,11 @@ NEW_FILES_FROM_THIS_CHANGE = [
     "hermes/build/patch-ish-pty.py",
     "hermes/build/patch-ish-documents-fs.py",
     "hermes/build/package-ish-framework.sh",
+    "hermes/build/prepare-blink-source.sh",
     "hermes/overlay/hermes/tools/ish_tool.py",
     "hermes/overlay/patches/patch-ish-tool.py",
     "hermes/tests/ish_bridge/ish_bridge_test_main.c",
+    "hermes/tests/test_blink_source_patch.py",
     "hermes/tests/test_ish_bridge_c.py",
     "hermes/tests/test_ish_ci_workflow.py",
     "hermes/tests/test_ish_ai_generated_files_inventory.py",

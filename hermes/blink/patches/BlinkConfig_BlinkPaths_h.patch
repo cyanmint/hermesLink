@@ -1,0 +1,12 @@
+diff --git a/BlinkConfig/BlinkPaths.h b/BlinkConfig/BlinkPaths.h
+index 73b0c55369468514c880aee22a079e45ed46a949..a2e2262855311694e2c1b6523ee75d8d83f6c451 100644
+--- a/BlinkConfig/BlinkPaths.h
++++ b/BlinkConfig/BlinkPaths.h
+@@ -38,6 +38,7 @@
+ 
+ + (NSString *) groupContainerPath;
+ + (NSString *) documentsPath;
+++ (NSString *) hermesHomePath;
+ + (NSString *) iCloudDriveDocuments;
+ 
+ // ~/.blink
