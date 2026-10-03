@@ -36,7 +36,8 @@ int ish_import_rootfs_archive(const char *archive_path, const char *dest_root) {
   return ISH_RUN_ERR_NOT_AVAILABLE;
 }
 
-int ish_run_command(const char *command, int input_fd, int output_fd, int cols, int rows, int *exit_code_out) {
+int ish_run_command(const char *command, int input_fd, int output_fd, int cols, int rows,
+                    int *exit_code_out, int *session_error_out) {
   (void) command;
   (void) input_fd;
   (void) output_fd;
@@ -44,6 +45,9 @@ int ish_run_command(const char *command, int input_fd, int output_fd, int cols, 
   (void) rows;
   if (exit_code_out != NULL) {
     *exit_code_out = 0;
+  }
+  if (session_error_out != NULL) {
+    *session_error_out = 0;
   }
   return ISH_RUN_ERR_NOT_AVAILABLE;
 }

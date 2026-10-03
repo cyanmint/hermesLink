@@ -193,6 +193,8 @@ class IshNativeXcconfigTests(unittest.TestCase):
         self.assertIn("g_boot_started = 0", bridge)
         self.assertIn("guest session startup failed (upstream status %d", bridge)
         self.assertIn('stringByAppendingPathComponent:@"Alpine"', bridge)
+        self.assertIn("int *session_error_out", bridge)
+        self.assertIn("upstream error %d; see diagnostics log", command)
 
     def test_kernel_readiness_waits_for_rootfs_init_instead_of_probing_workqueue(self) -> None:
         source = (ISH_DIR / "ish_kernel_bridge.m").read_text(encoding="utf-8")

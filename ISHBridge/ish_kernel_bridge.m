@@ -609,11 +609,13 @@ static void *ish_input_forward_main(void *arg) {
 
 #pragma mark - Public entry point
 
-int ish_run_command(const char *command, int input_fd, int output_fd, int cols, int rows, int *exit_code_out) {
-  if (command == NULL || exit_code_out == NULL) {
+int ish_run_command(const char *command, int input_fd, int output_fd, int cols, int rows,
+                    int *exit_code_out, int *session_error_out) {
+  if (command == NULL || exit_code_out == NULL || session_error_out == NULL) {
     return ISH_RUN_ERR_INVALID_ARGUMENT;
   }
   *exit_code_out = 0;
+  *session_error_out = 0;
 
   int boot_status = ish_kernel_ensure_booted();
   if (boot_status != ISH_RUN_OK) {
@@ -664,6 +666,7 @@ int ish_run_command(const char *command, int input_fd, int output_fd, int cols, 
   free(script);
 
   if (start_retval < 0 || start_terminal == NULL) {
+    *session_error_out = start_retval;
     char message[160];
     snprintf(message, sizeof(message),
              "ish: guest session startup failed (upstream status %d, terminal %s)",

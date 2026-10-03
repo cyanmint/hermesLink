@@ -66,8 +66,11 @@ int ish_kernel_has_booted(void);
  * (plain file descriptors, e.g. from ios_system's thread_stdin/thread_stdout
  * via fileno(3); -1 for `input_fd` leaves guest stdin at EOF). `cols`/`rows`
  * set the initial pty window size (0 to skip). On ISH_RUN_OK,
- * `*exit_code_out` holds the guest command's real exit status (0-255). */
-int ish_run_command(const char *command, int input_fd, int output_fd, int cols, int rows, int *exit_code_out);
+ * `*exit_code_out` holds the guest command's real exit status (0-255).
+ * On ISH_RUN_ERR_SESSION_START_FAILED, `*session_error_out` holds the
+ * negative upstream error returned while creating the session. */
+int ish_run_command(const char *command, int input_fd, int output_fd, int cols, int rows,
+                    int *exit_code_out, int *session_error_out);
 
 #ifdef __cplusplus
 }

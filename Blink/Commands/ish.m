@@ -63,7 +63,9 @@ int ish_main(int argc, char *argv[]) {
   }
 
   int exit_code = 0;
-  int status = ish_run_command(command.UTF8String, input_fd, output_fd, cols, rows, &exit_code);
+  int session_error = 0;
+  int status = ish_run_command(command.UTF8String, input_fd, output_fd, cols, rows,
+                               &exit_code, &session_error);
   switch (status) {
     case ISH_RUN_OK:
       return exit_code;
@@ -87,7 +89,8 @@ int ish_main(int argc, char *argv[]) {
       fprintf(thread_stderr, "ish: the guest Linux kernel panicked during startup (see diagnostics log)\n");
       return 70;
     case ISH_RUN_ERR_SESSION_START_FAILED:
-      fprintf(thread_stderr, "ish: failed to start a guest session\n");
+      fprintf(thread_stderr, "ish: failed to start a guest session (upstream error %d; see diagnostics log)\n",
+              session_error);
       return 71;
     case ISH_RUN_ERR_NOT_AVAILABLE:
       fprintf(thread_stderr,
