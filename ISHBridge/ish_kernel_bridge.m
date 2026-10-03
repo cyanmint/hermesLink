@@ -19,6 +19,7 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
+#include <sys/stat.h>
 #include <time.h>
 #include <unistd.h>
 
@@ -324,19 +325,46 @@ static NSString *ISHRootfsStorageDirectory(void) {
   NSString *root = g_configured_root[0] != '\0'
       ? [NSString stringWithUTF8String:g_configured_root]
       : [NSSearchPathForDirectoriesInDomains(NSDocumentDirectory, NSUserDomainMask, YES).firstObject
-          stringByAppendingPathComponent:@"iSH"];
+          stringByAppendingPathComponent:@"iSH/Profiles/Alpine"];
   pthread_mutex_unlock(&g_configuration_lock);
   if (root == nil) {
-    root = [NSHomeDirectory() stringByAppendingPathComponent:@"Documents/iSH"];
+    root = [NSHomeDirectory() stringByAppendingPathComponent:@"Documents/iSH/Profiles/Alpine"];
   }
   [[NSFileManager defaultManager] createDirectoryAtPath:root withIntermediateDirectories:YES attributes:nil error:nil];
   return root;
 }
 
 static BOOL ISHRootfsIsProvisioned(NSString *root) {
-  NSFileManager *fm = [NSFileManager defaultManager];
-  return [fm fileExistsAtPath:[root stringByAppendingPathComponent:@"bin/busybox"]] &&
-         [fm fileExistsAtPath:[root stringByAppendingPathComponent:@"etc/alpine-release"]];
+  struct stat root_status;
+  struct stat busybox_status;
+  struct stat release_status;
+  NSString *busybox = [root stringByAppendingPathComponent:@"bin/busybox"];
+  NSString *release = [root stringByAppendingPathComponent:@"etc/alpine-release"];
+  return lstat(root.fileSystemRepresentation, &root_status) == 0 &&
+         S_ISDIR(root_status.st_mode) &&
+         lstat(busybox.fileSystemRepresentation, &busybox_status) == 0 &&
+         S_ISREG(busybox_status.st_mode) &&
+         lstat(release.fileSystemRepresentation, &release_status) == 0 &&
+         S_ISREG(release_status.st_mode);
+}
+
+int ish_import_rootfs_archive(const char *archive_path, const char *dest_root) {
+  if (archive_path == NULL || archive_path[0] == '\0' || dest_root == NULL || dest_root[0] == '\0') {
+    return ISH_RUN_ERR_INVALID_ARGUMENT;
+  }
+  NSString *destination = [NSString stringWithUTF8String:dest_root];
+  NSError *error = nil;
+  if (![[NSFileManager defaultManager] createDirectoryAtPath:destination
+                                 withIntermediateDirectories:NO
+                                                  attributes:nil
+                                                       error:&error]) {
+    return ISH_RUN_ERR_ROOTFS_EXTRACT_FAILED;
+  }
+  int status = ish_rootfs_extract(archive_path, dest_root);
+  if (status != ISH_ROOTFS_OK) {
+    return ISH_RUN_ERR_ROOTFS_EXTRACT_FAILED;
+  }
+  return ISHRootfsIsProvisioned(destination) ? ISH_RUN_OK : ISH_RUN_ERR_ROOTFS_EXTRACT_FAILED;
 }
 
 /* Extracts the bundled, pinned Alpine rootfs archive (packaged into the app
@@ -421,6 +449,13 @@ static void ish_boot_once_body(void) {
 int ish_kernel_ensure_booted(void) {
   pthread_once(&g_boot_once, ish_boot_once_body);
   return atomic_load(&g_boot_result);
+}
+
+int ish_kernel_has_booted(void) {
+  pthread_mutex_lock(&g_configuration_lock);
+  int started = g_boot_started;
+  pthread_mutex_unlock(&g_configuration_lock);
+  return started;
 }
 
 /* Workqueue/IRQ submission is unsafe until kernel initialization reaches

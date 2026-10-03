@@ -28,6 +28,9 @@ typedef enum {
   ISH_RUN_ERR_ROOTFS_EXTRACT_FAILED = -2,
   ISH_RUN_ERR_BOOT_TIMEOUT = -3,
   ISH_RUN_ERR_SESSION_START_FAILED = -4,
+  /* The guest session ended without emitting the exit-status sentinel,
+   * usually because the command replaced the shell via exec(2). */
+  ISH_RUN_ERR_NO_EXIT_SENTINEL = -5,
   /* This build was compiled without the native guest kernel bridge linked
    * in (ISH_NATIVE_AVAILABLE=NO in hermes/build/ISHNative.xcconfig — the
    * default, since the prebuilt static libraries
@@ -35,20 +38,18 @@ typedef enum {
    * checkout). See ISHBridge/ish_kernel_bridge_stub.m. */
   ISH_RUN_ERR_NOT_AVAILABLE = -6,
   ISH_RUN_ERR_KERNEL_PANIC = -7,
-  /* The guest session ended (its pty hung up) without ever emitting the
-   * exit-status sentinel. The one expected cause is the command's last
-   * action replacing the shell via exec(2), which — like any exec — leaves
-   * nothing to run the trailer that reports a status; see
-   * ISHBridge/ish_exit_protocol.h. */
-  ISH_RUN_ERR_NO_EXIT_SENTINEL = -5,
 } ish_run_status;
 
 typedef void (*ish_log_handler)(const char *message);
 
 /* Configures the persistent guest-root directory and optional diagnostic
- * callback. HermesLink supplies Files-visible Documents/iSH. Call before the
- * first boot; repeated calls with the same values are harmless. */
+ * callback. HermesLink supplies a profile below Files-visible Documents/iSH.
+ * Call before the first boot; repeated calls with the same values are harmless. */
 int ish_configure(const char *root_path, ish_log_handler log_handler);
+
+/* Extracts a gzip-compressed ustar rootfs archive into a new destination
+ * directory and verifies its Alpine rootfs markers. */
+int ish_import_rootfs_archive(const char *archive_path, const char *dest_root);
 
 /* Boots the shared guest kernel if it has not been booted yet in this app
  * process (idempotent and thread-safe; cheap to call before every `ish`
@@ -58,6 +59,7 @@ int ish_configure(const char *root_path, ish_log_handler log_handler);
  * one-time setup — because the boot itself runs on its own permanent
  * background thread. */
 int ish_kernel_ensure_booted(void);
+int ish_kernel_has_booted(void);
 
 /* Runs `command` to completion as `/bin/sh -c <command>` inside the
  * persistent guest, bridging the guest pty to `input_fd`/`output_fd`

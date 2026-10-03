@@ -471,6 +471,9 @@
 		F10000080000000000000001 /* HermesRuntime.framework in Embed Frameworks */ = {isa = PBXBuildFile; fileRef = F10000090000000000000001 /* HermesRuntime.framework */; settings = {ATTRIBUTES = (CodeSignOnCopy, RemoveHeadersOnCopy, ); }; };
 		F10000050000000000000001 /* hermesrt.zip in Resources */ = {isa = PBXBuildFile; fileRef = F10000060000000000000001 /* hermesrt.zip */; };
 		F1A1CE560000000000000001 /* ish.m in Sources */ = {isa = PBXBuildFile; fileRef = F1A1CE550000000000000001 /* ish.m */; };
+		F1A1CE570000000000000001 /* ishfs.m in Sources */ = {isa = PBXBuildFile; fileRef = F1A1CE5A0000000000000001 /* ishfs.m */; };
+		F1A1CE580000000000000001 /* ISHRootfsProfiles.m in Sources */ = {isa = PBXBuildFile; fileRef = F1A1CE5B0000000000000001 /* ISHRootfsProfiles.m */; };
+		F1A1CE590000000000000001 /* ISHRootfsSettingsView.swift in Sources */ = {isa = PBXBuildFile; fileRef = F1A1CE5D0000000000000001 /* ISHRootfsSettingsView.swift */; };
 		3EC2EABECFB079180991531B /* ish_kernel_bridge_stub.m in Sources */ = {isa = PBXBuildFile; fileRef = 1E3F68EDDDED7F8AAF6CD86C /* ish_kernel_bridge_stub.m */; };
 		DCA2F5F653C2C3F9662E8822 /* ish-rootfs.tar.gz in Resources */ = {isa = PBXBuildFile; fileRef = 314E2F04FE0F5B60CB0D4E61 /* ish-rootfs.tar.gz */; };
 		D2F330CA20A6CB840074ADD7 /* help.m in Sources */ = {isa = PBXBuildFile; fileRef = D2F330C920A6CB840074ADD7 /* help.m */; };
@@ -1250,6 +1253,10 @@
 		F10000090000000000000001 /* HermesRuntime.framework */ = {isa = PBXFileReference; lastKnownFileType = wrapper.framework; path = HermesRuntime.framework; sourceTree = "<group>"; };
 		F10000060000000000000001 /* hermesrt.zip */ = {isa = PBXFileReference; lastKnownFileType = archive.zip; path = hermesrt.zip; sourceTree = "<group>"; };
 		F1A1CE550000000000000001 /* ish.m */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.objc; path = ish.m; sourceTree = "<group>"; };
+		F1A1CE5A0000000000000001 /* ishfs.m */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.objc; path = ishfs.m; sourceTree = "<group>"; };
+		F1A1CE5B0000000000000001 /* ISHRootfsProfiles.m */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.objc; path = ISHRootfsProfiles.m; sourceTree = "<group>"; };
+		F1A1CE5C0000000000000001 /* ISHRootfsProfiles.h */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.h; path = ISHRootfsProfiles.h; sourceTree = "<group>"; };
+		F1A1CE5D0000000000000001 /* ISHRootfsSettingsView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ISHRootfsSettingsView.swift; sourceTree = "<group>"; };
 		314E2F04FE0F5B60CB0D4E61 /* ish-rootfs.tar.gz */ = {isa = PBXFileReference; lastKnownFileType = archive.gzip; path = "ish-rootfs.tar.gz"; sourceTree = "<group>"; };
 		165BD920B521DB9E8903D82D /* ish_path_safety.h */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.h; path = ish_path_safety.h; sourceTree = "<group>"; };
 		7D974064786F253981F25015 /* ish_path_safety.c */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.c; path = ish_path_safety.c; sourceTree = "<group>"; };
@@ -2046,6 +2053,7 @@
 			isa = PBXGroup;
 			children = (
 				D2AD8E8327A2C80C00DED28D /* SettingsView.swift */,
+				F1A1CE5D0000000000000001 /* ISHRootfsSettingsView.swift */,
 				C94E9B611D6BA21C00DA4DD6 /* DismissSegue.h */,
 				C94E9B621D6BA21C00DA4DD6 /* DismissSegue.m */,
 				C9B2E0041D6B612300B89F69 /* Settings.storyboard */,
@@ -2431,6 +2439,7 @@
 				D2F330CB20A6D98C0074ADD7 /* config.m */,
 				F10000020000000000000001 /* hermes.m */,
 				F1A1CE550000000000000001 /* ish.m */,
+				F1A1CE5A0000000000000001 /* ishfs.m */,
 				D264D2B528F84724002B1B14 /* whatsnew.m */,
 				D2F330C920A6CB840074ADD7 /* help.m */,
 				D263A7672AA9AFE7001C6CFC /* device_info.m */,
@@ -2507,6 +2516,8 @@
 				2E4F976EA6332326BB0C5C05 /* ish_kernel_bridge.h */,
 				F8AA606AEC0B09E8279F79DF /* ish_kernel_bridge.m */,
 				1E3F68EDDDED7F8AAF6CD86C /* ish_kernel_bridge_stub.m */,
+				F1A1CE5B0000000000000001 /* ISHRootfsProfiles.m */,
+				F1A1CE5C0000000000000001 /* ISHRootfsProfiles.h */,
 			);
 			path = ISHBridge;
 			sourceTree = "<group>";
@@ -3640,7 +3651,10 @@
 				D2F330CA20A6CB840074ADD7 /* help.m in Sources */,
 				F10000010000000000000001 /* hermes.m in Sources */,
 				F1A1CE560000000000000001 /* ish.m in Sources */,
+				F1A1CE570000000000000001 /* ishfs.m in Sources */,
 				3EC2EABECFB079180991531B /* ish_kernel_bridge_stub.m in Sources */,
+				F1A1CE580000000000000001 /* ISHRootfsProfiles.m in Sources */,
+				F1A1CE590000000000000001 /* ISHRootfsSettingsView.swift in Sources */,
 				D28C357626A56DDF00202C4D /* FileProviderDomain.swift in Sources */,
 				D241CBD223040734003D64A5 /* KBDevice.swift in Sources */,
 				D23B4C6E2A6FCAC2002E689B /* SearchTextInput.swift in Sources */,

@@ -94,7 +94,10 @@ registered alongside `terminal` in the standard Hermes bundles. The design:
   upstream's own (UIKit/WebKit-backed) `Terminal.m`. Each `ish <command>`
   invocation reuses the already-booted guest via upstream's
   `linux_start_session()`, matching how upstream's own
-  `TerminalViewController.m` starts an interactive session.
+  `TerminalViewController.m` starts an interactive session. Sessions wait for
+  `LinuxRoot.c`'s rootfs initcall signal before submitting work: probing the
+  kernel workqueue immediately after creating its thread can hit the upstream
+  hard-trap path before its IRQ pipe is initialized.
 - **Exit status** — upstream's `linux_start_session()` only reports that a
   guest process *started*, not how it exited, and upstream's own GUI never
   needed that (interactive sessions end when the user closes them, or the
@@ -109,16 +112,24 @@ registered alongside `terminal` in the standard Hermes bundles. The design:
 - **Guest root / fakefs** — `ISHBridge/ish_rootfs.{h,c}` is an original,
   from-scratch gzip+ustar extractor (zlib + a minimal ustar parser; no
   upstream code reused) that unpacks the pinned, build-time-bundled Alpine
-  rootfs archive into the Files-visible `Documents/iSH/` directory on first
-  use. It leaves directories writable while extracting their contents, then
-  restores the archive's directory modes. A complete rootfs placed there
-  manually is reused as-is,
+  rootfs archive into `Documents/iSH/Profiles/Alpine/` on first use. Existing
+  rootfs files at `Documents/iSH/` are migrated into that default profile.
+  Other named profiles remain Files-visible below `Documents/iSH/Profiles/`.
+  The extractor leaves directories writable while extracting their contents,
+  then restores the archive's directory modes. A complete manually imported
+  folder or gzip-compressed tar rootfs is reused as-is,
   validating every entry with `ISHBridge/ish_path_safety.{h,c}` (rejects
   absolute paths and `..` components, and refuses to traverse through an
   existing non-directory/symlink path component) before touching the
   filesystem. The persistent, on-disk result is what makes the guest
   *persistent*: packages/files a user's commands create survive app
   relaunches, even though in-memory kernel/process state does not.
+- **Rootfs profiles** — `ishfs` supports `list`, `create`, `import`, `rename`,
+  `delete`, and `use`. Creating copies the active rootfs; imports accept a
+  complete rootfs folder or `.tar.gz`/`.tgz` archive. The Settings → iSH page
+  provides the same profile operations. Selecting another profile takes
+  effect on the next kernel start; force-quit and reopen Blink if `ish` has
+  already started in the current app process.
 - **Hermes Agent tool** — `hermes/overlay/hermes/tools/ish_tool.py` registers
   an `ish` tool that reuses the exact same native `_hermesios` async-process
   bridge the `terminal` tool's iOS backend uses, just pointed at the native

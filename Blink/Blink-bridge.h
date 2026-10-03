@@ -74,6 +74,7 @@ extern void HermesLinkSetDiagnosticsEnabled(BOOL enabled);
 #import "BlinkMenu.h"
 #import "GeoManager.h"
 #import "mosh/moshiosbridge.h"
+#import "ISHRootfsProfiles.h"
 
 
 #endif /* Blink_bridge_h */

@@ -1,7 +1,7 @@
 /* HermesLink AI-generated glue code; created by cyanmint's coding agent.
  * AI-generated content has no copyright holder and is not subject to copyright. */
 #import <Foundation/Foundation.h>
-#import <BlinkConfig/BlinkPaths.h>
+#import "ISHRootfsProfiles.h"
 
 #include <stdio.h>
 #include <stdlib.h>
@@ -27,9 +27,15 @@ extern void HermesLinkAppendLog(const char *message);
  * the normal ios_system signal/EOF path on thread_stdin). */
 __attribute__((visibility("default")))
 int ish_main(int argc, char *argv[]) {
-  NSString *ishRoot = [[BlinkPaths documentsPath] stringByAppendingPathComponent:@"iSH"];
+  NSError *profileError = nil;
+  NSString *ishRoot = ISHRootfsActiveProfilePath(&profileError);
+  if (ishRoot == nil) {
+    fprintf(thread_stderr, "ish: could not prepare rootfs profiles: %s\n",
+            profileError.localizedDescription.UTF8String ?: "unknown filesystem error");
+    return 71;
+  }
   if (ish_configure(ishRoot.fileSystemRepresentation, HermesLinkAppendLog) != ISH_RUN_OK) {
-    fprintf(thread_stderr, "ish: failed to configure the native guest runtime\n");
+    fprintf(thread_stderr, "ish: rootfs profile changed after the kernel started; force-quit and relaunch the app\n");
     return 70;
   }
 

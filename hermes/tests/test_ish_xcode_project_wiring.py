@@ -40,6 +40,15 @@ class CommandRegistrationTests(unittest.TestCase):
         self.assertIn("int ish_main(int argc, char *argv[])", source)
         self.assertIn('#include "ish_kernel_bridge.h"', source)
 
+    def test_ishfs_is_registered_with_profile_lifecycle_operations(self) -> None:
+        with COMMANDS_PLIST.open("rb") as handle:
+            commands = plistlib.load(handle)
+        self.assertEqual(commands["ishfs"], ["MAIN", "ishfs_main", "", "no"])
+        source = (ROOT / "Blink" / "Commands" / "ishfs.m").read_text(encoding="utf-8")
+        for operation in ("list", "create", "import", "rename", "delete", "use"):
+            with self.subTest(operation=operation):
+                self.assertIn(f'"{operation}"', source)
+
 
 class PbxprojWiringTests(unittest.TestCase):
     @classmethod
@@ -59,6 +68,7 @@ class PbxprojWiringTests(unittest.TestCase):
             "ish_exit_protocol.h", "ish_exit_protocol.c",
             "ish_kernel_bridge.h", "ish_kernel_bridge.m",
             "ish_kernel_bridge_stub.m",
+            "ISHRootfsProfiles.h", "ISHRootfsProfiles.m",
         ]
         for name in expected_paths:
             with self.subTest(name=name):
@@ -68,9 +78,12 @@ class PbxprojWiringTests(unittest.TestCase):
         self.assertIn("path = ish.m;", self.source)
         self.assertIn('path = "ish-rootfs.tar.gz";', self.source)
 
-    def test_only_command_and_stub_are_compiled_into_the_app_target(self) -> None:
+    def test_app_sources_include_profile_tools_but_keep_kernel_glue_in_the_framework(self) -> None:
         self.assertIn("ish.m in Sources */,", self.source)
+        self.assertIn("ishfs.m in Sources */,", self.source)
         self.assertIn("ish_kernel_bridge_stub.m in Sources */,", self.source)
+        self.assertIn("ISHRootfsProfiles.m in Sources */,", self.source)
+        self.assertIn("ISHRootfsSettingsView.swift in Sources */,", self.source)
         for name in ("ish_path_safety.c", "ish_rootfs.c", "ish_exit_protocol.c", "ish_kernel_bridge.m"):
             with self.subTest(name=name):
                 self.assertNotIn(f"{name} in Sources */,", self.source)
@@ -100,6 +113,7 @@ class PbxprojWiringTests(unittest.TestCase):
             "ish_rootfs.h", "ish_rootfs.c",
             "ish_exit_protocol.h", "ish_exit_protocol.c",
             "ish_kernel_bridge.h", "ish_kernel_bridge.m", "ish_kernel_bridge_stub.m",
+            "ISHRootfsProfiles.h", "ISHRootfsProfiles.m",
         ):
             with self.subTest(name=name):
                 self.assertIn(name, group_body)
@@ -156,16 +170,49 @@ class IshNativeXcconfigTests(unittest.TestCase):
         command = (ROOT / "Blink" / "Commands" / "ish.m").read_text(encoding="utf-8")
         bridge = (ISH_DIR / "ish_kernel_bridge.m").read_text(encoding="utf-8")
         header = (ISH_DIR / "ish_kernel_bridge.h").read_text(encoding="utf-8")
+        profiles = (ISH_DIR / "ISHRootfsProfiles.m").read_text(encoding="utf-8")
 
-        self.assertIn(
-            '[[BlinkPaths documentsPath] stringByAppendingPathComponent:@"iSH"]',
-            command,
-        )
+        self.assertIn("ISHRootfsActiveProfilePath", command)
+        self.assertIn('stringByAppendingPathComponent:@"iSH"', profiles)
+        self.assertIn('stringByAppendingPathComponent:@"Profiles"', profiles)
+        self.assertIn('ISHDefaultProfileName = @"Alpine"', profiles)
         self.assertIn("NSDocumentDirectory", bridge)
-        self.assertIn('stringByAppendingPathComponent:@"iSH"', bridge)
+        self.assertIn('stringByAppendingPathComponent:@"iSH/Profiles/Alpine"', bridge)
         self.assertIn("Files-visible Documents/iSH", header)
         self.assertIn('@"bin/busybox"', bridge)
         self.assertIn('@"etc/alpine-release"', bridge)
+
+    def test_kernel_readiness_waits_for_rootfs_init_instead_of_probing_workqueue(self) -> None:
+        source = (ISH_DIR / "ish_kernel_bridge.m").read_text(encoding="utf-8")
+        fs_initialize = source.split("void FsInitialize(void)", 1)[1].split("\n}", 1)[0]
+        readiness = source.split("static int ish_wait_for_kernel_ready(void)", 1)[1].split("\n}", 1)[0]
+        self.assertIn("g_kernel_ready = 1", fs_initialize)
+        self.assertIn("pthread_cond_broadcast(&g_kernel_ready_cond)", fs_initialize)
+        self.assertIn("pthread_cond_timedwait", readiness)
+        self.assertNotIn("ish_sync_do_in_workqueue", readiness)
+        self.assertIn("g_kernel_panicked", readiness)
+
+    def test_profile_management_preserves_legacy_rootfs_and_blocks_unsafe_names(self) -> None:
+        source = (ISH_DIR / "ISHRootfsProfiles.m").read_text(encoding="utf-8")
+        self.assertIn('@"bin/busybox"', source)
+        self.assertIn('@"etc/alpine-release"', source)
+        self.assertIn("ISHValidProfileName", source)
+        self.assertIn("lstat(path.fileSystemRepresentation", source)
+        self.assertIn("S_ISDIR(attributes.st_mode)", source)
+        self.assertIn("moveItemAtPath:source toPath:destination", source)
+        self.assertIn("ish_kernel_has_booted()", source)
+        self.assertIn("ish_import_rootfs_archive", source)
+
+    def test_settings_exposes_rootfs_profiles(self) -> None:
+        settings = (ROOT / "Settings" / "SettingsView.swift").read_text(encoding="utf-8")
+        profile_view = (ROOT / "Settings" / "ISHRootfsSettingsView.swift").read_text(encoding="utf-8")
+        self.assertIn('Section("iSH")', settings)
+        self.assertIn("ISHRootfsSettingsView()", settings)
+        for operation in ("ISHRootfsCreateProfile", "ISHRootfsImportProfile",
+                          "ISHRootfsRenameProfile", "ISHRootfsDeleteProfile", "ISHRootfsSelectProfile"):
+            with self.subTest(operation=operation):
+                self.assertIn(operation, profile_view)
+        self.assertIn("Force-quit and reopen Blink", profile_view)
 
     def test_template_setup_includes_the_ish_native_xcconfig(self) -> None:
         source = TEMPLATE_XCCONFIG.read_text(encoding="utf-8")
@@ -178,7 +225,8 @@ class IshNativeXcconfigTests(unittest.TestCase):
     def test_stub_implements_the_same_public_entry_points_as_the_real_bridge(self) -> None:
         header = (ISH_DIR / "ish_kernel_bridge.h").read_text(encoding="utf-8")
         stub = (ISH_DIR / "ish_kernel_bridge_stub.m").read_text(encoding="utf-8")
-        for symbol in ("ish_configure", "ish_kernel_ensure_booted", "ish_run_command"):
+        for symbol in ("ish_configure", "ish_import_rootfs_archive", "ish_kernel_ensure_booted",
+                       "ish_kernel_has_booted", "ish_run_command"):
             with self.subTest(symbol=symbol):
                 self.assertIn(symbol, header)
                 self.assertIn(symbol, stub)
@@ -188,7 +236,11 @@ class IshNativeXcconfigTests(unittest.TestCase):
         project = PBXPROJ.read_text(encoding="utf-8")
         self.assertIn("Embed Ish.framework when enabled", project)
         self.assertIn('ISH_NATIVE_AVAILABLE:-NO', project)
-        self.assertIn('@rpath/Ish.framework/Ish', (ROOT / "hermes" / "build" / "package-ish-framework.sh").read_text())
+        package_script = (ROOT / "hermes" / "build" / "package-ish-framework.sh").read_text()
+        self.assertIn('@rpath/Ish.framework/Ish', package_script)
+        for symbol in ("_ish_import_rootfs_archive", "_ish_kernel_has_booted"):
+            with self.subTest(symbol=symbol):
+                self.assertIn(f"-Wl,-exported_symbol,{symbol}", package_script)
 
 
 if __name__ == "__main__":

@@ -175,6 +175,14 @@ struct SettingsView: View {
           .foregroundColor(.secondary)
       }
 
+      Section("iSH") {
+        Row {
+          Label("Rootfs Profiles", systemImage: "terminal")
+        } details: {
+          ISHRootfsSettingsView()
+        }
+      }
+
       Section("Configuration") {
         Row {
           Label("Bookmarks", systemImage: "bookmark")

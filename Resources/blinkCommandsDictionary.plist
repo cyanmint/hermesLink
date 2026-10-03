@@ -65,6 +65,13 @@
 		<string></string>
 		<string>no</string>
 	</array>
+	<key>ishfs</key>
+	<array>
+		<string>MAIN</string>
+		<string>ishfs_main</string>
+		<string></string>
+		<string>no</string>
+	</array>
 	<key>python</key>
 	<array>
 		<string>MAIN</string>

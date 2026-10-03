@@ -26,6 +26,16 @@ int ish_kernel_ensure_booted(void) {
   return ISH_RUN_ERR_NOT_AVAILABLE;
 }
 
+int ish_kernel_has_booted(void) {
+  return 0;
+}
+
+int ish_import_rootfs_archive(const char *archive_path, const char *dest_root) {
+  (void) archive_path;
+  (void) dest_root;
+  return ISH_RUN_ERR_NOT_AVAILABLE;
+}
+
 int ish_run_command(const char *command, int input_fd, int output_fd, int cols, int rows, int *exit_code_out) {
   (void) command;
   (void) input_fd;

@@ -71,7 +71,9 @@ xcrun --sdk "$SDK_NAME" clang "${COMMON_FLAGS[@]}" -dynamiclib \
   -framework Foundation -lsqlite3 -lz \
   -Wl,-install_name,@rpath/Ish.framework/Ish \
   -Wl,-exported_symbol,_ish_configure \
+  -Wl,-exported_symbol,_ish_import_rootfs_archive \
   -Wl,-exported_symbol,_ish_kernel_ensure_booted \
+  -Wl,-exported_symbol,_ish_kernel_has_booted \
   -Wl,-exported_symbol,_ish_run_command \
   -o "$FRAMEWORK/Ish"
 chmod 755 "$FRAMEWORK/Ish"
