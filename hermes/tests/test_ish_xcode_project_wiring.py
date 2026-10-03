@@ -164,7 +164,8 @@ class IshNativeXcconfigTests(unittest.TestCase):
         self.assertIn("NSDocumentDirectory", bridge)
         self.assertIn('stringByAppendingPathComponent:@"iSH"', bridge)
         self.assertIn("Files-visible Documents/iSH", header)
-        self.assertIn('@"sbin/init"', bridge)
+        self.assertIn('@"bin/busybox"', bridge)
+        self.assertIn('@"etc/alpine-release"', bridge)
 
     def test_template_setup_includes_the_ish_native_xcconfig(self) -> None:
         source = TEMPLATE_XCCONFIG.read_text(encoding="utf-8")

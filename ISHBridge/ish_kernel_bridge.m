@@ -322,8 +322,7 @@ static NSString *ISHRootfsStorageDirectory(void) {
 static BOOL ISHRootfsIsProvisioned(NSString *root) {
   NSFileManager *fm = [NSFileManager defaultManager];
   return [fm fileExistsAtPath:[root stringByAppendingPathComponent:@"bin/busybox"]] &&
-         [fm fileExistsAtPath:[root stringByAppendingPathComponent:@"etc/alpine-release"]] &&
-         [fm fileExistsAtPath:[root stringByAppendingPathComponent:@"sbin/init"]];
+         [fm fileExistsAtPath:[root stringByAppendingPathComponent:@"etc/alpine-release"]];
 }
 
 /* Extracts the bundled, pinned Alpine rootfs archive (packaged into the app
