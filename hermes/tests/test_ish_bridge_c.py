@@ -260,7 +260,7 @@ class IshBridgeCTests(unittest.TestCase):
         host_documents = "/private/var/mobile/Documents/O'Brien"
         result = self._run("documents-script", str(root), host_documents)
 
-        script = (root / "data/mount-documents.sh")
+        script = (root / "data/ish/mount-documents.sh")
         self.assertEqual(result.stdout.strip(), b"0", result.stderr)
         self.assertTrue(stat.S_IMODE(script.stat().st_mode) & 0o111)
         content = script.read_text(encoding="utf-8")
@@ -271,9 +271,14 @@ class IshBridgeCTests(unittest.TestCase):
         with sqlite3.connect(root / "meta.db") as db:
             indexed = db.execute(
                 "SELECT 1 FROM paths WHERE CAST(path AS TEXT) = ?",
-                ("/mount-documents.sh",),
+                ("/ish/mount-documents.sh",),
+            ).fetchone()
+            directory = db.execute(
+                "SELECT 1 FROM paths WHERE CAST(path AS TEXT) = ?",
+                ("/ish",),
             ).fetchone()
             self.assertIsNotNone(indexed)
+            self.assertIsNotNone(directory)
 
         updated_path = "/private/var/mobile/Documents/New Folder"
         repeat = self._run("documents-script", str(root), updated_path)

@@ -459,17 +459,32 @@ int ish_rootfs_write_documents_mount_script(const char *root,
     return ISH_ROOTFS_ERR_FORMAT;
   }
 
+  if (mkdirat(data_fd, "ish", 0755) != 0 && errno != EEXIST) {
+    close(data_fd);
+    return ISH_ROOTFS_ERR_IO;
+  }
+  int ish_fd = openat(data_fd, "ish", O_RDONLY | O_DIRECTORY | O_NOFOLLOW);
+  if (ish_fd < 0 || fchmod(ish_fd, 0755) != 0) {
+    if (ish_fd >= 0) {
+      close(ish_fd);
+    }
+    close(data_fd);
+    return ISH_ROOTFS_ERR_FORMAT;
+  }
+
   char temporary_name[96];
   int temporary_length = snprintf(temporary_name, sizeof(temporary_name),
                                   ".mount-documents-%ld.tmp", (long) getpid());
   if (temporary_length < 0 ||
       (size_t) temporary_length >= sizeof(temporary_name)) {
+    close(ish_fd);
     close(data_fd);
     return ISH_ROOTFS_ERR_DEST;
   }
-  int script_fd = openat(data_fd, temporary_name,
+  int script_fd = openat(ish_fd, temporary_name,
                          O_WRONLY | O_CREAT | O_EXCL | O_NOFOLLOW, 0700);
   if (script_fd < 0) {
+    close(ish_fd);
     close(data_fd);
     return ISH_ROOTFS_ERR_IO;
   }
@@ -482,7 +497,8 @@ int ish_rootfs_write_documents_mount_script(const char *root,
     }
     if (count <= 0) {
       close(script_fd);
-      unlinkat(data_fd, temporary_name, 0);
+      unlinkat(ish_fd, temporary_name, 0);
+      close(ish_fd);
       close(data_fd);
       return ISH_ROOTFS_ERR_IO;
     }
@@ -490,13 +506,15 @@ int ish_rootfs_write_documents_mount_script(const char *root,
   }
   if (fchmod(script_fd, 0755) != 0 || fsync(script_fd) != 0) {
     close(script_fd);
-    unlinkat(data_fd, temporary_name, 0);
+    unlinkat(ish_fd, temporary_name, 0);
+    close(ish_fd);
     close(data_fd);
     return ISH_ROOTFS_ERR_IO;
   }
   if (close(script_fd) != 0 ||
-      renameat(data_fd, temporary_name, data_fd, "mount-documents.sh") != 0) {
-    unlinkat(data_fd, temporary_name, 0);
+      renameat(ish_fd, temporary_name, ish_fd, "mount-documents.sh") != 0) {
+    unlinkat(ish_fd, temporary_name, 0);
+    close(ish_fd);
     close(data_fd);
     return ISH_ROOTFS_ERR_IO;
   }
@@ -513,7 +531,9 @@ int ish_rootfs_write_documents_mount_script(const char *root,
           "INSERT OR REPLACE INTO paths (path, inode) VALUES (?, ?)", -1,
           &insert_path, NULL) != SQLITE_OK ||
       ish_fakefs_store_path(db, insert_stat, insert_path,
-                            "mount-documents.sh", S_IFREG | 0755) != 0 ||
+                            "ish", S_IFDIR | 0755) != 0 ||
+      ish_fakefs_store_path(db, insert_stat, insert_path,
+                            "ish/mount-documents.sh", S_IFREG | 0755) != 0 ||
       ish_fakefs_exec(db, "COMMIT;") != 0) {
     if (db != NULL) {
       ish_fakefs_exec(db, "ROLLBACK;");
@@ -524,6 +544,7 @@ int ish_rootfs_write_documents_mount_script(const char *root,
   sqlite3_finalize(insert_stat);
   sqlite3_finalize(insert_path);
   sqlite3_close(db);
+  close(ish_fd);
   close(data_fd);
   return result;
 }

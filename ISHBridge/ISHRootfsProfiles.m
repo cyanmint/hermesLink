@@ -477,7 +477,7 @@ BOOL ISHRootfsImportProfile(NSString *name, NSURL *sourceURL, NSError **error) {
     if (status != ISH_ROOTFS_OK) {
       success = NO;
       underlying = ISHProfilesError(status,
-          [NSString stringWithFormat:@"Could not install /mount-documents.sh (status %d).", status]);
+          [NSString stringWithFormat:@"Could not install /ish/mount-documents.sh (status %d).", status]);
     }
   }
   if (success) {

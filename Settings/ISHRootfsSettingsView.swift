@@ -78,11 +78,11 @@ struct ISHRootfsSettingsView: View {
       }
 
       Section {
-        Text("Run /mount-documents.sh inside iSH to mount Files-visible Documents when needed.")
+        Text("Run /ish/mount-documents.sh inside iSH to mount Files-visible Documents when needed.")
       } header: {
         Text("Documents mount")
       } footer: {
-        Text("Documents is no longer mounted automatically. The helper script is created in each prepared rootfs.")
+        Text("Documents is no longer mounted automatically. The /ish directory and helper script are created in each prepared rootfs.")
       }
 
       if restartRequired {

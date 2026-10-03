@@ -182,7 +182,7 @@ class IshNativeXcconfigTests(unittest.TestCase):
 
     def test_documents_mount_is_manual_and_script_is_written_for_profiles(self) -> None:
         view = (ROOT / "Settings" / "ISHRootfsSettingsView.swift").read_text(encoding="utf-8")
-        self.assertIn("Run /mount-documents.sh inside iSH", view)
+        self.assertIn("Run /ish/mount-documents.sh inside iSH", view)
         self.assertNotIn("Automatically mount Documents", view)
         rootfs = (ISH_DIR / "ish_rootfs.c").read_text(encoding="utf-8")
         self.assertIn("ish_rootfs_write_documents_mount_script", rootfs)

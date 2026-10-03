@@ -142,7 +142,8 @@ registered alongside `terminal` in the standard Hermes bundles. The design:
   effect on the next kernel start; force-quit and reopen Blink if `ish` has
   already started in the current app process.
 - **Documents mount** — Documents is not mounted automatically. Each prepared
-  rootfs contains `/mount-documents.sh`; run it inside iSH when you want the
+  rootfs contains `/ish/mount-documents.sh` (under a generated `/ish`
+  directory); run it inside iSH when you want the
   Files-visible Documents directory mounted at `/mnt/documents`. The script
   mounts the host directory directly with `documentsfs`, without fakefs
   `meta.db`. Regular files appear as `0666 & ~0022` and directories as
