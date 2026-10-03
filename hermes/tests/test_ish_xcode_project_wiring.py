@@ -189,6 +189,15 @@ class IshNativeXcconfigTests(unittest.TestCase):
         command = (ROOT / "Blink" / "Commands" / "ish.m").read_text(encoding="utf-8")
         self.assertNotIn("Documents mount settings changed after the kernel started", command)
 
+    def test_invalid_documents_mount_settings_fall_back_and_reset_saved_preferences(self) -> None:
+        command = (ROOT / "Blink" / "Commands" / "ish.m").read_text(encoding="utf-8")
+        configure = command.split(
+            "static int ish_configure_documents_for_command(void)", 1
+        )[1].split("\n}", 1)[0]
+        self.assertIn('ish_configure_documents("", "/mnt/documents", 0022)', configure)
+        self.assertIn('ISHDocumentsMountConfigure(NO, @"/mnt/documents", 0022, NULL)', configure)
+        self.assertIn("ish_configure_documents_for_command()", command)
+
     def test_real_bridge_passes_capturable_argument_pointers_to_session_block(self) -> None:
         source = (ISH_DIR / "ish_kernel_bridge.m").read_text(encoding="utf-8")
         self.assertIn("const char *argv_values[]", source)
