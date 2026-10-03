@@ -11,6 +11,9 @@ from pathlib import Path
 
 PTY_SOURCE = Path("app/LinuxPTY.c")
 INTEROP_SOURCE = Path("app/LinuxInterop.c")
+PTY_PATH_DECLARATION = "static struct path ptmx_path;"
+PTY_PATH_DECLARATION_PATCHED = """static struct path ptmx_path;
+static int ios_pty_ensure_initialized(void);"""
 
 PTY_INIT = """static __init int ios_pty_init(void) {
     init_mkdir("/dev/pts", 0755);
@@ -88,6 +91,14 @@ def patch(source_root: Path) -> None:
     interop_path = source_root / INTEROP_SOURCE
     pty = pty_path.read_text(encoding="utf-8")
     interop = interop_path.read_text(encoding="utf-8")
+    if PTY_PATH_DECLARATION_PATCHED not in pty:
+        if pty.count(PTY_PATH_DECLARATION) != 1:
+            raise ValueError(f"unexpected pinned source layout in {PTY_SOURCE}")
+        pty = pty.replace(
+            PTY_PATH_DECLARATION,
+            PTY_PATH_DECLARATION_PATCHED,
+            1,
+        )
     pty = replace_once(pty, PTY_INIT, PTY_INIT_PATCHED, PTY_SOURCE)
     pty = replace_once(pty, PTY_OPEN, PTY_OPEN_PATCHED, PTY_SOURCE)
     interop = replace_once(interop, SESSION_TTY, SESSION_TTY_PATCHED, INTEROP_SOURCE)

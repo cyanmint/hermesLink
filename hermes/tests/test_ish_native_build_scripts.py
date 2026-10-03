@@ -67,6 +67,7 @@ class BuildIshStaticScriptTests(unittest.TestCase):
             pty_path = app / "LinuxPTY.c"
             interop_path = app / "LinuxInterop.c"
             pty_path.write_text(
+                patcher.PTY_PATH_DECLARATION + "\n" +
                 patcher.PTY_INIT + "\n" + patcher.PTY_OPEN + "\n",
                 encoding="utf-8",
             )
@@ -80,6 +81,10 @@ class BuildIshStaticScriptTests(unittest.TestCase):
             self.assertEqual(interop_path.read_text(encoding="utf-8"), patched_interop)
 
         self.assertIn("ios_pty_ensure_initialized()", patched_pty)
+        self.assertLess(
+            patched_pty.index("static int ios_pty_ensure_initialized(void);"),
+            patched_pty.index("struct file *ios_pty_open"),
+        )
         self.assertIn('kern_path("/dev/pts/ptmx", 0, &ptmx_path)', patched_pty)
         self.assertIn("return ERR_PTR(err);", patched_pty)
         self.assertIn("if (IS_ERR(session->tty))", patched_interop)
