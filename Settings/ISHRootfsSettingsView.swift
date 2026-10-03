@@ -216,16 +216,11 @@ struct ISHRootfsSettingsView: View {
   }
 
   private func documentsConfigurationIsCurrent() -> Bool {
-    let hostPath = documentsAutoMount ? ISHDocumentsHostPath() : ""
     guard let mask = UInt(documentsMask, radix: 8) else {
       return false
     }
-    return hostPath.withCString { hostPathPointer in
-      documentsMountPath.withCString { mountPathPointer in
-        ish_documents_configuration_is_current(
-          hostPathPointer, mountPathPointer, UInt32(mask)) != 0
-      }
-    }
+    return ISHDocumentsMountConfigurationIsCurrent(
+      documentsAutoMount, documentsMountPath, mask)
   }
 
   private func select(_ profile: String) {

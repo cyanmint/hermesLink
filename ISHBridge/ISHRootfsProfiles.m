@@ -85,6 +85,16 @@ BOOL ISHDocumentsMountConfigure(BOOL enabled, NSString *guestPath,
   return YES;
 }
 
+BOOL ISHDocumentsMountConfigurationIsCurrent(BOOL enabled, NSString *guestPath,
+                                             NSUInteger mask) {
+  NSString *hostPath = enabled ? ISHDocumentsHostPath() : @"";
+  const char *hostPathCString = hostPath.UTF8String;
+  const char *guestPathCString = guestPath.UTF8String;
+  return hostPathCString != NULL && guestPathCString != NULL &&
+      ish_documents_configuration_is_current(
+          hostPathCString, guestPathCString, (unsigned int) mask) != 0;
+}
+
 static NSString *ISHLegacyProfilesRoot(void) {
   return [ISHDocumentsRoot() stringByAppendingPathComponent:@"Profiles"];
 }

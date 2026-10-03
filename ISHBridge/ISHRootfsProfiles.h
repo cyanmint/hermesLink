@@ -21,5 +21,7 @@ FOUNDATION_EXPORT BOOL ISHDocumentsMountConfigure(BOOL enabled,
                                                    NSString *guestPath,
                                                    NSUInteger mask,
                                                    NSError **error);
+FOUNDATION_EXPORT BOOL ISHDocumentsMountConfigurationIsCurrent(
+    BOOL enabled, NSString *guestPath, NSUInteger mask);
 
 NS_ASSUME_NONNULL_END

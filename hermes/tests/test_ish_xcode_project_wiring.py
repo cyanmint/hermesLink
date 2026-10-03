@@ -183,7 +183,9 @@ class IshNativeXcconfigTests(unittest.TestCase):
     def test_documents_settings_restart_notice_tracks_live_kernel_configuration(self) -> None:
         view = (ROOT / "Settings" / "ISHRootfsSettingsView.swift").read_text(encoding="utf-8")
         self.assertIn("restartRequired = !documentsConfigurationIsCurrent()", view)
-        self.assertIn("ish_documents_configuration_is_current(", view)
+        self.assertIn("ISHDocumentsMountConfigurationIsCurrent(", view)
+        profiles_header = (ISH_DIR / "ISHRootfsProfiles.h").read_text(encoding="utf-8")
+        self.assertIn("ISHDocumentsMountConfigurationIsCurrent(", profiles_header)
         command = (ROOT / "Blink" / "Commands" / "ish.m").read_text(encoding="utf-8")
         self.assertNotIn("Documents mount settings changed after the kernel started", command)
 
