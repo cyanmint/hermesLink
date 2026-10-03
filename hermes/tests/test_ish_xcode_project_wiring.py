@@ -49,7 +49,7 @@ class CommandRegistrationTests(unittest.TestCase):
         self.assertIn("ish_mount_documents(argv[2], &mount_error)", command)
         self.assertIn("NSSearchPathForDirectoriesInDomains(", bridge)
         self.assertIn("path_normalize(AT_PWD, mount_path", bridge)
-        self.assertIn("do_mount(&realfs, documents_path, normalized_path", bridge)
+        self.assertIn("do_mount(&realfs, resolved_documents_path, normalized_path", bridge)
         self.assertIn("ish_sync_do_in_workqueue", bridge)
         self.assertIn("ish_mount_documents", header)
         self.assertIn("ish_mount_documents", stub)
@@ -71,6 +71,21 @@ class CommandRegistrationTests(unittest.TestCase):
         for operation in ("list", "create", "import", "rename", "delete", "use"):
             with self.subTest(operation=operation):
                 self.assertIn(f'"{operation}"', source)
+        self.assertIn('"mount-documents"', source)
+        self.assertIn("HermesLinkISHDocumentsMountPath", source)
+
+    def test_documents_mount_is_configurable_in_settings_and_auto_mounted_at_boot(self) -> None:
+        bridge = (ISH_DIR / "ish_kernel_bridge.m").read_text(encoding="utf-8")
+        settings = (ROOT / "Settings" / "ISHRootfsSettingsView.swift").read_text(encoding="utf-8")
+        command = (ROOT / "Blink" / "Commands" / "ishfs.m").read_text(encoding="utf-8")
+        self.assertIn('#define ISH_DEFAULT_DOCUMENTS_MOUNT_PATH "/mnt/documents"', bridge)
+        self.assertIn("ISH_DOCUMENTS_MOUNT_PATH_KEY", bridge)
+        self.assertIn("ish_mount_documents_on_kernel_thread", bridge)
+        self.assertIn("generic_mkdirat(AT_PWD, directory, 0755)", bridge)
+        self.assertIn("@AppStorage(\"HermesLinkISHDocumentsMountPath\")", settings)
+        self.assertIn("saveDocumentsMountPath", settings)
+        self.assertIn("Disabled automatic Documents mounting", command)
+        self.assertIn("ishfs mount-documents [<guest-path>|off]", command)
 
 
 class PbxprojWiringTests(unittest.TestCase):
