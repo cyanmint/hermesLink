@@ -87,6 +87,7 @@ class PackageIshFrameworkTests(unittest.TestCase):
         self.assertIn("-Wl,-force_load", source)
         self.assertIn("@rpath/Ish.framework/Ish", source)
         self.assertIn("_ish_run_command", source)
+        self.assertIn("_ish_rootfs_prepare_fakefs", source)
         self.assertIn("ish_kernel_bridge.m", source)
         self.assertIn('SDK_NAME=${SDK_NAME:-iphoneos}', source)
         self.assertIn("iPhoneSimulator", source)
