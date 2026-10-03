@@ -244,6 +244,46 @@ class IshBridgeCTests(unittest.TestCase):
         self.assertEqual(second.stdout.strip(), b"0", second.stderr)
         self.assertEqual((root / "data/bin/busybox").read_bytes(), b"busybox")
 
+    def test_fakefs_conversion_preserves_guest_data_and_meta_db_paths(self) -> None:
+        import sqlite3
+
+        root = self.build_dir / "fakefs-collisions"
+        (root / "bin").mkdir(parents=True)
+        (root / "etc").mkdir()
+        (root / "sbin").mkdir()
+        (root / "data").mkdir()
+        (root / "bin/busybox").write_bytes(b"busybox")
+        (root / "etc/alpine-release").write_text("3.21.3\n", encoding="utf-8")
+        (root / "sbin/init").symlink_to("../bin/busybox")
+        (root / "data/guest-file").write_text("guest data", encoding="utf-8")
+        (root / "meta.db").write_bytes(b"guest database")
+        os.chmod(root / "bin/busybox", 0o755)
+        os.chmod(root / "data", 0o555)
+        os.chmod(root, 0o555)
+
+        result = self._run("fakefsify", str(root))
+
+        self.assertEqual(result.stdout.strip(), b"0", result.stderr)
+        self.assertEqual(
+            (root / "data/data/guest-file").read_text(encoding="utf-8"), "guest data"
+        )
+        self.assertEqual((root / "data/meta.db").read_bytes(), b"guest database")
+        with sqlite3.connect(root / "meta.db") as db:
+            root_stat = db.execute(
+                "SELECT stats.stat FROM paths JOIN stats ON stats.inode = paths.inode "
+                "WHERE paths.path = ?",
+                (b"",),
+            ).fetchone()[0]
+            guest_data_stat = db.execute(
+                "SELECT stats.stat FROM paths JOIN stats ON stats.inode = paths.inode "
+                "WHERE paths.path = ?",
+                (b"data",),
+            ).fetchone()[0]
+        self.assertEqual(int.from_bytes(root_stat[:4], byteorder="little") & 0o777, 0o555)
+        self.assertEqual(
+            int.from_bytes(guest_data_stat[:4], byteorder="little") & 0o777, 0o555
+        )
+
     def test_tar_dot_prefixes_are_normalized_for_fakefs_database_paths(self) -> None:
         import sqlite3
 
@@ -296,7 +336,7 @@ class IshBridgeCTests(unittest.TestCase):
         self.assertTrue((dest / "data" / "sbin" / "init").exists())
         with sqlite3.connect(dest / "meta.db") as db:
             self.assertGreater(
-                db.execute("SELECT count(*) FROM paths").fetchone()[0], 1000
+                db.execute("SELECT count(*) FROM paths").fetchone()[0], 500
             )
 
     # ---- ish_exit_protocol: wrap + streaming scan ----

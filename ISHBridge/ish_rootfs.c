@@ -77,9 +77,80 @@ static int ish_fakefs_store_path(sqlite3 *db, sqlite3_stmt *insert_stat,
   return status == SQLITE_DONE ? 0 : -1;
 }
 
+static int ish_fakefs_raw_root_is_valid(const char *root) {
+  const char *paths[] = {"bin/busybox", "etc/alpine-release", "sbin/init"};
+  for (size_t i = 0; i < sizeof(paths) / sizeof(paths[0]); i++) {
+    char path[4096];
+    if (snprintf(path, sizeof(path), "%s/%s", root, paths[i]) >= (int) sizeof(path)) {
+      return 0;
+    }
+    struct stat stat;
+    if (lstat(path, &stat) != 0) {
+      return 0;
+    }
+    if ((i == 0 && (!S_ISREG(stat.st_mode) || (stat.st_mode & 0111) == 0)) ||
+        (i == 1 && !S_ISREG(stat.st_mode)) ||
+        (i == 2 && !S_ISLNK(stat.st_mode) && !S_ISREG(stat.st_mode))) {
+      return 0;
+    }
+  }
+  return 1;
+}
+
+static int ish_fakefs_move_path(const char *source, const char *destination) {
+  struct stat source_stat;
+  if (lstat(source, &source_stat) != 0) {
+    return -1;
+  }
+  struct stat destination_stat;
+  if (lstat(destination, &destination_stat) == 0) {
+    errno = EEXIST;
+    return -1;
+  }
+  if (errno != ENOENT) {
+    return -1;
+  }
+
+  mode_t original_mode = source_stat.st_mode & 07777;
+  int is_directory = S_ISDIR(source_stat.st_mode);
+  if (is_directory && chmod(source, original_mode | S_IWUSR) != 0) {
+    return -1;
+  }
+  if (rename(source, destination) != 0) {
+    int saved_errno = errno;
+    if (is_directory) {
+      chmod(source, original_mode);
+    }
+    errno = saved_errno;
+    return -1;
+  }
+  if (is_directory && chmod(destination, original_mode) != 0) {
+    return -1;
+  }
+  return 0;
+}
+
+static int ish_fakefs_make_temporary_path(const char *root, const char *label,
+                                          char *path, size_t path_size) {
+  for (unsigned int attempt = 0; attempt < 100; attempt++) {
+    int written = snprintf(path, path_size, "%s/.hermeslink-%s-%ld-%u",
+                           root, label, (long) getpid(), attempt);
+    if (written < 0 || (size_t) written >= path_size) {
+      errno = ENAMETOOLONG;
+      return -1;
+    }
+    struct stat stat;
+    if (lstat(path, &stat) != 0) {
+      return errno == ENOENT ? 0 : -1;
+    }
+  }
+  errno = EEXIST;
+  return -1;
+}
+
 static int ish_fakefs_index_tree(sqlite3 *db, sqlite3_stmt *insert_stat,
                                  sqlite3_stmt *insert_path, const char *data_root,
-                                 const char *relative_path) {
+                                 const char *relative_path, mode_t root_mode) {
   char directory_path[4096];
   if (relative_path[0] == '\0') {
     if (snprintf(directory_path, sizeof(directory_path), "%s", data_root) >=
@@ -97,8 +168,9 @@ static int ish_fakefs_index_tree(sqlite3 *db, sqlite3_stmt *insert_stat,
   if (lstat(directory_path, &directory_stat) != 0 || !S_ISDIR(directory_stat.st_mode)) {
     return -1;
   }
+  mode_t stored_mode = relative_path[0] == '\0' ? root_mode : directory_stat.st_mode;
   if (ish_fakefs_store_path(db, insert_stat, insert_path, relative_path,
-                            directory_stat.st_mode) != 0 ||
+                            stored_mode) != 0 ||
       chmod(directory_path, 0777) != 0) {
     return -1;
   }
@@ -136,7 +208,8 @@ static int ish_fakefs_index_tree(sqlite3 *db, sqlite3_stmt *insert_stat,
       break;
     }
     if (S_ISDIR(child_stat.st_mode)) {
-      if (ish_fakefs_index_tree(db, insert_stat, insert_path, data_root, child_path) != 0) {
+      if (ish_fakefs_index_tree(db, insert_stat, insert_path, data_root, child_path,
+                                root_mode) != 0) {
         result = -1;
         break;
       }
@@ -197,7 +270,8 @@ static int ish_fakefs_index_tree(sqlite3 *db, sqlite3_stmt *insert_stat,
   return result;
 }
 
-static int ish_fakefs_create_database(const char *root, const char *data_root) {
+static int ish_fakefs_create_database(const char *root, const char *data_root,
+                                      mode_t root_mode) {
   char database_path[4096];
   if (snprintf(database_path, sizeof(database_path), "%s/meta.db", root) >=
       (int) sizeof(database_path)) {
@@ -229,7 +303,7 @@ static int ish_fakefs_create_database(const char *root, const char *data_root) {
                          &insert_path, NULL) != SQLITE_OK) {
     goto cleanup;
   }
-  if (ish_fakefs_index_tree(db, insert_stat, insert_path, data_root, "") != 0 ||
+  if (ish_fakefs_index_tree(db, insert_stat, insert_path, data_root, "", root_mode) != 0 ||
       ish_fakefs_exec(db, "COMMIT;") != 0) {
     ish_fakefs_exec(db, "ROLLBACK;");
     goto cleanup;
@@ -287,7 +361,9 @@ static int ish_fakefs_database_is_valid(const char *database_path) {
   return valid;
 }
 
-static int ish_fakefs_move_entries(const char *root, const char *data_root) {
+static int ish_fakefs_move_entries(const char *root, const char *data_root,
+                                   const char *temporary_data_name,
+                                   const char *temporary_database_name) {
   DIR *directory = opendir(root);
   if (directory == NULL) {
     return -1;
@@ -296,7 +372,10 @@ static int ish_fakefs_move_entries(const char *root, const char *data_root) {
   struct dirent *entry;
   while ((entry = readdir(directory)) != NULL) {
     if (strcmp(entry->d_name, ".") == 0 || strcmp(entry->d_name, "..") == 0 ||
-        strcmp(entry->d_name, "data") == 0 || strcmp(entry->d_name, "meta.db") == 0) {
+        strcmp(entry->d_name, "data") == 0 || strcmp(entry->d_name, "meta.db") == 0 ||
+        (temporary_data_name != NULL && strcmp(entry->d_name, temporary_data_name) == 0) ||
+        (temporary_database_name != NULL &&
+         strcmp(entry->d_name, temporary_database_name) == 0)) {
       continue;
     }
     char source[4096];
@@ -309,13 +388,7 @@ static int ish_fakefs_move_entries(const char *root, const char *data_root) {
       result = -1;
       break;
     }
-    struct stat existing;
-    if (lstat(destination, &existing) == 0) {
-      errno = EEXIST;
-      result = -1;
-      break;
-    }
-    if (errno != ENOENT || rename(source, destination) != 0) {
+    if (ish_fakefs_move_path(source, destination) != 0) {
       result = -1;
       break;
     }
@@ -339,28 +412,78 @@ int ish_rootfs_prepare_fakefs(const char *root) {
   }
   struct stat data_stat;
   struct stat database_stat;
-  int have_data = lstat(data_root, &data_stat) == 0 && S_ISDIR(data_stat.st_mode);
-  int have_database = lstat(database_path, &database_stat) == 0 &&
-      S_ISREG(database_stat.st_mode) && database_stat.st_size > 0;
+  int have_data_entry = lstat(data_root, &data_stat) == 0;
+  int have_database_entry = lstat(database_path, &database_stat) == 0;
+  int have_data = have_data_entry && S_ISDIR(data_stat.st_mode);
+  int have_database = have_database_entry && S_ISREG(database_stat.st_mode) &&
+      database_stat.st_size > 0;
   if (have_data && have_database) {
-    return ish_fakefs_database_is_valid(database_path)
-        ? ISH_ROOTFS_OK : ISH_ROOTFS_ERR_FORMAT;
-  }
-  if (!have_data && lstat(data_root, &data_stat) != 0) {
-    if (errno != ENOENT || mkdir(data_root, 0777) != 0) {
-      return ISH_ROOTFS_ERR_IO;
+    if (ish_fakefs_database_is_valid(database_path)) {
+      return ISH_ROOTFS_OK;
     }
-  } else if (!have_data && !S_ISDIR(data_stat.st_mode)) {
+    if (!ish_fakefs_raw_root_is_valid(root)) {
+      return ISH_ROOTFS_ERR_FORMAT;
+    }
+  }
+  if (!ish_fakefs_raw_root_is_valid(root)) {
+    return ISH_ROOTFS_ERR_FORMAT;
+  }
+  struct stat root_stat;
+  if (lstat(root, &root_stat) != 0 || !S_ISDIR(root_stat.st_mode)) {
     errno = ENOTDIR;
     return ISH_ROOTFS_ERR_DEST;
   }
+  mode_t root_mode = root_stat.st_mode;
   if (chmod(root, 0777) != 0) {
     return ISH_ROOTFS_ERR_IO;
   }
-  if (ish_fakefs_move_entries(root, data_root) != 0) {
+  char temporary_data[4096];
+  char temporary_database[4096];
+  int has_temporary_data = 0;
+  int has_temporary_database = 0;
+  if (have_data_entry) {
+    if (ish_fakefs_make_temporary_path(root, "raw-data", temporary_data,
+                                       sizeof(temporary_data)) != 0 ||
+        ish_fakefs_move_path(data_root, temporary_data) != 0) {
+      return ISH_ROOTFS_ERR_IO;
+    }
+    has_temporary_data = 1;
+  }
+  if (have_database_entry) {
+    if (ish_fakefs_make_temporary_path(root, "raw-meta", temporary_database,
+                                       sizeof(temporary_database)) != 0 ||
+        ish_fakefs_move_path(database_path, temporary_database) != 0) {
+      return ISH_ROOTFS_ERR_IO;
+    }
+    has_temporary_database = 1;
+  }
+  if (mkdir(data_root, 0777) != 0) {
     return ISH_ROOTFS_ERR_IO;
   }
-  unlink(database_path);
+  const char *temporary_data_name = has_temporary_data
+      ? strrchr(temporary_data, '/') + 1 : NULL;
+  const char *temporary_database_name = has_temporary_database
+      ? strrchr(temporary_database, '/') + 1 : NULL;
+  if (ish_fakefs_move_entries(root, data_root, temporary_data_name,
+                              temporary_database_name) != 0) {
+    return ISH_ROOTFS_ERR_IO;
+  }
+  if (has_temporary_data) {
+    char guest_data_path[4096];
+    if (snprintf(guest_data_path, sizeof(guest_data_path), "%s/data", data_root) >=
+        (int) sizeof(guest_data_path) ||
+        ish_fakefs_move_path(temporary_data, guest_data_path) != 0) {
+      return ISH_ROOTFS_ERR_IO;
+    }
+  }
+  if (has_temporary_database) {
+    char guest_meta_path[4096];
+    if (snprintf(guest_meta_path, sizeof(guest_meta_path), "%s/meta.db", data_root) >=
+        (int) sizeof(guest_meta_path) ||
+        ish_fakefs_move_path(temporary_database, guest_meta_path) != 0) {
+      return ISH_ROOTFS_ERR_IO;
+    }
+  }
   char sidecar_path[4096];
   if (snprintf(sidecar_path, sizeof(sidecar_path), "%s-wal", database_path) >=
       (int) sizeof(sidecar_path)) {
@@ -374,7 +497,7 @@ int ish_rootfs_prepare_fakefs(const char *root) {
     return ISH_ROOTFS_ERR_DEST;
   }
   unlink(sidecar_path);
-  if (ish_fakefs_create_database(root, data_root) != 0) {
+  if (ish_fakefs_create_database(root, data_root, root_mode) != 0) {
     return ISH_ROOTFS_ERR_IO;
   }
   if (!ish_fakefs_database_is_valid(database_path)) {
