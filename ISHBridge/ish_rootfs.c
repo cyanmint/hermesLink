@@ -330,7 +330,20 @@ static int ish_fakefs_database_is_valid(const char *database_path) {
     return 0;
   }
   sqlite3_stmt *statement = NULL;
-  int valid = sqlite3_prepare_v2(db,
+  int valid = sqlite3_prepare_v2(db, "PRAGMA user_version", -1,
+                                 &statement, NULL) == SQLITE_OK &&
+      sqlite3_step(statement) == SQLITE_ROW &&
+      sqlite3_column_int(statement, 0) == 3;
+  sqlite3_finalize(statement);
+  statement = NULL;
+  valid = valid && sqlite3_prepare_v2(db, "PRAGMA integrity_check", -1,
+                                      &statement, NULL) == SQLITE_OK &&
+      sqlite3_step(statement) == SQLITE_ROW &&
+      sqlite3_column_text(statement, 0) != NULL &&
+      strcmp((const char *) sqlite3_column_text(statement, 0), "ok") == 0;
+  sqlite3_finalize(statement);
+  statement = NULL;
+  valid = valid && sqlite3_prepare_v2(db,
       "SELECT db_inode FROM meta LIMIT 1", -1, &statement, NULL) == SQLITE_OK &&
       sqlite3_step(statement) == SQLITE_ROW;
   sqlite3_finalize(statement);
@@ -362,6 +375,14 @@ static int ish_fakefs_database_is_valid(const char *database_path) {
     sqlite3_reset(statement);
     sqlite3_clear_bindings(statement);
   }
+  sqlite3_finalize(statement);
+  statement = NULL;
+  valid = valid && sqlite3_prepare_v2(db,
+      "SELECT 1 FROM paths JOIN stats ON stats.inode = paths.inode "
+      "WHERE paths.inode <= 0 OR length(stats.stat) != ? LIMIT 1",
+      -1, &statement, NULL) == SQLITE_OK &&
+      sqlite3_bind_int(statement, 1, (int) sizeof(ish_fakefs_stat)) == SQLITE_OK &&
+      sqlite3_step(statement) == SQLITE_DONE;
   sqlite3_finalize(statement);
   sqlite3_close(db);
   return valid;

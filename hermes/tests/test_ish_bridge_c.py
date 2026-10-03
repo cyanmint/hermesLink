@@ -244,6 +244,30 @@ class IshBridgeCTests(unittest.TestCase):
         self.assertEqual(second.stdout.strip(), b"0", second.stderr)
         self.assertEqual((root / "data/bin/busybox").read_bytes(), b"busybox")
 
+    def test_incompatible_fakefs_schema_is_rejected_before_kernel_mount(self) -> None:
+        import sqlite3
+
+        root = self.build_dir / "fakefs-old-schema"
+        (root / "bin").mkdir(parents=True)
+        (root / "etc").mkdir()
+        (root / "sbin").mkdir()
+        (root / "bin/busybox").write_bytes(b"busybox")
+        (root / "etc/alpine-release").write_text("3.21.3\n", encoding="utf-8")
+        (root / "sbin/init").symlink_to("../bin/busybox")
+        os.chmod(root / "bin/busybox", 0o755)
+
+        prepared = self._run("fakefsify", str(root))
+        self.assertEqual(prepared.stdout.strip(), b"0", prepared.stderr)
+        with sqlite3.connect(root / "meta.db") as db:
+            db.execute("PRAGMA user_version=2")
+
+        validation = self._run("fakefsify", str(root))
+
+        self.assertEqual(validation.stdout.strip(), b"-3", validation.stderr)
+        with sqlite3.connect(root / "meta.db") as db:
+            self.assertEqual(db.execute("PRAGMA user_version").fetchone()[0], 2)
+        self.assertEqual((root / "data/bin/busybox").read_bytes(), b"busybox")
+
     def test_fakefs_conversion_preserves_guest_data_and_meta_db_paths(self) -> None:
         import sqlite3
 
