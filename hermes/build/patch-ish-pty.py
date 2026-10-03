@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 # HermesLink AI-generated glue code; created by cyanmint's coding agent.
 # AI-generated content has no copyright holder and is not subject to copyright.
-"""Make iSH's PTY device initialization safe when its initcall was missed."""
+"""Make PTY initialization safe and defer session readiness until late initcalls."""
 
 from __future__ import annotations
 
@@ -11,6 +11,7 @@ from pathlib import Path
 
 PTY_SOURCE = Path("app/LinuxPTY.c")
 INTEROP_SOURCE = Path("app/LinuxInterop.c")
+ROOT_SOURCE = Path("app/LinuxRoot.c")
 PTY_PATH_DECLARATION = "static struct path ptmx_path;"
 PTY_PATH_DECLARATION_PATCHED = """static struct path ptmx_path;
 static int ios_pty_ensure_initialized(void);"""
@@ -77,6 +78,23 @@ SESSION_TTY_PATCHED = """    session->tty = ios_pty_open(&session->terminal);
     }
     session->callback = done;"""
 
+ROOTFS_INITCALL = """    FsInitialize();
+    return 0;
+}
+
+rootfs_initcall(ish_rootfs);"""
+
+ROOTFS_INITCALL_PATCHED = """    return 0;
+}
+
+static __init int ish_session_ready(void) {
+    FsInitialize();
+    return 0;
+}
+
+rootfs_initcall(ish_rootfs);
+late_initcall(ish_session_ready);"""
+
 
 def replace_once(source: str, before: str, after: str, filename: Path) -> str:
     if after in source:
@@ -89,8 +107,10 @@ def replace_once(source: str, before: str, after: str, filename: Path) -> str:
 def patch(source_root: Path) -> None:
     pty_path = source_root / PTY_SOURCE
     interop_path = source_root / INTEROP_SOURCE
+    root_path = source_root / ROOT_SOURCE
     pty = pty_path.read_text(encoding="utf-8")
     interop = interop_path.read_text(encoding="utf-8")
+    root = root_path.read_text(encoding="utf-8")
     if PTY_PATH_DECLARATION_PATCHED not in pty:
         if pty.count(PTY_PATH_DECLARATION) != 1:
             raise ValueError(f"unexpected pinned source layout in {PTY_SOURCE}")
@@ -102,8 +122,10 @@ def patch(source_root: Path) -> None:
     pty = replace_once(pty, PTY_INIT, PTY_INIT_PATCHED, PTY_SOURCE)
     pty = replace_once(pty, PTY_OPEN, PTY_OPEN_PATCHED, PTY_SOURCE)
     interop = replace_once(interop, SESSION_TTY, SESSION_TTY_PATCHED, INTEROP_SOURCE)
+    root = replace_once(root, ROOTFS_INITCALL, ROOTFS_INITCALL_PATCHED, ROOT_SOURCE)
     pty_path.write_text(pty, encoding="utf-8")
     interop_path.write_text(interop, encoding="utf-8")
+    root_path.write_text(root, encoding="utf-8")
 
 
 def main() -> int:

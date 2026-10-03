@@ -174,15 +174,17 @@ fi
 [ "$HOST_OS" = Darwin ] || fail "Xcode static-library targets require macOS"
 [ -f "$MESON_BUILD_DIR/build.ninja" ] || fail "Meson build directory is missing: $MESON_BUILD_DIR"
 
-# The PTY device initcall is not guaranteed to populate ptmx_path in this
-# embedded-kernel build. Patch the pinned host glue only for compilation and
-# restore the verified checkout on every normal exit.
+# The embedded kernel can reach the rootfs initcall before PTY initialization.
+# Patch the pinned host glue to resolve ptmx_path lazily and publish session
+# readiness from a late initcall; restore the verified checkout on every exit.
 SOURCE_PATCH_BACKUP=$(mktemp -d "$BUILD_ROOT/ish-source-patch.XXXXXX")
 cp "$ISH_SOURCE/app/LinuxPTY.c" "$SOURCE_PATCH_BACKUP/LinuxPTY.c"
 cp "$ISH_SOURCE/app/LinuxInterop.c" "$SOURCE_PATCH_BACKUP/LinuxInterop.c"
+cp "$ISH_SOURCE/app/LinuxRoot.c" "$SOURCE_PATCH_BACKUP/LinuxRoot.c"
 restore_ish_source() {
   cp "$SOURCE_PATCH_BACKUP/LinuxPTY.c" "$ISH_SOURCE/app/LinuxPTY.c"
   cp "$SOURCE_PATCH_BACKUP/LinuxInterop.c" "$ISH_SOURCE/app/LinuxInterop.c"
+  cp "$SOURCE_PATCH_BACKUP/LinuxRoot.c" "$ISH_SOURCE/app/LinuxRoot.c"
   rm -rf "$SOURCE_PATCH_BACKUP"
 }
 trap restore_ish_source EXIT

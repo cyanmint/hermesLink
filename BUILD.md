@@ -94,10 +94,11 @@ registered alongside `terminal` in the standard Hermes bundles. The design:
   upstream's own (UIKit/WebKit-backed) `Terminal.m`. Each `ish <command>`
   invocation reuses the already-booted guest via upstream's
   `linux_start_session()`, matching how upstream's own
-  `TerminalViewController.m` starts an interactive session. Sessions wait for
-  `LinuxRoot.c`'s rootfs initcall signal before submitting work: probing the
-  kernel workqueue immediately after creating its thread can hit the upstream
-  hard-trap path before its IRQ pipe is initialized.
+  `TerminalViewController.m` starts an interactive session. Rootfs mounting
+  remains in its upstream rootfs initcall, while `FsInitialize` is deferred to
+  a late initcall so session startup waits for PTY/device initialization too.
+  Workqueue submissions before `call_block_init` can hit the upstream hard-trap
+  path.
 - **Exit status** — upstream's `linux_start_session()` only reports that a
   guest process *started*, not how it exited, and upstream's own GUI never
   needed that (interactive sessions end when the user closes them, or the

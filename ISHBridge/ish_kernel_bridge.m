@@ -425,8 +425,8 @@ void FsInitialize(void) {
   g_kernel_ready = 1;
   pthread_cond_broadcast(&g_kernel_ready_cond);
   pthread_mutex_unlock(&g_kernel_ready_lock);
-  ISHLog("ish: guest root filesystem mounted; kernel workqueue is ready");
-  /* Don't perform guest filesystem I/O inside the rootfs initcall. Apart from
+  ISHLog("ish: guest PTY and device initialization completed; sessions are ready");
+  /* Don't perform guest filesystem I/O inside this initcall. Apart from
    * delaying readiness, a slow host-backed file operation here prevents the
    * kernel from returning to its scheduler to run queued work. */
   async_do_in_ios(^{
@@ -646,9 +646,8 @@ int ish_kernel_has_booted(void) {
 }
 
 /* Workqueue/IRQ submission is unsafe until kernel initialization reaches
- * LinuxRoot.c's rootfs initcall: LinuxInterop.c traps if its host pipe has not
- * yet been created by call_block_init. FsInitialize runs after the guest root
- * is mounted, so it is the first safe readiness signal. */
+ * LinuxRoot.c's late initcall: it runs after rootfs setup and the PTY device
+ * initcalls required by linux_start_session(). */
 #define ISH_BOOT_READY_TIMEOUT_SECONDS 30
 #define ISH_SESSION_START_ENODEV_RETRIES 2
 #define ISH_SESSION_START_RETRY_DELAY_MICROSECONDS 100000

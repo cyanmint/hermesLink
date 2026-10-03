@@ -217,7 +217,7 @@ class IshNativeXcconfigTests(unittest.TestCase):
         self.assertIn("start_retval != -ENODEV || start_terminal != NULL", bridge)
         self.assertIn("usleep(ISH_SESSION_START_RETRY_DELAY_MICROSECONDS * (attempt + 1))", bridge)
 
-    def test_kernel_readiness_waits_for_rootfs_init_instead_of_probing_workqueue(self) -> None:
+    def test_kernel_readiness_waits_for_session_initcalls_instead_of_probing_workqueue(self) -> None:
         source = (ISH_DIR / "ish_kernel_bridge.m").read_text(encoding="utf-8")
         fs_initialize = source.split("void FsInitialize(void)", 1)[1].split("\n}", 1)[0]
         readiness = source.split("static int ish_wait_for_kernel_ready(void)", 1)[1].split("\n}", 1)[0]
@@ -231,6 +231,9 @@ class IshNativeXcconfigTests(unittest.TestCase):
         self.assertIn("pthread_cond_timedwait", readiness)
         self.assertNotIn("ish_sync_do_in_workqueue", readiness)
         self.assertIn("g_kernel_panicked", readiness)
+        pty_patcher = (ROOT / "hermes" / "build" / "patch-ish-pty.py").read_text(encoding="utf-8")
+        self.assertIn("rootfs_initcall(ish_rootfs);", pty_patcher)
+        self.assertIn("late_initcall(ish_session_ready);", pty_patcher)
         network_callback = source.split(
             "static void ish_network_reachability_changed", 1
         )[1].split("\n}", 1)[0]
