@@ -21,6 +21,8 @@ NEW_FILES_FROM_THIS_CHANGE = [
     "hermes/blink/overlay/Blink/Commands/ish.m",
     "hermes/blink/overlay/Blink/Commands/ishfs.m",
     "hermes/blink/overlay/Settings/ISHRootfsSettingsView.swift",
+    "hermes/blink/apply-patches.py",
+    "hermes/blink/patches/_patch_utils.py",
     "ISHBridge/ish_exit_protocol.c",
     "ISHBridge/ish_exit_protocol.h",
     "ISHBridge/ish_kernel_bridge.h",
@@ -69,6 +71,14 @@ class AiGeneratedFilesInventoryTests(unittest.TestCase):
     def test_every_listed_path_exists_on_disk(self) -> None:
         missing = [path for path in sorted(self.listed_paths) if not (ROOT / path).is_file()]
         self.assertEqual(missing, [])
+
+    def test_all_blink_patch_scripts_are_in_the_inventory(self) -> None:
+        patch_dir = ROOT / "hermes" / "blink" / "patches"
+        patch_paths = {
+            path.relative_to(ROOT).as_posix() for path in patch_dir.glob("patch-*.py")
+        }
+        self.assertTrue(patch_paths)
+        self.assertEqual(patch_paths - self.listed_paths, set())
 
     def test_all_ishbridge_sources_are_listed(self) -> None:
         ish_bridge_dir = ROOT / "ISHBridge"

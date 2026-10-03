@@ -3,8 +3,8 @@
 This repository stores Hermes/iSH integration code and the Blink customization
 patch, not the Blink app source. The upstream Blink revision is pinned in
 `hermes/blink/UPSTREAM_REVISION`; app glue and assets are in
-`hermes/blink/overlay/`, and changes to upstream files are split into small
-per-file patches in `hermes/blink/patches/`.
+`hermes/blink/overlay/`, and changes to upstream files are applied by small
+per-file Python scripts in `hermes/blink/patches/`.
 
 ## Prepare Blink locally
 
@@ -22,8 +22,9 @@ cp template_setup.xcconfig developer_setup.xcconfig
 ```
 
 The preparation script rejects any checkout that does not match the pinned
-revision, applies the overlay and small patches, and materializes the Blink tree in the
-repository checkout. CI performs the same preparation before building the app.
+revision, applies the overlay and Python patch scripts, and materializes the
+Blink tree in the repository checkout. CI performs the same preparation before
+building the app.
 The staged Blink files are ignored by Git; they are generated build inputs, not
 repository sources.
 

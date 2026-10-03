@@ -3,7 +3,7 @@
 The following files are HermesLink glue code created by cyanmint's coding agent. A coding agent was used to create the complete contents of these files; they are not copied from Blink or from the upstream Hermes projects.
 
 This inventory intentionally excludes `AI-GENERATED-FILES.md` itself; it is attribution documentation, not a glue file.
-Blink app glue and resources are carried under `hermes/blink/overlay/`; changes to existing upstream files use small per-file patches under `hermes/blink/patches/`. They are materialized only in the build workspace.
+Blink app glue and resources are carried under `hermes/blink/overlay/`; changes to existing upstream files use small per-file Python patch scripts under `hermes/blink/patches/`. They are materialized only in the build workspace.
 
 Under the project's stated attribution policy, AI-generated content has no copyright holder and is not subject to copyright. These files are therefore provided as non-copyrightable glue code. This statement does not remove or alter the licenses and copyright notices of Blink, Hermes Agent, Hermes WebUI, CPython, or any other third-party material incorporated by the build.
 
@@ -25,6 +25,40 @@ Under the project's stated attribution policy, AI-generated content has no copyr
 - `hermes/blink/overlay/Blink/Commands/ish.m`
 - `hermes/blink/overlay/Blink/Commands/ishfs.m`
 - `hermes/blink/overlay/Settings/ISHRootfsSettingsView.swift`
+- `hermes/blink/apply-patches.py`
+- `hermes/blink/patches/_patch_utils.py`
+- `hermes/blink/patches/patch-blink-appdelegate-m.py`
+- `hermes/blink/patches/patch-blink-blink-bridge-h.py`
+- `hermes/blink/patches/patch-blink-commands-help-m.py`
+- `hermes/blink/patches/patch-blink-complete-swift.py`
+- `hermes/blink/patches/patch-blink-info-plist.py`
+- `hermes/blink/patches/patch-blink-migrator-1860migration-swift.py`
+- `hermes/blink/patches/patch-blink-migrator-migrator-swift.py`
+- `hermes/blink/patches/patch-blink-scenedelegate-swift.py`
+- `hermes/blink/patches/patch-blink-smarterkeys-smarterterminput-swift.py`
+- `hermes/blink/patches/patch-blink-spacecontroller-swift.py`
+- `hermes/blink/patches/patch-blink-terminal-termcontroller-swift.py`
+- `hermes/blink/patches/patch-blink-terminal-termview-h.py`
+- `hermes/blink/patches/patch-blink-terminal-termview-m.py`
+- `hermes/blink/patches/patch-blink-whatsnew-whatsnewinfo-swift.py`
+- `hermes/blink/patches/patch-blink-xcodeproj-project-pbxproj-01.py`
+- `hermes/blink/patches/patch-blink-xcodeproj-project-pbxproj-02.py`
+- `hermes/blink/patches/patch-blink-xcodeproj-project-pbxproj-03.py`
+- `hermes/blink/patches/patch-blink-xcodeproj-project-pbxproj-04.py`
+- `hermes/blink/patches/patch-blink-xcodeproj-project-pbxproj-05.py`
+- `hermes/blink/patches/patch-blink-xcodeproj-project-pbxproj-06.py`
+- `hermes/blink/patches/patch-blink-xcodeproj-project-pbxproj-07.py`
+- `hermes/blink/patches/patch-blink-xcodeproj-project-pbxproj-08.py`
+- `hermes/blink/patches/patch-blink-xcodeproj-project-pbxproj-09.py`
+- `hermes/blink/patches/patch-blink-xcodeproj-project-pbxproj-10.py`
+- `hermes/blink/patches/patch-blinkconfig-blinkpaths-h.py`
+- `hermes/blink/patches/patch-blinkconfig-blinkpaths-m.py`
+- `hermes/blink/patches/patch-sessions-mcpsession-m.py`
+- `hermes/blink/patches/patch-sessions-sessionparams-swift.py`
+- `hermes/blink/patches/patch-settings-model-terminalstyle-swift.py`
+- `hermes/blink/patches/patch-settings-settingsview-swift.py`
+- `hermes/blink/patches/patch-settings-viewcontrollers-about-about-html.py`
+- `hermes/blink/patches/patch-settings-viewcontrollers-appearance-stylecustomizationview-swift.py`
 - `hermes/build/ISHNative.xcconfig`
 - `hermes/build/build-hermesrt-zip.sh`
 - `hermes/build/build-ish-static.sh`

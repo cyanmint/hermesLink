@@ -1,9 +1,10 @@
 # HermesLink AI-generated glue code; created by cyanmint's coding agent.
 # AI-generated content has no copyright holder and is not subject to copyright.
-"""Checks that CI reconstructs the pinned Blink app from its integration patch."""
+"""Checks that CI reconstructs the pinned Blink app from glue and patch scripts."""
 
 from __future__ import annotations
 
+import ast
 import re
 import subprocess
 import unittest
@@ -24,20 +25,27 @@ class BlinkSourcePatchTests(unittest.TestCase):
     @classmethod
     def setUpClass(cls) -> None:
         cls.revision = PIN.read_text(encoding="ascii").strip()
-        cls.patches = sorted(PATCH_DIR.glob("*.patch"))
+        cls.patches = sorted(PATCH_DIR.glob("patch-*.py"))
         cls.script = PREPARE_SCRIPT.read_text(encoding="utf-8")
         cls.workflow_text = WORKFLOW.read_text(encoding="utf-8")
         cls.workflow = yaml.safe_load(cls.workflow_text)
 
-    def test_upstream_revision_is_immutable_and_patches_are_small_per_file(self) -> None:
+    def test_upstream_revision_is_fixed_and_source_patches_are_small_python_scripts(self) -> None:
         self.assertRegex(self.revision, re.compile(r"^[0-9a-f]{40}$"))
-        self.assertGreaterEqual(len(self.patches), 20)
+        self.assertGreaterEqual(len(self.patches), 30)
+        self.assertEqual(list(PATCH_DIR.glob("*.patch")), [])
         for patch in self.patches:
             text = patch.read_text(encoding="utf-8")
+            tree = ast.parse(text)
+            target_assignments = [
+                node for node in tree.body
+                if isinstance(node, ast.Assign)
+                and any(isinstance(target, ast.Name) and target.id == "TARGET" for target in node.targets)
+            ]
             with self.subTest(patch=patch.name):
-                self.assertLess(patch.stat().st_size, 32 * 1024)
-                self.assertEqual(text.count("diff --git "), 1)
-                self.assertNotIn("GIT binary patch", text)
+                self.assertLess(patch.stat().st_size, 20 * 1024)
+                self.assertIn("from _patch_utils import apply_file", text)
+                self.assertEqual(len(target_assignments), 1)
 
     def test_new_app_glue_and_binary_assets_live_in_the_overlay(self) -> None:
         for path in (
@@ -74,10 +82,13 @@ class BlinkSourcePatchTests(unittest.TestCase):
         ]
         self.assertEqual(retained, [])
 
-    def test_preparation_script_checks_revision_and_applies_patch_before_staging(self) -> None:
+    def test_preparation_script_checks_revision_and_runs_patch_scripts_before_staging(self) -> None:
         self.assertIn("rev-parse HEAD", self.script)
-        self.assertIn("git -C \"$source_root\" apply --check \"$patch_file\"", self.script)
-        self.assertIn("git -C \"$source_root\" apply \"$patch_file\"", self.script)
+        self.assertIn("apply-patches.py", self.script)
+        self.assertIn("rsync -a \"$integration_root/hermes/blink/overlay/\"", self.script)
+        utility = (PATCH_DIR / "_patch_utils.py").read_text(encoding="utf-8")
+        self.assertIn("ambiguous source anchors", utility)
+        self.assertIn("source anchor not found", utility)
         self.assertIn("rsync -a", self.script)
         for excluded_path in (".git", ".github", ".gitignore", "README.md", "BUILD.md", "Frameworks"):
             with self.subTest(path=excluded_path):

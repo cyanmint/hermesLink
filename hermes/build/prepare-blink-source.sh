@@ -6,7 +6,6 @@ source_root="$(cd "${1:?usage: prepare-blink-source.sh BLINK_CHECKOUT [INTEGRATI
 integration_root="$(cd "${2:-$repository_root}" && pwd)"
 target_root="$(cd "${3:-$integration_root}" && pwd)"
 revision="$(tr -d '\r\n' < "$integration_root/hermes/blink/UPSTREAM_REVISION")"
-patch_dir="$integration_root/hermes/blink/patches"
 actual_revision="$(git -C "$source_root" rev-parse HEAD)"
 
 if [[ ! "$revision" =~ ^[0-9a-f]{40}$ ]]; then
@@ -19,12 +18,7 @@ if [[ "$actual_revision" != "$revision" ]]; then
 fi
 
 rsync -a "$integration_root/hermes/blink/overlay/" "$source_root/"
-for patch_file in "$patch_dir"/*.patch; do
-  if ! git -C "$source_root" apply --reverse --check "$patch_file" >/dev/null 2>&1; then
-    git -C "$source_root" apply --check "$patch_file"
-    git -C "$source_root" apply "$patch_file"
-  fi
-done
+python3 "$integration_root/hermes/blink/apply-patches.py" "$source_root"
 
 test -s "$source_root/Blink.xcodeproj/project.pbxproj"
 rsync -a \

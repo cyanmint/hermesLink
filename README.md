@@ -10,8 +10,8 @@ components retain their own license terms and notices.
 The Blink app source is not stored in this repository. The upstream revision is
 pinned in [`hermes/blink/UPSTREAM_REVISION`](hermes/blink/UPSTREAM_REVISION),
 and HermesLink's app glue and resources are maintained in
-[`hermes/blink/overlay/`](hermes/blink/overlay/) with small per-file patches in
-[`hermes/blink/patches/`](hermes/blink/patches/).
+[`hermes/blink/overlay/`](hermes/blink/overlay/) with per-file Python patch
+scripts in [`hermes/blink/patches/`](hermes/blink/patches/).
 CI checks out that exact revision, applies the patch, and stages the resulting
 Blink source for the app build. See [BUILD.md](BUILD.md) to prepare the same
 source tree locally.
