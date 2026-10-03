@@ -19,12 +19,17 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
+#include <time.h>
 #include <unistd.h>
 
 static pthread_mutex_t g_configuration_lock = PTHREAD_MUTEX_INITIALIZER;
 static char g_configured_root[1024];
 static ish_log_handler g_log_handler;
 static int g_boot_started;
+static pthread_mutex_t g_kernel_ready_lock = PTHREAD_MUTEX_INITIALIZER;
+static pthread_cond_t g_kernel_ready_cond = PTHREAD_COND_INITIALIZER;
+static int g_kernel_ready;
+static int g_kernel_panicked;
 
 static void ISHLog(const char *message) {
   pthread_mutex_lock(&g_configuration_lock);
@@ -92,6 +97,10 @@ void async_do_in_ios(void (^block)(void)) {
 #pragma mark - Diagnostics (ReportPanic / ConsoleLog)
 
 void ReportPanic(const char *message) {
+  pthread_mutex_lock(&g_kernel_ready_lock);
+  g_kernel_panicked = 1;
+  pthread_cond_broadcast(&g_kernel_ready_cond);
+  pthread_mutex_unlock(&g_kernel_ready_lock);
   char buffer[256];
   snprintf(buffer, sizeof(buffer), "ish: guest kernel panic: %s", message != NULL ? message : "(no message)");
   ISHLog(buffer);
@@ -303,6 +312,11 @@ const char *DefaultRootPath(void) {
 void FsInitialize(void) {
   /* Upstream's CurrentRoot.m only performs app-specific version and
    * repository bookkeeping here; HermesLink owns rootfs provisioning. */
+  pthread_mutex_lock(&g_kernel_ready_lock);
+  g_kernel_ready = 1;
+  pthread_cond_broadcast(&g_kernel_ready_cond);
+  pthread_mutex_unlock(&g_kernel_ready_lock);
+  ISHLog("ish: guest root filesystem mounted; kernel workqueue is ready");
 }
 
 static NSString *ISHRootfsStorageDirectory(void) {
@@ -375,6 +389,7 @@ static void *ish_boot_thread_entry(void *context) {
 #if defined(__APPLE__)
   pthread_setname_np("ish-linux-kernel");
 #endif
+  ISHLog("ish: entering guest Linux kernel");
   actuate_kernel("");
   return NULL; /* unreachable: actuate_kernel/run_kernel does not return */
 }
@@ -408,46 +423,36 @@ int ish_kernel_ensure_booted(void) {
   return atomic_load(&g_boot_result);
 }
 
-/* ish_kernel_ensure_booted() only starts the kernel's boot thread; it does
- * not (cannot, cheaply) know when the kernel has initialized far enough to
- * safely accept work (workqueue/IRQ plumbing, devpts mount, fakefs mount —
- * see the pinned app/LinuxRoot.c `ish_rootfs` initcall this bridge's own
- * DefaultRootPath() feeds). Rather than guess a fixed sleep, this probes
- * readiness with the exact mechanism a real session start would use
- * (`ish_sync_do_in_workqueue`), bounded by a timeout so a kernel that is
- * slow — or, in the worst case, stuck — fails the calling `ish` command
- * clearly instead of hanging it (and the UI thread behind it) forever.
- * Successful readiness is cached forever; a timeout is retried on the next
- * call, since a slow (not stuck) boot is the more likely real-world case. */
+/* Workqueue/IRQ submission is unsafe until kernel initialization reaches
+ * LinuxRoot.c's rootfs initcall: LinuxInterop.c traps if its host pipe has not
+ * yet been created by call_block_init. FsInitialize runs after the guest root
+ * is mounted, so it is the first safe readiness signal. */
 #define ISH_BOOT_READY_TIMEOUT_SECONDS 30
 
-static pthread_mutex_t g_ready_lock = PTHREAD_MUTEX_INITIALIZER;
-static int g_ready = 0;
-
 static int ish_wait_for_kernel_ready(void) {
-  pthread_mutex_lock(&g_ready_lock);
-  if (g_ready) {
-    pthread_mutex_unlock(&g_ready_lock);
-    return ISH_RUN_OK;
+  struct timespec deadline;
+  if (clock_gettime(CLOCK_REALTIME, &deadline) != 0) {
+    ISHLog("ish: could not read the clock while waiting for kernel startup");
+    return ISH_RUN_ERR_BOOT_TIMEOUT;
   }
-  pthread_mutex_unlock(&g_ready_lock);
+  deadline.tv_sec += ISH_BOOT_READY_TIMEOUT_SECONDS;
 
-  dispatch_semaphore_t probe_done = dispatch_semaphore_create(0);
-  dispatch_async(dispatch_get_global_queue(DISPATCH_QUEUE_PRIORITY_DEFAULT, 0), ^{
-    ish_sync_do_in_workqueue(^(void (^done)(void)) {
-      done();
-    });
-    dispatch_semaphore_signal(probe_done);
-  });
-  dispatch_time_t deadline = dispatch_time(DISPATCH_TIME_NOW, (int64_t) ISH_BOOT_READY_TIMEOUT_SECONDS * NSEC_PER_SEC);
-  long timed_out = dispatch_semaphore_wait(probe_done, deadline);
-  if (timed_out != 0) {
+  pthread_mutex_lock(&g_kernel_ready_lock);
+  int wait_status = 0;
+  while (!g_kernel_ready && !g_kernel_panicked && wait_status == 0) {
+    wait_status = pthread_cond_timedwait(&g_kernel_ready_cond, &g_kernel_ready_lock, &deadline);
+  }
+  int ready = g_kernel_ready;
+  int panicked = g_kernel_panicked;
+  pthread_mutex_unlock(&g_kernel_ready_lock);
+
+  if (panicked) {
+    return ISH_RUN_ERR_KERNEL_PANIC;
+  }
+  if (!ready) {
     ISHLog("ish: guest kernel was not ready to start a session within the boot timeout");
     return ISH_RUN_ERR_BOOT_TIMEOUT;
   }
-  pthread_mutex_lock(&g_ready_lock);
-  g_ready = 1;
-  pthread_mutex_unlock(&g_ready_lock);
   return ISH_RUN_OK;
 }
 

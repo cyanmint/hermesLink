@@ -70,6 +70,9 @@ int ish_main(int argc, char *argv[]) {
     case ISH_RUN_ERR_BOOT_TIMEOUT:
       fprintf(thread_stderr, "ish: the guest Linux kernel did not finish booting in time; try again\n");
       return 75;
+    case ISH_RUN_ERR_KERNEL_PANIC:
+      fprintf(thread_stderr, "ish: the guest Linux kernel panicked during startup (see diagnostics log)\n");
+      return 70;
     case ISH_RUN_ERR_SESSION_START_FAILED:
       fprintf(thread_stderr, "ish: failed to start a guest session\n");
       return 71;

@@ -34,6 +34,7 @@ typedef enum {
    * hermes/build/build-ish-static.sh produces are not part of a plain
    * checkout). See ISHBridge/ish_kernel_bridge_stub.m. */
   ISH_RUN_ERR_NOT_AVAILABLE = -6,
+  ISH_RUN_ERR_KERNEL_PANIC = -7,
   /* The guest session ended (its pty hung up) without ever emitting the
    * exit-status sentinel. The one expected cause is the command's last
    * action replacing the shell via exec(2), which — like any exec — leaves
