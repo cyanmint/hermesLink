@@ -203,6 +203,7 @@ class PackageIshFrameworkTests(unittest.TestCase):
         self.assertIn("_ish_configure_documents", source)
         self.assertNotIn("_ish_documents_configuration_is_current", source)
         self.assertIn("_ish_rootfs_prepare_fakefs", source)
+        self.assertIn("_ish_rootfs_write_documents_mount_script", source)
         self.assertIn("-framework SystemConfiguration", source)
         self.assertIn('-Wl,-force_load,"$LIB_DIR/libfakefs.a"', source)
         self.assertIn("-lresolv", source)
