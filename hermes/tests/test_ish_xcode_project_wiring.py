@@ -188,6 +188,8 @@ class IshNativeXcconfigTests(unittest.TestCase):
         self.assertIn("ish_rootfs_write_documents_mount_script", rootfs)
         profiles = (ISH_DIR / "ISHRootfsProfiles.m").read_text(encoding="utf-8")
         self.assertIn("ish_rootfs_write_documents_mount_script(", profiles)
+        bridge = (ISH_DIR / "ish_kernel_bridge.m").read_text(encoding="utf-8")
+        self.assertIn("ish_rootfs_write_documents_mount_script(", bridge)
         command = (ROOT / "Blink" / "Commands" / "ish.m").read_text(encoding="utf-8")
         self.assertIn("ISHDocumentsHostPath().UTF8String", command)
         self.assertNotIn("ish_mount_documents", (ROOT / "hermes" / "build" / "patch-ish-pty.py").read_text(encoding="utf-8"))

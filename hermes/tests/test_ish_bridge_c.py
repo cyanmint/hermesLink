@@ -266,6 +266,8 @@ class IshBridgeCTests(unittest.TestCase):
         content = script.read_text(encoding="utf-8")
         self.assertIn("O'\\''Brien'", content)
         self.assertIn("mount -t documentsfs -o mask=0022", content)
+        syntax = subprocess.run(["sh", "-n", str(script)], capture_output=True, text=True)
+        self.assertEqual(syntax.returncode, 0, syntax.stderr)
         with sqlite3.connect(root / "meta.db") as db:
             indexed = db.execute(
                 "SELECT 1 FROM paths WHERE CAST(path AS TEXT) = ?",
@@ -273,8 +275,10 @@ class IshBridgeCTests(unittest.TestCase):
             ).fetchone()
             self.assertIsNotNone(indexed)
 
-        repeat = self._run("documents-script", str(root), host_documents)
+        updated_path = "/private/var/mobile/Documents/New Folder"
+        repeat = self._run("documents-script", str(root), updated_path)
         self.assertEqual(repeat.stdout.strip(), b"0", repeat.stderr)
+        self.assertIn(updated_path, script.read_text(encoding="utf-8"))
 
     def test_incompatible_fakefs_schema_is_rejected_before_kernel_mount(self) -> None:
         import sqlite3

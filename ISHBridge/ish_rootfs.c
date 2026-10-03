@@ -435,13 +435,10 @@ int ish_rootfs_write_documents_mount_script(const char *root,
     return ISH_ROOTFS_ERR_DEST;
   }
 
-  char data_path[PATH_MAX];
   char database_path[PATH_MAX];
-  int data_path_length = snprintf(data_path, sizeof(data_path), "%s/data", root);
   int database_path_length = snprintf(database_path, sizeof(database_path),
                                       "%s/meta.db", root);
-  if (data_path_length < 0 || (size_t) data_path_length >= sizeof(data_path) ||
-      database_path_length < 0 ||
+  if (database_path_length < 0 ||
       (size_t) database_path_length >= sizeof(database_path)) {
     return ISH_ROOTFS_ERR_DEST;
   }
@@ -452,32 +449,14 @@ int ish_rootfs_write_documents_mount_script(const char *root,
   }
   int data_fd = openat(root_fd, "data", O_RDONLY | O_DIRECTORY | O_NOFOLLOW);
   close(root_fd);
-  if (data_fd < 0 || !ish_fakefs_database_is_valid(database_path)) {
+  struct stat database_stat;
+  if (data_fd < 0 ||
+      lstat(database_path, &database_stat) != 0 ||
+      !S_ISREG(database_stat.st_mode) || database_stat.st_size == 0) {
     if (data_fd >= 0) {
       close(data_fd);
     }
     return ISH_ROOTFS_ERR_FORMAT;
-  }
-
-  int existing_fd = openat(data_fd, "mount-documents.sh",
-                            O_RDONLY | O_NOFOLLOW | O_NONBLOCK);
-  if (existing_fd >= 0) {
-    struct stat existing_stat;
-    char existing_script[sizeof(script)];
-    ssize_t bytes_read = read(existing_fd, existing_script, sizeof(existing_script));
-    int unchanged = fstat(existing_fd, &existing_stat) == 0 &&
-        S_ISREG(existing_stat.st_mode) &&
-        (existing_stat.st_mode & 0111) != 0 &&
-        bytes_read == script_length &&
-        memcmp(existing_script, script, (size_t) script_length) == 0;
-    close(existing_fd);
-    if (unchanged) {
-      close(data_fd);
-      return ISH_ROOTFS_OK;
-    }
-  } else if (errno != ENOENT && errno != ELOOP) {
-    close(data_fd);
-    return ISH_ROOTFS_ERR_IO;
   }
 
   char temporary_name[96];
