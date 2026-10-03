@@ -428,7 +428,8 @@ int ish_rootfs_prepare_fakefs(const char *root) {
   if (root_fd < 0) {
     return ISH_ROOTFS_ERR_DEST;
   }
-  if (snprintf(database_path, sizeof(database_path), "/dev/fd/%d/meta.db", root_fd) >=
+  /* SQLite needs a native path; /dev/fd/<dirfd>/meta.db is not portable on Darwin. */
+  if (snprintf(database_path, sizeof(database_path), "%s/meta.db", root) >=
           (int) sizeof(database_path)) {
     errno = ENAMETOOLONG;
     close(root_fd);
