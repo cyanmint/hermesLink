@@ -168,6 +168,12 @@ static void ish_network_reachability_changed(SCNetworkReachabilityRef target,
   (void) target;
   (void) flags;
   (void) context;
+  pthread_mutex_lock(&g_kernel_ready_lock);
+  int kernel_ready = g_kernel_ready;
+  pthread_mutex_unlock(&g_kernel_ready_lock);
+  if (!kernel_ready) {
+    return;
+  }
   async_do_in_workqueue(^{
     ish_configure_guest_dns();
   });
@@ -192,7 +198,9 @@ static void ish_start_network_monitor(void) {
       g_network_reachability = NULL;
     }
     ISHLog("ish: could not start iOS network reachability monitoring");
+    return;
   }
+  ish_network_reachability_changed(g_network_reachability, 0, NULL);
 }
 
 #pragma mark - Diagnostics (ReportPanic / ConsoleLog)
@@ -413,15 +421,17 @@ const char *DefaultRootPath(void) {
 void FsInitialize(void) {
   /* Upstream's CurrentRoot.m only performs app-specific version and
    * repository bookkeeping here; HermesLink owns rootfs provisioning. */
-  ish_configure_guest_dns();
-  async_do_in_ios(^{
-    ish_start_network_monitor();
-  });
   pthread_mutex_lock(&g_kernel_ready_lock);
   g_kernel_ready = 1;
   pthread_cond_broadcast(&g_kernel_ready_cond);
   pthread_mutex_unlock(&g_kernel_ready_lock);
   ISHLog("ish: guest root filesystem mounted; kernel workqueue is ready");
+  /* Don't perform guest filesystem I/O inside the rootfs initcall. Apart from
+   * delaying readiness, a slow host-backed file operation here prevents the
+   * kernel from returning to its scheduler to run queued work. */
+  async_do_in_ios(^{
+    ish_start_network_monitor();
+  });
 }
 
 static NSString *ISHRootfsStorageDirectory(void) {

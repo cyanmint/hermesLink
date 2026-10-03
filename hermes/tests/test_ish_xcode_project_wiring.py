@@ -223,9 +223,19 @@ class IshNativeXcconfigTests(unittest.TestCase):
         readiness = source.split("static int ish_wait_for_kernel_ready(void)", 1)[1].split("\n}", 1)[0]
         self.assertIn("g_kernel_ready = 1", fs_initialize)
         self.assertIn("pthread_cond_broadcast(&g_kernel_ready_cond)", fs_initialize)
+        self.assertLess(
+            fs_initialize.index("g_kernel_ready = 1"),
+            fs_initialize.index("async_do_in_ios"),
+        )
+        self.assertNotIn("ish_configure_guest_dns();", fs_initialize)
         self.assertIn("pthread_cond_timedwait", readiness)
         self.assertNotIn("ish_sync_do_in_workqueue", readiness)
         self.assertIn("g_kernel_panicked", readiness)
+        network_callback = source.split(
+            "static void ish_network_reachability_changed", 1
+        )[1].split("\n}", 1)[0]
+        self.assertIn("async_do_in_workqueue", network_callback)
+        self.assertIn("ish_configure_guest_dns();", network_callback)
 
     def test_profile_management_preserves_legacy_rootfs_and_blocks_unsafe_names(self) -> None:
         source = (ISH_DIR / "ISHRootfsProfiles.m").read_text(encoding="utf-8")
