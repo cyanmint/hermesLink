@@ -11,6 +11,8 @@ Under the project's stated attribution policy, AI-generated content has no copyr
 - `.github/workflows/build.yml`
 - `Blink/Commands/hermes.m`
 - `Blink/Commands/ish.m`
+- `ISHBridge/ISHRootfsProfiles.h`
+- `ISHBridge/ISHRootfsProfiles.m`
 - `ISHBridge/ish_exit_protocol.c`
 - `ISHBridge/ish_exit_protocol.h`
 - `ISHBridge/ish_kernel_bridge.h`
