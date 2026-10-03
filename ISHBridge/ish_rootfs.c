@@ -398,6 +398,157 @@ static int ish_fakefs_database_is_valid(const char *database_path) {
   return valid;
 }
 
+int ish_rootfs_write_documents_mount_script(const char *root,
+                                            const char *host_documents_path) {
+  if (root == NULL || root[0] == '\0' || host_documents_path == NULL ||
+      host_documents_path[0] != '/' || strlen(host_documents_path) >= 1024) {
+    return ISH_ROOTFS_ERR_DEST;
+  }
+
+  size_t quoted_capacity = strlen(host_documents_path) * 4 + 3;
+  char *quoted_path = malloc(quoted_capacity);
+  if (quoted_path == NULL) {
+    return ISH_ROOTFS_ERR_IO;
+  }
+  size_t quoted_length = 0;
+  quoted_path[quoted_length++] = '\'';
+  for (const char *cursor = host_documents_path; *cursor != '\0'; cursor++) {
+    if (*cursor == '\'') {
+      memcpy(quoted_path + quoted_length, "'\\''", 4);
+      quoted_length += 4;
+    } else {
+      quoted_path[quoted_length++] = *cursor;
+    }
+  }
+  quoted_path[quoted_length++] = '\'';
+  quoted_path[quoted_length] = '\0';
+
+  char script[8192];
+  int script_length = snprintf(script, sizeof(script),
+      "#!/bin/sh\n"
+      "set -eu\n"
+      "mkdir -p /mnt/documents\n"
+      "mount -t documentsfs -o mask=0022 %s /mnt/documents\n",
+      quoted_path);
+  free(quoted_path);
+  if (script_length < 0 || (size_t) script_length >= sizeof(script)) {
+    return ISH_ROOTFS_ERR_DEST;
+  }
+
+  char data_path[PATH_MAX];
+  char database_path[PATH_MAX];
+  int data_path_length = snprintf(data_path, sizeof(data_path), "%s/data", root);
+  int database_path_length = snprintf(database_path, sizeof(database_path),
+                                      "%s/meta.db", root);
+  if (data_path_length < 0 || (size_t) data_path_length >= sizeof(data_path) ||
+      database_path_length < 0 ||
+      (size_t) database_path_length >= sizeof(database_path)) {
+    return ISH_ROOTFS_ERR_DEST;
+  }
+
+  int root_fd = open(root, O_RDONLY | O_DIRECTORY | O_NOFOLLOW);
+  if (root_fd < 0) {
+    return ISH_ROOTFS_ERR_DEST;
+  }
+  int data_fd = openat(root_fd, "data", O_RDONLY | O_DIRECTORY | O_NOFOLLOW);
+  close(root_fd);
+  if (data_fd < 0 || !ish_fakefs_database_is_valid(database_path)) {
+    if (data_fd >= 0) {
+      close(data_fd);
+    }
+    return ISH_ROOTFS_ERR_FORMAT;
+  }
+
+  int existing_fd = openat(data_fd, "mount-documents.sh",
+                            O_RDONLY | O_NOFOLLOW | O_NONBLOCK);
+  if (existing_fd >= 0) {
+    struct stat existing_stat;
+    char existing_script[sizeof(script)];
+    ssize_t bytes_read = read(existing_fd, existing_script, sizeof(existing_script));
+    int unchanged = fstat(existing_fd, &existing_stat) == 0 &&
+        S_ISREG(existing_stat.st_mode) &&
+        (existing_stat.st_mode & 0111) != 0 &&
+        bytes_read == script_length &&
+        memcmp(existing_script, script, (size_t) script_length) == 0;
+    close(existing_fd);
+    if (unchanged) {
+      close(data_fd);
+      return ISH_ROOTFS_OK;
+    }
+  } else if (errno != ENOENT && errno != ELOOP) {
+    close(data_fd);
+    return ISH_ROOTFS_ERR_IO;
+  }
+
+  char temporary_name[96];
+  int temporary_length = snprintf(temporary_name, sizeof(temporary_name),
+                                  ".mount-documents-%ld.tmp", (long) getpid());
+  if (temporary_length < 0 ||
+      (size_t) temporary_length >= sizeof(temporary_name)) {
+    close(data_fd);
+    return ISH_ROOTFS_ERR_DEST;
+  }
+  int script_fd = openat(data_fd, temporary_name,
+                         O_WRONLY | O_CREAT | O_EXCL | O_NOFOLLOW, 0700);
+  if (script_fd < 0) {
+    close(data_fd);
+    return ISH_ROOTFS_ERR_IO;
+  }
+  size_t written = 0;
+  while (written < (size_t) script_length) {
+    ssize_t count = write(script_fd, script + written,
+                          (size_t) script_length - written);
+    if (count < 0 && errno == EINTR) {
+      continue;
+    }
+    if (count <= 0) {
+      close(script_fd);
+      unlinkat(data_fd, temporary_name, 0);
+      close(data_fd);
+      return ISH_ROOTFS_ERR_IO;
+    }
+    written += (size_t) count;
+  }
+  if (fchmod(script_fd, 0755) != 0 || fsync(script_fd) != 0) {
+    close(script_fd);
+    unlinkat(data_fd, temporary_name, 0);
+    close(data_fd);
+    return ISH_ROOTFS_ERR_IO;
+  }
+  if (close(script_fd) != 0 ||
+      renameat(data_fd, temporary_name, data_fd, "mount-documents.sh") != 0) {
+    unlinkat(data_fd, temporary_name, 0);
+    close(data_fd);
+    return ISH_ROOTFS_ERR_IO;
+  }
+
+  sqlite3 *db = NULL;
+  sqlite3_stmt *insert_stat = NULL;
+  sqlite3_stmt *insert_path = NULL;
+  int result = ISH_ROOTFS_ERR_IO;
+  if (sqlite3_open_v2(database_path, &db, SQLITE_OPEN_READWRITE, NULL) != SQLITE_OK ||
+      ish_fakefs_exec(db, "BEGIN IMMEDIATE;") != 0 ||
+      sqlite3_prepare_v2(db, "INSERT INTO stats (stat) VALUES (?)", -1,
+                         &insert_stat, NULL) != SQLITE_OK ||
+      sqlite3_prepare_v2(db,
+          "INSERT OR REPLACE INTO paths (path, inode) VALUES (?, ?)", -1,
+          &insert_path, NULL) != SQLITE_OK ||
+      ish_fakefs_store_path(db, insert_stat, insert_path,
+                            "mount-documents.sh", S_IFREG | 0755) != 0 ||
+      ish_fakefs_exec(db, "COMMIT;") != 0) {
+    if (db != NULL) {
+      ish_fakefs_exec(db, "ROLLBACK;");
+    }
+  } else {
+    result = ISH_ROOTFS_OK;
+  }
+  sqlite3_finalize(insert_stat);
+  sqlite3_finalize(insert_path);
+  sqlite3_close(db);
+  close(data_fd);
+  return result;
+}
+
 static int ish_fakefs_move_entries(int root_fd, int data_fd,
                                    const char *temporary_data_name,
                                    const char *temporary_database_name) {

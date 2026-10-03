@@ -55,6 +55,11 @@ int ish_rootfs_extract(const char *archive_path, const char *dest_root);
  * `bin/busybox`, `etc/alpine-release`, and `sbin/init` entries. */
 int ish_rootfs_prepare_fakefs(const char *root);
 
+/* Writes an executable guest-side Documents mount helper into a prepared
+ * fakefs root and indexes it in meta.db. */
+int ish_rootfs_write_documents_mount_script(const char *root,
+                                            const char *host_documents_path);
+
 #ifdef __cplusplus
 }
 #endif

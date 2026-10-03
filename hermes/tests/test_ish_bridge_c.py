@@ -244,6 +244,38 @@ class IshBridgeCTests(unittest.TestCase):
         self.assertEqual(second.stdout.strip(), b"0", second.stderr)
         self.assertEqual((root / "data/bin/busybox").read_bytes(), b"busybox")
 
+    def test_documents_mount_script_is_generated_and_indexed_in_fakefs(self) -> None:
+        import sqlite3
+
+        root = self.build_dir / "documents-script-root"
+        (root / "bin").mkdir(parents=True)
+        (root / "etc").mkdir()
+        (root / "sbin").mkdir()
+        (root / "bin/busybox").write_bytes(b"busybox")
+        (root / "etc/alpine-release").write_text("3.21.3\n", encoding="utf-8")
+        (root / "sbin/init").symlink_to("../bin/busybox")
+        os.chmod(root / "bin/busybox", 0o755)
+        self.assertEqual(self._run("fakefsify", str(root)).stdout.strip(), b"0")
+
+        host_documents = "/private/var/mobile/Documents/O'Brien"
+        result = self._run("documents-script", str(root), host_documents)
+
+        script = (root / "data/mount-documents.sh")
+        self.assertEqual(result.stdout.strip(), b"0", result.stderr)
+        self.assertTrue(stat.S_IMODE(script.stat().st_mode) & 0o111)
+        content = script.read_text(encoding="utf-8")
+        self.assertIn("O'\\''Brien'", content)
+        self.assertIn("mount -t documentsfs -o mask=0022", content)
+        with sqlite3.connect(root / "meta.db") as db:
+            indexed = db.execute(
+                "SELECT 1 FROM paths WHERE CAST(path AS TEXT) = ?",
+                ("/mount-documents.sh",),
+            ).fetchone()
+            self.assertIsNotNone(indexed)
+
+        repeat = self._run("documents-script", str(root), host_documents)
+        self.assertEqual(repeat.stdout.strip(), b"0", repeat.stderr)
+
     def test_incompatible_fakefs_schema_is_rejected_before_kernel_mount(self) -> None:
         import sqlite3
 

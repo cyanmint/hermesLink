@@ -97,6 +97,17 @@ static int cmd_fakefsify(int argc, char **argv) {
   return 0;
 }
 
+static int cmd_documents_script(int argc, char **argv) {
+  if (argc != 4) {
+    fprintf(stderr, "usage: %s documents-script <rootfs-dir> <host-documents-path>\n",
+            argv[0]);
+    return 2;
+  }
+  int status = ish_rootfs_write_documents_mount_script(argv[2], argv[3]);
+  printf("%d\n", status);
+  return 0;
+}
+
 static int cmd_wrap(int argc, char **argv) {
   (void) argc;
   (void) argv;
@@ -179,6 +190,9 @@ int main(int argc, char **argv) {
   }
   if (strcmp(argv[1], "fakefsify") == 0) {
     return cmd_fakefsify(argc, argv);
+  }
+  if (strcmp(argv[1], "documents-script") == 0) {
+    return cmd_documents_script(argc, argv);
   }
   if (strcmp(argv[1], "wrap") == 0) {
     return cmd_wrap(argc, argv);

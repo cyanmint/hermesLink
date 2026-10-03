@@ -38,8 +38,6 @@ static pthread_cond_t g_kernel_ready_cond = PTHREAD_COND_INITIALIZER;
 static int g_kernel_ready;
 static int g_kernel_panicked;
 static char g_documents_host_path[1024];
-static char g_documents_guest_mount_path[256] = "/mnt/documents";
-static unsigned int g_documents_mount_mask = 0022;
 
 static void ISHLog(const char *message) {
   pthread_mutex_lock(&g_configuration_lock);
@@ -68,39 +66,10 @@ int ish_configure(const char *root_path, ish_log_handler log_handler) {
   return ISH_RUN_OK;
 }
 
-static int ish_valid_documents_guest_path(const char *path) {
-  if (path == NULL || strncmp(path, "/mnt/", 5) != 0 ||
-      path[5] == '\0' || strlen(path) >= sizeof(g_documents_guest_mount_path) ||
-      path[strlen(path) - 1] == '/' || strstr(path, "//") != NULL) {
-    return 0;
-  }
-  const char *component = path;
-  for (const char *cursor = path; ; cursor++) {
-    unsigned char character = (unsigned char) *cursor;
-    if (character < 0x20 || character == 0x7f) {
-      return 0;
-    }
-    if (character == '/' || character == '\0') {
-      size_t length = (size_t) (cursor - component);
-      if ((length == 1 && component[0] == '.') ||
-          (length == 2 && component[0] == '.' && component[1] == '.')) {
-        return 0;
-      }
-      if (character == '\0') {
-        break;
-      }
-      component = cursor + 1;
-    }
-  }
-  return 1;
-}
-
-int ish_configure_documents(const char *host_path, const char *guest_mount_path,
-                            unsigned int mask) {
-  if (host_path == NULL || guest_mount_path == NULL || mask > 0777 ||
+int ish_configure_documents(const char *host_path) {
+  if (host_path == NULL ||
       strlen(host_path) >= sizeof(g_documents_host_path) ||
-      (host_path[0] != '\0' && host_path[0] != '/') ||
-      !ish_valid_documents_guest_path(guest_mount_path)) {
+      host_path[0] != '/') {
     return ISH_RUN_ERR_INVALID_ARGUMENT;
   }
   pthread_mutex_lock(&g_configuration_lock);
@@ -109,38 +78,8 @@ int ish_configure_documents(const char *host_path, const char *guest_mount_path,
     return ISH_RUN_OK;
   }
   strlcpy(g_documents_host_path, host_path, sizeof(g_documents_host_path));
-  strlcpy(g_documents_guest_mount_path, guest_mount_path,
-          sizeof(g_documents_guest_mount_path));
-  g_documents_mount_mask = mask;
   pthread_mutex_unlock(&g_configuration_lock);
   return ISH_RUN_OK;
-}
-
-int ish_documents_configuration_is_current(const char *host_path,
-                                           const char *guest_mount_path,
-                                           unsigned int mask) {
-  if (host_path == NULL || guest_mount_path == NULL) {
-    return 0;
-  }
-  pthread_mutex_lock(&g_configuration_lock);
-  int configuration_matches = !g_boot_started ||
-      (strcmp(g_documents_host_path, host_path) == 0 &&
-       strcmp(g_documents_guest_mount_path, guest_mount_path) == 0 &&
-       g_documents_mount_mask == mask);
-  pthread_mutex_unlock(&g_configuration_lock);
-  return configuration_matches;
-}
-
-const char *DefaultDocumentsPath(void) {
-  return g_documents_host_path;
-}
-
-const char *DefaultDocumentsMountPath(void) {
-  return g_documents_guest_mount_path;
-}
-
-unsigned int DefaultDocumentsMask(void) {
-  return g_documents_mount_mask;
 }
 
 #pragma mark - sync_do_in_workqueue
@@ -608,13 +547,19 @@ static int ISHPrepareRootfsIfNeeded(void) {
   if (ISHRootfsIsProvisioned(root)) {
     int validation = ish_rootfs_prepare_fakefs(root.fileSystemRepresentation);
     if (validation == ISH_ROOTFS_OK) {
-      return ISH_RUN_OK;
+      validation = ish_rootfs_write_documents_mount_script(
+          root.fileSystemRepresentation, g_documents_host_path);
+      return validation == ISH_ROOTFS_OK ? ISH_RUN_OK : ISH_RUN_ERR_ROOTFS_EXTRACT_FAILED;
     }
     ISHLog("ish: the selected rootfs fakefs database is invalid; remove and recreate the profile");
     return ISH_RUN_ERR_ROOTFS_EXTRACT_FAILED;
   }
   if (ISHRootfsHasRawMarkers(root)) {
     int conversion = ish_rootfs_prepare_fakefs(root.fileSystemRepresentation);
+    if (conversion == ISH_ROOTFS_OK) {
+      conversion = ish_rootfs_write_documents_mount_script(
+          root.fileSystemRepresentation, g_documents_host_path);
+    }
     if (conversion == ISH_ROOTFS_OK && ISHRootfsIsProvisioned(root)) {
       return ISH_RUN_OK;
     }
@@ -654,6 +599,10 @@ static int ISHPrepareRootfsIfNeeded(void) {
   int status = ish_rootfs_extract(archivePath.fileSystemRepresentation, root.fileSystemRepresentation);
   if (status == ISH_ROOTFS_OK) {
     status = ish_rootfs_prepare_fakefs(root.fileSystemRepresentation);
+  }
+  if (status == ISH_ROOTFS_OK) {
+    status = ish_rootfs_write_documents_mount_script(
+        root.fileSystemRepresentation, g_documents_host_path);
   }
   if (status != ISH_ROOTFS_OK) {
     char message[256];

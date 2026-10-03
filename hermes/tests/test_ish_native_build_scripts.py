@@ -78,7 +78,7 @@ class BuildIshStaticScriptTests(unittest.TestCase):
             )
             interop_path.write_text(patcher.SESSION_TTY + "\n", encoding="utf-8")
             root_path.write_text(
-                patcher.ROOT_DOCUMENTS_DECLARATION + "\n"
+                "void FsInitialize(void);\n"
                 "static __init int ish_rootfs(void) {\n"
                 "    init_chroot(\".\");\n\n"
                 "    FsInitialize();\n" +
@@ -110,15 +110,8 @@ class BuildIshStaticScriptTests(unittest.TestCase):
             patched_root.index("rootfs_initcall(ish_rootfs);"),
             patched_root.index("late_initcall(ish_session_ready);"),
         )
-        self.assertLess(
-            patched_root.index("init_chroot(\".\");"),
-            patched_root.index("ish_mount_documents();"),
-        )
-        self.assertLess(
-            patched_root.index("ish_mount_documents();"),
-            patched_root.index("FsInitialize();"),
-        )
-        self.assertIn("DefaultDocumentsMask()", patched_root)
+        self.assertNotIn("ish_mount_documents", patched_root)
+        self.assertNotIn("do_mount(source, point, \"documentsfs\"", patched_root)
 
     def test_documents_filesystem_patch_adds_source_to_pinned_meson_build(self) -> None:
         spec = importlib.util.spec_from_file_location(
@@ -208,7 +201,7 @@ class PackageIshFrameworkTests(unittest.TestCase):
         self.assertIn("@rpath/Ish.framework/Ish", source)
         self.assertIn("_ish_run_command", source)
         self.assertIn("_ish_configure_documents", source)
-        self.assertIn("_ish_documents_configuration_is_current", source)
+        self.assertNotIn("_ish_documents_configuration_is_current", source)
         self.assertIn("_ish_rootfs_prepare_fakefs", source)
         self.assertIn("-framework SystemConfiguration", source)
         self.assertIn('-Wl,-force_load,"$LIB_DIR/libfakefs.a"', source)

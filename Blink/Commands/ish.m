@@ -26,22 +26,7 @@ extern void HermesLinkAppendLog(const char *message);
  * command (correct $?, live interactive I/O, Ctrl-C/Ctrl-D passthrough via
  * the normal ios_system signal/EOF path on thread_stdin). */
 static int ish_configure_documents_for_command(void) {
-  NSString *documentsPath = ISHDocumentsAutoMountEnabled()
-      ? ISHDocumentsHostPath() : @"";
-  int status = ish_configure_documents(documentsPath.UTF8String,
-                                       ISHDocumentsGuestMountPath().UTF8String,
-                                       (unsigned int) ISHDocumentsMountMask());
-  if (status == ISH_RUN_OK) {
-    return status;
-  }
-
-  fprintf(thread_stderr,
-          "ish: invalid Documents mount settings; resetting to safe defaults\n");
-  status = ish_configure_documents("", "/mnt/documents", 0022);
-  if (status == ISH_RUN_OK) {
-    ISHDocumentsMountConfigure(NO, @"/mnt/documents", 0022, NULL);
-  }
-  return status;
+  return ish_configure_documents(ISHDocumentsHostPath().UTF8String);
 }
 
 __attribute__((visibility("default")))

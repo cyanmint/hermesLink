@@ -12,47 +12,6 @@ from pathlib import Path
 PTY_SOURCE = Path("app/LinuxPTY.c")
 INTEROP_SOURCE = Path("app/LinuxInterop.c")
 ROOT_SOURCE = Path("app/LinuxRoot.c")
-ROOT_DOCUMENTS_DECLARATION = "void FsInitialize(void);"
-ROOT_DOCUMENTS_DECLARATION_PATCHED = """void FsInitialize(void);
-const char *DefaultDocumentsPath(void);
-const char *DefaultDocumentsMountPath(void);
-unsigned int DefaultDocumentsMask(void);
-
-static __init void ish_mount_documents(void) {
-    const char *source = DefaultDocumentsPath();
-    const char *point = DefaultDocumentsMountPath();
-    if (source == NULL || source[0] == '\\0' ||
-        point == NULL || point[0] != '/' || point[1] == '\\0')
-        return;
-
-    char mountpoint[256];
-    strlcpy(mountpoint, point, sizeof(mountpoint));
-    int err;
-    for (char *cursor = mountpoint + 1; ; cursor++) {
-        if (*cursor != '/' && *cursor != '\\0')
-            continue;
-        char separator = *cursor;
-        *cursor = '\\0';
-        err = init_mkdir(mountpoint, 0755);
-        *cursor = separator;
-        if (err < 0 && err != -EEXIST) {
-            pr_warn("ish: could not create Documents mount point %s: %s\\n",
-                    mountpoint, errname(err));
-            return;
-        }
-        if (separator == '\\0')
-            break;
-    }
-
-    char options[32];
-    snprintf(options, sizeof(options), "mask=%04o", DefaultDocumentsMask() & 0777);
-    err = do_mount(source, point, "documentsfs", MS_SILENT, options);
-    if (err < 0)
-        pr_warn("ish: could not mount Documents at %s: %s\\n",
-                point, errname(err));
-}"""
-ROOT_MOUNT_CALL = '    init_chroot(".");\n\n    FsInitialize();'
-ROOT_MOUNT_CALL_PATCHED = '    init_chroot(".");\n    ish_mount_documents();\n\n    FsInitialize();'
 PTY_PATH_DECLARATION = "static struct path ptmx_path;"
 PTY_PATH_DECLARATION_PATCHED = """static struct path ptmx_path;
 static int ios_pty_ensure_initialized(void);"""
@@ -152,15 +111,6 @@ def patch(source_root: Path) -> None:
     pty = pty_path.read_text(encoding="utf-8")
     interop = interop_path.read_text(encoding="utf-8")
     root = root_path.read_text(encoding="utf-8")
-    if ROOT_DOCUMENTS_DECLARATION_PATCHED not in root:
-        if root.count(ROOT_DOCUMENTS_DECLARATION) != 1:
-            raise ValueError(f"unexpected pinned source layout in {ROOT_SOURCE}")
-        root = root.replace(
-            ROOT_DOCUMENTS_DECLARATION,
-            ROOT_DOCUMENTS_DECLARATION_PATCHED,
-            1,
-        )
-    root = replace_once(root, ROOT_MOUNT_CALL, ROOT_MOUNT_CALL_PATCHED, ROOT_SOURCE)
     root = replace_once(root, ROOTFS_INITCALL, ROOTFS_INITCALL_PATCHED, ROOT_SOURCE)
     if PTY_PATH_DECLARATION_PATCHED not in pty:
         if pty.count(PTY_PATH_DECLARATION) != 1:

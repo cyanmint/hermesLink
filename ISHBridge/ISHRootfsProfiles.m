@@ -11,9 +11,6 @@
 
 static NSString *const ISHDefaultProfileName = @"Alpine";
 static NSString *const ISHActiveProfileDefaultsKey = @"HermesLinkISHActiveProfile";
-static NSString *const ISHDocumentsAutoMountDefaultsKey = @"HermesLinkISHDocumentsAutoMount";
-static NSString *const ISHDocumentsMountPathDefaultsKey = @"HermesLinkISHDocumentsMountPath";
-static NSString *const ISHDocumentsMountMaskDefaultsKey = @"HermesLinkISHDocumentsMountMask";
 static NSString *const ISHProfilesErrorDomain = @"com.hermeslink.ish-rootfs";
 static NSRecursiveLock *ISHProfilesLock;
 
@@ -26,73 +23,9 @@ static NSString *ISHDocumentsRoot(void) {
 }
 
 static BOOL ISHSetError(NSError **error, NSInteger code, NSString *message);
-static BOOL ISHValidDocumentsGuestMountPath(NSString *path);
 
 NSString *ISHDocumentsHostPath(void) {
   return BlinkPaths.documentsPath;
-}
-
-BOOL ISHDocumentsAutoMountEnabled(void) {
-  return [NSUserDefaults.standardUserDefaults boolForKey:ISHDocumentsAutoMountDefaultsKey];
-}
-
-NSString *ISHDocumentsGuestMountPath(void) {
-  NSString *path = [NSUserDefaults.standardUserDefaults
-      stringForKey:ISHDocumentsMountPathDefaultsKey];
-  return ISHValidDocumentsGuestMountPath(path) ? path : @"/mnt/documents";
-}
-
-NSUInteger ISHDocumentsMountMask(void) {
-  NSNumber *mask = [NSUserDefaults.standardUserDefaults
-      objectForKey:ISHDocumentsMountMaskDefaultsKey];
-  return mask != nil && mask.unsignedIntegerValue <= 0777
-      ? mask.unsignedIntegerValue : 0022;
-}
-
-static BOOL ISHValidDocumentsGuestMountPath(NSString *path) {
-  const char *utf8Path = path.UTF8String;
-  if (![path isKindOfClass:NSString.class] || path.length < 2 ||
-      utf8Path == NULL || strlen(utf8Path) > 255 ||
-      ![path hasPrefix:@"/mnt/"] || [path hasSuffix:@"/"] ||
-      [path containsString:@"//"]) {
-    return NO;
-  }
-  for (NSString *component in [path componentsSeparatedByString:@"/"]) {
-    if ([component isEqualToString:@"."] || [component isEqualToString:@".."] ||
-        component.length > 255) {
-      return NO;
-    }
-    for (NSUInteger index = 0; index < component.length; index++) {
-      unichar character = [component characterAtIndex:index];
-      if (character < 0x20 || character == 0x7f) {
-        return NO;
-      }
-    }
-  }
-  return YES;
-}
-
-BOOL ISHDocumentsMountConfigure(BOOL enabled, NSString *guestPath,
-                               NSUInteger mask, NSError **error) {
-  if (!ISHValidDocumentsGuestMountPath(guestPath) || mask > 0777) {
-    return ISHSetError(error, 11,
-        @"Use a mount path below /mnt and a permission mask from 0000 to 0777.");
-  }
-  NSUserDefaults *defaults = NSUserDefaults.standardUserDefaults;
-  [defaults setBool:enabled forKey:ISHDocumentsAutoMountDefaultsKey];
-  [defaults setObject:guestPath forKey:ISHDocumentsMountPathDefaultsKey];
-  [defaults setObject:@(mask) forKey:ISHDocumentsMountMaskDefaultsKey];
-  return YES;
-}
-
-BOOL ISHDocumentsMountConfigurationIsCurrent(BOOL enabled, NSString *guestPath,
-                                             NSUInteger mask) {
-  NSString *hostPath = enabled ? ISHDocumentsHostPath() : @"";
-  const char *hostPathCString = hostPath.UTF8String;
-  const char *guestPathCString = guestPath.UTF8String;
-  return hostPathCString != NULL && guestPathCString != NULL &&
-      ish_documents_configuration_is_current(
-          hostPathCString, guestPathCString, (unsigned int) mask) != 0;
 }
 
 static NSString *ISHLegacyProfilesRoot(void) {
@@ -535,6 +468,16 @@ BOOL ISHRootfsImportProfile(NSString *name, NSURL *sourceURL, NSError **error) {
       success = NO;
       underlying = ISHProfilesError(status,
           [NSString stringWithFormat:@"Could not prepare the rootfs for iSH (status %d).", status]);
+    }
+  }
+  if (success) {
+    int status = ish_rootfs_write_documents_mount_script(
+        staging.fileSystemRepresentation,
+        ISHDocumentsHostPath().fileSystemRepresentation);
+    if (status != ISH_ROOTFS_OK) {
+      success = NO;
+      underlying = ISHProfilesError(status,
+          [NSString stringWithFormat:@"Could not install /mount-documents.sh (status %d).", status]);
     }
   }
   if (success) {

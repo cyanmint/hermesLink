@@ -174,29 +174,25 @@ class IshNativeXcconfigTests(unittest.TestCase):
         source = (ISH_DIR / "ish_kernel_bridge.m").read_text(encoding="utf-8")
         self.assertIn("void FsInitialize(void)", source)
         self.assertIn("int ish_configure(const char *root_path, ish_log_handler log_handler)", source)
-        self.assertIn("int ish_documents_configuration_is_current", source)
+        self.assertIn("int ish_configure_documents(const char *host_path)", source)
         self.assertIn("if (g_boot_started) {", source)
         self.assertIn("return ISH_RUN_OK;", source)
         self.assertNotIn("#import <BlinkConfig/BlinkPaths.h>", source)
         self.assertNotIn("extern void HermesLinkAppendLog", source)
 
-    def test_documents_settings_restart_notice_tracks_live_kernel_configuration(self) -> None:
+    def test_documents_mount_is_manual_and_script_is_written_for_profiles(self) -> None:
         view = (ROOT / "Settings" / "ISHRootfsSettingsView.swift").read_text(encoding="utf-8")
-        self.assertIn("restartRequired = !documentsConfigurationIsCurrent()", view)
-        self.assertIn("ISHDocumentsMountConfigurationIsCurrent(", view)
-        profiles_header = (ISH_DIR / "ISHRootfsProfiles.h").read_text(encoding="utf-8")
-        self.assertIn("ISHDocumentsMountConfigurationIsCurrent(", profiles_header)
+        self.assertIn("Run /mount-documents.sh inside iSH", view)
+        self.assertNotIn("Automatically mount Documents", view)
+        rootfs = (ISH_DIR / "ish_rootfs.c").read_text(encoding="utf-8")
+        self.assertIn("ish_rootfs_write_documents_mount_script", rootfs)
+        profiles = (ISH_DIR / "ISHRootfsProfiles.m").read_text(encoding="utf-8")
+        self.assertIn("ish_rootfs_write_documents_mount_script(", profiles)
         command = (ROOT / "Blink" / "Commands" / "ish.m").read_text(encoding="utf-8")
-        self.assertNotIn("Documents mount settings changed after the kernel started", command)
-
-    def test_invalid_documents_mount_settings_fall_back_and_reset_saved_preferences(self) -> None:
-        command = (ROOT / "Blink" / "Commands" / "ish.m").read_text(encoding="utf-8")
-        configure = command.split(
-            "static int ish_configure_documents_for_command(void)", 1
-        )[1].split("\n}", 1)[0]
-        self.assertIn('ish_configure_documents("", "/mnt/documents", 0022)', configure)
-        self.assertIn('ISHDocumentsMountConfigure(NO, @"/mnt/documents", 0022, NULL)', configure)
-        self.assertIn("ish_configure_documents_for_command()", command)
+        self.assertIn("ISHDocumentsHostPath().UTF8String", command)
+        self.assertNotIn("ish_mount_documents", (ROOT / "hermes" / "build" / "patch-ish-pty.py").read_text(encoding="utf-8"))
+        command = (ROOT / "Blink" / "Commands" / "ishfs.m").read_text(encoding="utf-8")
+        self.assertNotIn('"documents"', command)
 
     def test_real_bridge_passes_capturable_argument_pointers_to_session_block(self) -> None:
         source = (ISH_DIR / "ish_kernel_bridge.m").read_text(encoding="utf-8")

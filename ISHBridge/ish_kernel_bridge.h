@@ -46,11 +46,7 @@ typedef void (*ish_log_handler)(const char *message);
  * callback. HermesLink supplies a profile below Files-visible Documents/iSH.
  * Call before the first boot; repeated calls with the same values are harmless. */
 int ish_configure(const char *root_path, ish_log_handler log_handler);
-int ish_configure_documents(const char *host_path, const char *guest_mount_path,
-                            unsigned int mask);
-int ish_documents_configuration_is_current(const char *host_path,
-                                           const char *guest_mount_path,
-                                           unsigned int mask);
+int ish_configure_documents(const char *host_path);
 
 /* Extracts a gzip-compressed ustar rootfs archive into a new destination
  * directory and verifies its Alpine rootfs markers. */

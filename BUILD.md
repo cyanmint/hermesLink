@@ -141,17 +141,14 @@ registered alongside `terminal` in the standard Hermes bundles. The design:
   provides the same profile operations. Selecting another profile takes
   effect on the next kernel start; force-quit and reopen Blink if `ish` has
   already started in the current app process.
-- **Documents mount** — Settings → iSH can automatically mount the
-  Files-visible Documents directory into the guest using `documentsfs`, which
-  accesses host files directly and does not require fakefs `meta.db`. Enable and
-  configure it with `ishfs documents on [/mnt/documents [0022]]`; inspect or
-  change the saved options with `ishfs documents`, `ishfs documents off`,
-  `ishfs documents path <guest-path>`, and `ishfs documents mask <octal-mask>`.
-  The mount presents regular files as `0666 & ~mask` and directories as
-  `0777 & ~mask`; ownership, chmod/chown, hard-link creation, and symlinks are
-  not supported. To change the active mount's mask without restarting, run
-  `mount -o remount,mask=0027 /mnt/documents` inside the guest. Saved
-  auto-mount settings take effect the next time the iSH kernel starts.
+- **Documents mount** — Documents is not mounted automatically. Each prepared
+  rootfs contains `/mount-documents.sh`; run it inside iSH when you want the
+  Files-visible Documents directory mounted at `/mnt/documents`. The script
+  mounts the host directory directly with `documentsfs`, without fakefs
+  `meta.db`. Regular files appear as `0666 & ~0022` and directories as
+  `0777 & ~0022`; ownership, chmod/chown, hard-link creation, and symlinks are
+  not supported. The mask can be changed for the active mount with
+  `mount -o remount,mask=0027 /mnt/documents`.
 - **iSH networking** — iSH guest sockets use iOS networking, and the bridge
   writes iOS DNS servers into `/etc/resolv.conf` at startup and refreshes them
   when network reachability changes.
