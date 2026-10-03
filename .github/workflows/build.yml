@@ -110,7 +110,7 @@ jobs:
                 ;;
             esac
             case "$path" in
-              hermes/build/build-ish-static.sh|hermes/build/fetch-ish-source.sh|hermes/build/verify-ish-source.py)
+              hermes/build/build-ish-static.sh|hermes/build/fetch-ish-source.sh|hermes/build/verify-ish-source.py|hermes/build/patch-ish-pty.py)
                 ish_meson_changed=true
                 ;;
             esac

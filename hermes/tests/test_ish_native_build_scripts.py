@@ -8,6 +8,7 @@ exercised end-to-end against the real pinned rootfs archive when present."""
 
 from __future__ import annotations
 
+import importlib.util
 import os
 import shutil
 import subprocess
@@ -21,6 +22,7 @@ BUILD_SCRIPT = ROOT / "hermes" / "build" / "build-ish-static.sh"
 PACKAGE_FRAMEWORK_SCRIPT = ROOT / "hermes" / "build" / "package-ish-framework.sh"
 PREPARE_XCODE_PROJECT = ROOT / "hermes" / "build" / "prepare-ish-xcode-project.py"
 REPACK_MESON_ARCHIVES = ROOT / "hermes" / "build" / "repack-ish-meson-archives.py"
+PATCH_ISH_PTY = ROOT / "hermes" / "build" / "patch-ish-pty.py"
 INSTALL_SCRIPT = ROOT / "install_ish_runtime.sh"
 PINNED_ROOTFS = ROOT / "hermes" / "build" / "external" / "ish" / "rootfs.tar.gz"
 PINNED_SOURCE = ROOT / "hermes" / "build" / "external" / "ish" / "source"
@@ -43,6 +45,45 @@ class BuildIshStaticScriptTests(unittest.TestCase):
         self.assertIn('--simulator', source)
         self.assertIn('SDK_PLATFORM=iphonesimulator', source)
         self.assertIn('if [ "$BUILD_MODE" = "--xcode-only" ] && [ "$HOST_OS" != Darwin ]; then', source)
+
+    def test_build_patches_pty_init_only_for_the_host_library_build(self) -> None:
+        source = BUILD_SCRIPT.read_text(encoding="utf-8")
+        self.assertIn('trap restore_ish_source EXIT', source)
+        self.assertIn('python3 "$ROOT/build/patch-ish-pty.py" "$ISH_SOURCE"', source)
+        self.assertLess(source.index('if [ "$BUILD_MODE" = "--meson-only" ]; then'),
+                        source.index('python3 "$ROOT/build/patch-ish-pty.py" "$ISH_SOURCE"'))
+
+    def test_pty_patch_lazily_resolves_the_ptmx_mount_and_handles_errors(self) -> None:
+        spec = importlib.util.spec_from_file_location("patch_ish_pty", PATCH_ISH_PTY)
+        self.assertIsNotNone(spec)
+        self.assertIsNotNone(spec.loader)
+        patcher = importlib.util.module_from_spec(spec)
+        spec.loader.exec_module(patcher)
+
+        with tempfile.TemporaryDirectory() as temp_dir:
+            source_root = Path(temp_dir)
+            app = source_root / "app"
+            app.mkdir()
+            pty_path = app / "LinuxPTY.c"
+            interop_path = app / "LinuxInterop.c"
+            pty_path.write_text(
+                patcher.PTY_INIT + "\n" + patcher.PTY_OPEN + "\n",
+                encoding="utf-8",
+            )
+            interop_path.write_text(patcher.SESSION_TTY + "\n", encoding="utf-8")
+
+            patcher.patch(source_root)
+            patched_pty = pty_path.read_text(encoding="utf-8")
+            patched_interop = interop_path.read_text(encoding="utf-8")
+            patcher.patch(source_root)
+            self.assertEqual(pty_path.read_text(encoding="utf-8"), patched_pty)
+            self.assertEqual(interop_path.read_text(encoding="utf-8"), patched_interop)
+
+        self.assertIn("ios_pty_ensure_initialized()", patched_pty)
+        self.assertIn('kern_path("/dev/pts/ptmx", 0, &ptmx_path)', patched_pty)
+        self.assertIn("return ERR_PTR(err);", patched_pty)
+        self.assertIn("if (IS_ERR(session->tty))", patched_interop)
+        self.assertIn("done(err, 0, NULL);", patched_interop)
 
     def test_script_builds_upstream_kernel_and_host_interop_targets(self) -> None:
         source = BUILD_SCRIPT.read_text(encoding="utf-8")

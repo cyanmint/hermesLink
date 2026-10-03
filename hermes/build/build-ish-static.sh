@@ -174,6 +174,20 @@ fi
 [ "$HOST_OS" = Darwin ] || fail "Xcode static-library targets require macOS"
 [ -f "$MESON_BUILD_DIR/build.ninja" ] || fail "Meson build directory is missing: $MESON_BUILD_DIR"
 
+# The PTY device initcall is not guaranteed to populate ptmx_path in this
+# embedded-kernel build. Patch the pinned host glue only for compilation and
+# restore the verified checkout on every normal exit.
+SOURCE_PATCH_BACKUP=$(mktemp -d "$BUILD_ROOT/ish-source-patch.XXXXXX")
+cp "$ISH_SOURCE/app/LinuxPTY.c" "$SOURCE_PATCH_BACKUP/LinuxPTY.c"
+cp "$ISH_SOURCE/app/LinuxInterop.c" "$SOURCE_PATCH_BACKUP/LinuxInterop.c"
+restore_ish_source() {
+  cp "$SOURCE_PATCH_BACKUP/LinuxPTY.c" "$ISH_SOURCE/app/LinuxPTY.c"
+  cp "$SOURCE_PATCH_BACKUP/LinuxInterop.c" "$ISH_SOURCE/app/LinuxInterop.c"
+  rm -rf "$SOURCE_PATCH_BACKUP"
+}
+trap restore_ish_source EXIT
+python3 "$ROOT/build/patch-ish-pty.py" "$ISH_SOURCE"
+
 # Build upstream's iOS host interop targets as well as its Meson kernel
 # archive. The host library contains LinuxInterop.c and the PTY/rootfs glue
 # referenced by ish_kernel_bridge.m; Meson alone does not produce it.
