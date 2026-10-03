@@ -230,24 +230,45 @@ static BOOL ISHPrepareLocked(NSError **error) {
       return NO;
     }
     NSArray<NSString *> *legacyNames = [fm contentsOfDirectoryAtPath:legacyProfilesRoot error:nil] ?: @[];
+    NSMutableDictionary<NSString *, NSString *> *destinationsByName = [NSMutableDictionary dictionary];
     for (NSString *legacyName in legacyNames) {
-      if (!ISHValidProfileName(legacyName)) {
-        continue;
+      if (!ISHValidProfileName(legacyName) ||
+          !ISHIsDirectoryWithoutFollowingSymlink([legacyProfilesRoot stringByAppendingPathComponent:legacyName])) {
+        return ISHSetError(error, 1,
+            @"Could not safely migrate legacy rootfs profiles because the directory contains unrecognized files.");
       }
-      NSString *source = [legacyProfilesRoot stringByAppendingPathComponent:legacyName];
       NSString *destinationName = [legacyName isEqualToString:ISHDefaultProfileName]
           ? @"Alpine-legacy" : legacyName;
       NSString *destination = [profilesRoot stringByAppendingPathComponent:destinationName];
-      if (ISHIsDirectoryWithoutFollowingSymlink(source) &&
-          !ISHPathEntryExists(destination) &&
-          ![fm moveItemAtPath:source toPath:destination error:&underlying]) {
+      if (ISHPathEntryExists(destination)) {
+        return ISHSetError(error, 1,
+            @"Could not safely migrate legacy rootfs profiles because a destination profile already exists.");
+      }
+      destinationsByName[legacyName] = destinationName;
+    }
+    NSMutableArray<NSString *> *migratedNames = [NSMutableArray array];
+    for (NSString *legacyName in legacyNames) {
+      NSString *source = [legacyProfilesRoot stringByAppendingPathComponent:legacyName];
+      NSString *destination = [profilesRoot stringByAppendingPathComponent:destinationsByName[legacyName]];
+      if (![fm moveItemAtPath:source toPath:destination error:&underlying]) {
+        for (NSString *migratedName in migratedNames.reverseObjectEnumerator) {
+          NSString *migratedSource = [profilesRoot stringByAppendingPathComponent:destinationsByName[migratedName]];
+          NSString *migratedDestination = [legacyProfilesRoot stringByAppendingPathComponent:migratedName];
+          [fm moveItemAtPath:migratedSource toPath:migratedDestination error:nil];
+        }
         if (error != NULL) {
           *error = underlying;
         }
         return NO;
       }
+      [migratedNames addObject:legacyName];
     }
     if (!ISHDirectoryIsEmpty(legacyProfilesRoot)) {
+      for (NSString *migratedName in migratedNames.reverseObjectEnumerator) {
+        NSString *migratedSource = [profilesRoot stringByAppendingPathComponent:destinationsByName[migratedName]];
+        NSString *migratedDestination = [legacyProfilesRoot stringByAppendingPathComponent:migratedName];
+        [fm moveItemAtPath:migratedSource toPath:migratedDestination error:nil];
+      }
       return ISHSetError(error, 1,
           @"Could not safely migrate legacy rootfs profiles because the directory contains unrecognized files.");
     }
@@ -524,15 +545,25 @@ BOOL ISHRootfsRenameProfile(NSString *name, NSString *newName, NSError **error) 
     return ISHSetError(error, 10, @"The active rootfs cannot be renamed while the iSH kernel is running. Restart the app after selecting another profile.");
   }
   NSError *underlying = nil;
-  if (destinationIsEmptyDefault) {
-    [ISHFileManager() removeItemAtPath:destination error:&underlying];
+  if (destinationIsEmptyDefault &&
+      ![ISHFileManager() removeItemAtPath:destination error:&underlying]) {
+    [ISHProfilesLock unlock];
+    if (error != NULL) {
+      *error = underlying;
+    }
+    return NO;
   }
   BOOL success = [ISHFileManager() moveItemAtPath:source toPath:destination error:&underlying];
-  if (success && [name isEqualToString:ISHDefaultProfileName]) {
+  if (success && ([name isEqualToString:ISHDefaultProfileName] ||
+                  [newName isEqualToString:ISHDefaultProfileName])) {
     success = [ISHFileManager() createDirectoryAtPath:source withIntermediateDirectories:NO
                                              attributes:nil error:&underlying];
     if (!success) {
       [ISHFileManager() moveItemAtPath:destination toPath:source error:nil];
+      if (destinationIsEmptyDefault) {
+        [ISHFileManager() createDirectoryAtPath:destination withIntermediateDirectories:NO
+                                     attributes:nil error:nil];
+      }
     }
   } else if (!success && destinationIsEmptyDefault &&
              !ISHPathEntryExists(destination)) {
