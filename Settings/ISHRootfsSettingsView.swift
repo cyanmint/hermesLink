@@ -133,6 +133,7 @@ struct ISHRootfsSettingsView: View {
       documentsMountPath = ISHDocumentsGuestMountPath()
       let mask = String(ISHDocumentsMountMask(), radix: 8)
       documentsMask = String(repeating: "0", count: max(0, 4 - mask.count)) + mask
+      restartRequired = !documentsConfigurationIsCurrent()
     }
     .sheet(isPresented: $showingNameSheet) {
       NavigationView {
@@ -211,7 +212,22 @@ struct ISHRootfsSettingsView: View {
       showError(error?.localizedDescription ?? "Could not save Documents mount settings.")
       return
     }
-    restartRequired = true
+    restartRequired = !documentsConfigurationIsCurrent()
+  }
+
+  private func documentsConfigurationIsCurrent() -> Bool {
+    let hostPath = documentsAutoMount ? ISHDocumentsHostPath() : ""
+    guard let hostPathCString = hostPath.cString(using: .utf8),
+          let mountPathCString = documentsMountPath.cString(using: .utf8),
+          let mask = UInt(documentsMask, radix: 8) else {
+      return false
+    }
+    return hostPathCString.withUnsafeBufferPointer { hostPathBuffer in
+      mountPathCString.withUnsafeBufferPointer { mountPathBuffer in
+        ish_documents_configuration_is_current(
+          hostPathBuffer.baseAddress, mountPathBuffer.baseAddress, UInt32(mask)) != 0
+      }
+    }
   }
 
   private func select(_ profile: String) {

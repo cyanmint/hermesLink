@@ -104,12 +104,9 @@ int ish_configure_documents(const char *host_path, const char *guest_mount_path,
     return ISH_RUN_ERR_INVALID_ARGUMENT;
   }
   pthread_mutex_lock(&g_configuration_lock);
-  if (g_boot_started &&
-      (strcmp(g_documents_host_path, host_path) != 0 ||
-       strcmp(g_documents_guest_mount_path, guest_mount_path) != 0 ||
-       g_documents_mount_mask != mask)) {
+  if (g_boot_started) {
     pthread_mutex_unlock(&g_configuration_lock);
-    return ISH_RUN_ERR_INVALID_ARGUMENT;
+    return ISH_RUN_OK;
   }
   strlcpy(g_documents_host_path, host_path, sizeof(g_documents_host_path));
   strlcpy(g_documents_guest_mount_path, guest_mount_path,
@@ -117,6 +114,21 @@ int ish_configure_documents(const char *host_path, const char *guest_mount_path,
   g_documents_mount_mask = mask;
   pthread_mutex_unlock(&g_configuration_lock);
   return ISH_RUN_OK;
+}
+
+int ish_documents_configuration_is_current(const char *host_path,
+                                           const char *guest_mount_path,
+                                           unsigned int mask) {
+  if (host_path == NULL || guest_mount_path == NULL) {
+    return 0;
+  }
+  pthread_mutex_lock(&g_configuration_lock);
+  int current = !g_boot_started ||
+      (strcmp(g_documents_host_path, host_path) == 0 &&
+       strcmp(g_documents_guest_mount_path, guest_mount_path) == 0 &&
+       g_documents_mount_mask == mask);
+  pthread_mutex_unlock(&g_configuration_lock);
+  return current;
 }
 
 const char *DefaultDocumentsPath(void) {

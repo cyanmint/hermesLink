@@ -30,6 +30,15 @@ int ish_configure_documents(const char *host_path, const char *guest_mount_path,
   return ISH_RUN_OK;
 }
 
+int ish_documents_configuration_is_current(const char *host_path,
+                                           const char *guest_mount_path,
+                                           unsigned int mask) {
+  (void) host_path;
+  (void) guest_mount_path;
+  (void) mask;
+  return 1;
+}
+
 int ish_kernel_ensure_booted(void) {
   return ISH_RUN_ERR_NOT_AVAILABLE;
 }

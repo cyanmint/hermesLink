@@ -48,6 +48,9 @@ typedef void (*ish_log_handler)(const char *message);
 int ish_configure(const char *root_path, ish_log_handler log_handler);
 int ish_configure_documents(const char *host_path, const char *guest_mount_path,
                             unsigned int mask);
+int ish_documents_configuration_is_current(const char *host_path,
+                                           const char *guest_mount_path,
+                                           unsigned int mask);
 
 /* Extracts a gzip-compressed ustar rootfs archive into a new destination
  * directory and verifies its Alpine rootfs markers. */

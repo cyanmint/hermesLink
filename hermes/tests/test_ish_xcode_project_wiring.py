@@ -174,8 +174,18 @@ class IshNativeXcconfigTests(unittest.TestCase):
         source = (ISH_DIR / "ish_kernel_bridge.m").read_text(encoding="utf-8")
         self.assertIn("void FsInitialize(void)", source)
         self.assertIn("int ish_configure(const char *root_path, ish_log_handler log_handler)", source)
+        self.assertIn("int ish_documents_configuration_is_current", source)
+        self.assertIn("if (g_boot_started) {", source)
+        self.assertIn("return ISH_RUN_OK;", source)
         self.assertNotIn("#import <BlinkConfig/BlinkPaths.h>", source)
         self.assertNotIn("extern void HermesLinkAppendLog", source)
+
+    def test_documents_settings_restart_notice_tracks_live_kernel_configuration(self) -> None:
+        view = (ROOT / "Settings" / "ISHRootfsSettingsView.swift").read_text(encoding="utf-8")
+        self.assertIn("restartRequired = !documentsConfigurationIsCurrent()", view)
+        self.assertIn("ish_documents_configuration_is_current(", view)
+        command = (ROOT / "Blink" / "Commands" / "ish.m").read_text(encoding="utf-8")
+        self.assertNotIn("Documents mount settings changed after the kernel started", command)
 
     def test_real_bridge_passes_capturable_argument_pointers_to_session_block(self) -> None:
         source = (ISH_DIR / "ish_kernel_bridge.m").read_text(encoding="utf-8")

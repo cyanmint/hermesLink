@@ -43,7 +43,7 @@ int ish_main(int argc, char *argv[]) {
   if (ish_configure_documents(documentsPath.UTF8String,
                               ISHDocumentsGuestMountPath().UTF8String,
                               (unsigned int) ISHDocumentsMountMask()) != ISH_RUN_OK) {
-    fprintf(thread_stderr, "ish: Documents mount settings changed after the kernel started; force-quit and relaunch the app\n");
+    fprintf(thread_stderr, "ish: invalid Documents mount settings\n");
     return 70;
   }
 
