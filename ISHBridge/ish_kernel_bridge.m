@@ -170,11 +170,8 @@ static void ish_configure_guest_dns(void) {
   }
   res_ndestroy(&resolver);
 
-  size_t write_length = sizeof(resolv_conf) - 1;
-  memset(resolv_conf + length, ' ', write_length - length);
-  resolv_conf[write_length - 1] = '\n';
-  ssize_t written = linux_write_file("/etc/resolv.conf", resolv_conf, write_length);
-  if (written != (ssize_t) write_length) {
+  ssize_t written = linux_write_file("/etc/resolv.conf", resolv_conf, length);
+  if (written != (ssize_t) length) {
     ISHLog("ish: could not update guest /etc/resolv.conf");
   }
 }

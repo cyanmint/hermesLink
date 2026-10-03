@@ -258,6 +258,9 @@ class IshNativeXcconfigTests(unittest.TestCase):
         )[1].split("\n}", 1)[0]
         self.assertIn("async_do_in_workqueue", network_callback)
         self.assertIn("ish_configure_guest_dns();", network_callback)
+        dns_writer = source.split("static void ish_configure_guest_dns(void)", 1)[1].split("\n}", 1)[0]
+        self.assertIn('linux_write_file("/etc/resolv.conf", resolv_conf, length)', dns_writer)
+        self.assertNotIn("memset(resolv_conf + length", dns_writer)
 
     def test_profile_management_preserves_legacy_rootfs_and_blocks_unsafe_names(self) -> None:
         source = (ISH_DIR / "ISHRootfsProfiles.m").read_text(encoding="utf-8")

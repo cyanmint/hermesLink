@@ -76,7 +76,10 @@ class BuildIshStaticScriptTests(unittest.TestCase):
                 patcher.PTY_INIT + "\n" + patcher.PTY_OPEN + "\n",
                 encoding="utf-8",
             )
-            interop_path.write_text(patcher.SESSION_TTY + "\n", encoding="utf-8")
+            interop_path.write_text(
+                patcher.LINUX_WRITE_FILE + "\n\n" + patcher.SESSION_TTY + "\n",
+                encoding="utf-8",
+            )
             root_path.write_text(
                 "void FsInitialize(void);\n"
                 "static __init int ish_rootfs(void) {\n"
@@ -104,6 +107,9 @@ class BuildIshStaticScriptTests(unittest.TestCase):
         self.assertIn("return ERR_PTR(err);", patched_pty)
         self.assertIn("if (IS_ERR(session->tty))", patched_interop)
         self.assertIn("done(err, 0, NULL);", patched_interop)
+        self.assertIn("O_WRONLY | O_CREAT | O_TRUNC", patched_interop)
+        self.assertIn("if (IS_ERR(filp))", patched_interop)
+        self.assertIn("return PTR_ERR(filp);", patched_interop)
         self.assertIn("rootfs_initcall(ish_rootfs);", patched_root)
         self.assertIn("late_initcall(ish_session_ready);", patched_root)
         self.assertLess(
