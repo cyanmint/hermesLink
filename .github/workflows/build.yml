@@ -467,6 +467,7 @@ jobs:
           xcrun --sdk iphoneos clang \
             -target arm64-apple-ios16.1 \
             -isysroot "$(xcrun --sdk iphoneos --show-sdk-path)" \
+            -D_DARWIN_C_SOURCE=1 \
             -I ISHBridge \
             -dynamiclib ISHBridge/ish_kernel_bridge_stub.m \
             ISHBridge/ish_rootfs.c ISHBridge/ish_path_safety.c \

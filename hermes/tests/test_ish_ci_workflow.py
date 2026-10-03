@@ -182,6 +182,7 @@ class IshRuntimeWorkflowTests(unittest.TestCase):
         self.assertIn("ISH_NATIVE_AVAILABLE = YES", steps_text)
         self.assertIn("ish_kernel_bridge_stub.m", steps_text)
         self.assertIn("ish_rootfs.c", steps_text)
+        self.assertIn("-D_DARWIN_C_SOURCE=1", steps_text)
         self.assertIn("@rpath/Ish.framework/Ish", steps_text)
         self.assertIn('test ! -e "$app/Frameworks/HermesRuntime.framework"', steps_text)
         self.assertIn('test ! -e "$app/Frameworks/Ish.framework"', steps_text)
