@@ -13,14 +13,12 @@ HermesLink features and controls added to the app.
 3. Start a Hermes conversation with `hermes`. You can also launch Hermes WebUI
    with `hermes webui`.
 
-The app's default workspace is `Documents/workspace`. To work in another
-directory, open the WebUI workspace controls and add or select that directory;
-the app's initial terminal workspace remains `Documents/workspace`. It is
-visible in the iOS Files app under **On My iPhone/iPad → HermesLink** (the exact
-display name may vary by iOS version). Files you create in the workspace remain
-available after restarting the app. Hermes Agent and WebUI state are kept
-separately under
-`Documents/HermesHome`.
+The app's default workspace is `Documents`. To work in another directory, open
+the WebUI workspace controls and add or select that directory; the initial
+terminal workspace is also `Documents`. It is visible in the iOS Files app under
+**On My iPhone/iPad → HermesLink** (the exact display name may vary by iOS
+version). Files you create there remain available after restarting the app.
+Hermes Agent and WebUI state are kept separately under `Documents/HermesHome`.
 
 ## Settings and gestures
 

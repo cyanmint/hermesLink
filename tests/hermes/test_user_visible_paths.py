@@ -28,16 +28,17 @@ class UserVisiblePathTests(unittest.TestCase):
         self.assertIn('NSString *hermesHomePath = [BlinkPaths hermesHomePath];', app_delegate)
         self.assertIn('setenv("HERMES_HOME", hermesHomePath.UTF8String, 1);', app_delegate)
         self.assertIn('setenv("HERMES_RUNTIME_ROOT", hermesHomePath.UTF8String, 1);', app_delegate)
-        self.assertIn('NSString *workspacePath = [documentsPath stringByAppendingPathComponent:@"workspace"];', app_delegate)
-        self.assertIn('setenv("HERMES_WEBUI_DEFAULT_WORKSPACE", workspacePath.UTF8String, 1);', app_delegate)
-        self.assertIn('setenv("TERMINAL_CWD", workspacePath.UTF8String, 1);', app_delegate)
+        self.assertIn('setenv("HERMES_WEBUI_DEFAULT_WORKSPACE", documentsPath.UTF8String, 1);', app_delegate)
+        self.assertIn('setenv("TERMINAL_CWD", documentsPath.UTF8String, 1);', app_delegate)
+        self.assertIn('chdir(documentsPath.UTF8String);', app_delegate)
         self.assertIn('NSString *documentsPath = [BlinkPaths documentsPath];', mcp_session)
-        self.assertIn('NSString *workspacePath = [documentsPath stringByAppendingPathComponent:@"workspace"];', mcp_session)
+        self.assertIn('[[NSFileManager defaultManager] createDirectoryAtPath:documentsPath', mcp_session)
         self.assertIn('NSString *hermesHomePath = [BlinkPaths hermesHomePath];', mcp_session)
         self.assertIn('setenv("HERMES_HOME", hermesHomePath.UTF8String, 1);', mcp_session)
-        self.assertIn('setenv("HERMES_WEBUI_DEFAULT_WORKSPACE", workspacePath.UTF8String, 1);', mcp_session)
-        self.assertIn('setenv("TERMINAL_CWD", workspacePath.UTF8String, 1);', mcp_session)
-        self.assertIn('setenv("PWD", workspacePath.UTF8String, 1);', mcp_session)
+        self.assertIn('setenv("HERMES_WEBUI_DEFAULT_WORKSPACE", documentsPath.UTF8String, 1);', mcp_session)
+        self.assertIn('setenv("TERMINAL_CWD", documentsPath.UTF8String, 1);', mcp_session)
+        self.assertIn('setenv("PWD", documentsPath.UTF8String, 1);', mcp_session)
+        self.assertIn('chdir(documentsPath.UTF8String);', mcp_session)
         self.assertNotIn('stringByAppendingPathComponent:@"Documents"', mcp_session)
         self.assertIn('[[self documentsPath] stringByAppendingPathComponent:@"HermesHome"]', blink_paths)
 
@@ -94,7 +95,7 @@ class UserVisiblePathTests(unittest.TestCase):
             workspace_path = api_dir / "workspace.py"
             workspace_path.write_text(
                 "from pathlib import Path, PurePosixPath\n"
-                '_BOOT_DEFAULT_WORKSPACE = PurePosixPath("/private/var/mobile/Containers/Data/Application/01234567-89ab-cdef-0123-456789abcdef/Documents/workspace")\n'
+                '_BOOT_DEFAULT_WORKSPACE = PurePosixPath("/private/var/mobile/Containers/Data/Application/01234567-89ab-cdef-0123-456789abcdef/Documents")\n'
                 "def _is_blocked_posix_workspace_path(path):\n"
                 '    value = PurePosixPath(str(path))\n'
                 '    return value == PurePosixPath("/private/var") or value.is_relative_to(PurePosixPath("/private/var"))\n'
@@ -171,19 +172,23 @@ class UserVisiblePathTests(unittest.TestCase):
             state_dir.mkdir(parents=True)
             legacy_home = root / "private" / "home"
             legacy_workspace = legacy_home / "workspace"
-            preferred_workspace = root / "Files" / "workspace"
+            documents_path = root / "Files"
+            previous_default = documents_path / "workspace"
             settings_path = state_dir / "settings.json"
             workspaces_path = state_dir / "workspaces.json"
             last_workspace_path = state_dir / "last_workspace.txt"
             settings_path.write_text(
-                json.dumps({"default_workspace": str(legacy_workspace), "theme": "dark"}),
+                json.dumps({"default_workspace": str(previous_default), "theme": "dark"}),
                 encoding="utf-8",
             )
             workspaces_path.write_text(
-                json.dumps([{"path": str(legacy_workspace), "name": "Home"}]),
+                json.dumps([
+                    {"path": str(legacy_workspace), "name": "Home"},
+                    {"path": str(previous_default), "name": "Old default"},
+                ]),
                 encoding="utf-8",
             )
-            last_workspace_path.write_text(str(legacy_workspace), encoding="utf-8")
+            last_workspace_path.write_text(str(previous_default), encoding="utf-8")
             config = root / "config.py"
             config.write_text(
                 "import json\n"
@@ -242,7 +247,7 @@ class UserVisiblePathTests(unittest.TestCase):
             env_names = ("HERMES_HOME", "HERMES_WEBUI_DEFAULT_WORKSPACE", "HERMES_TEST_HOME", "HERMES_WEBUI_STATE_DIR")
             old_env = {name: os.environ.get(name) for name in env_names}
             os.environ["HERMES_HOME"] = str(visible_home)
-            os.environ["HERMES_WEBUI_DEFAULT_WORKSPACE"] = str(preferred_workspace)
+            os.environ["HERMES_WEBUI_DEFAULT_WORKSPACE"] = str(documents_path)
             os.environ["HERMES_TEST_HOME"] = str(legacy_home)
             os.environ["HERMES_WEBUI_STATE_DIR"] = str(state_dir)
             try:
@@ -261,9 +266,10 @@ class UserVisiblePathTests(unittest.TestCase):
                 )
                 migrated_settings = json.loads(settings_path.read_text(encoding="utf-8"))
                 migrated_workspaces = json.loads(workspaces_path.read_text(encoding="utf-8"))
-                preferred_path = str(preferred_workspace.resolve())
+                preferred_path = str(documents_path.resolve())
                 self.assertEqual(migrated_settings["default_workspace"], preferred_path)
                 self.assertEqual(migrated_workspaces[0]["path"], preferred_path)
+                self.assertEqual(migrated_workspaces[1]["path"], preferred_path)
                 self.assertEqual(last_workspace_path.read_text(encoding="utf-8").strip(), preferred_path)
                 self.assertFalse(static_root.name.startswith("."))
             finally:

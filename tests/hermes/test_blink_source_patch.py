@@ -63,6 +63,32 @@ class BlinkSourcePatchTests(unittest.TestCase):
             with self.subTest(path=path):
                 self.assertTrue((OVERLAY / path).is_file())
 
+    def test_app_and_session_default_workspace_is_documents(self) -> None:
+        for patch_name in (
+            "patch-blink-appdelegate-m.py",
+            "patch-sessions-mcpsession-m.py",
+        ):
+            tree = ast.parse((PATCH_DIR / patch_name).read_text(encoding="utf-8"))
+            replacements = next(
+                node.value
+                for node in tree.body
+                if isinstance(node, ast.Assign)
+                and any(
+                    isinstance(target, ast.Name) and target.id == "REPLACEMENTS"
+                    for target in node.targets
+                )
+            )
+            patched_source = "\n".join(
+                replacement[2] for replacement in ast.literal_eval(replacements)
+            )
+            with self.subTest(patch=patch_name):
+                self.assertIn(
+                    'setenv("HERMES_WEBUI_DEFAULT_WORKSPACE", documentsPath.UTF8String, 1);',
+                    patched_source,
+                )
+                self.assertIn('chdir(documentsPath.UTF8String);', patched_source)
+                self.assertNotIn('stringByAppendingPathComponent:@"workspace"', patched_source)
+
     def test_blink_app_sources_are_not_tracked_in_this_repository(self) -> None:
         tracked = subprocess.check_output(
             ["git", "ls-files", "-z"],

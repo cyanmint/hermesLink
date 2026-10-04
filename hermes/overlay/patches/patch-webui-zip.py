@@ -102,21 +102,23 @@ workspace_migration = '''LAST_WORKSPACE_FILE = STATE_DIR / "last_workspace.txt"
 
 
 def _migrate_legacy_workspace_state() -> None:
-    """Move persisted default-workspace pointers from ~/workspace to Documents/workspace."""
+    """Move persisted default-workspace pointers to the configured Documents directory."""
     configured = os.getenv("HERMES_WEBUI_DEFAULT_WORKSPACE", "").strip()
     if not configured:
         return
     try:
         _preferred = str(Path(configured).expanduser().resolve())
-        _legacy = str((Path(HOME).expanduser() / "workspace").resolve())
-        if _preferred == _legacy:
-            return
+        _legacy_paths = {
+            str((Path(HOME).expanduser() / "workspace").resolve()),
+            str((Path(_preferred) / "workspace").resolve()),
+        }
 
         def _is_legacy(value: object) -> bool:
             if not isinstance(value, str) or not value.strip():
                 return False
             try:
-                return str(Path(value).expanduser().resolve()) == _legacy
+                _path = str(Path(value).expanduser().resolve())
+                return _path != _preferred and _path in _legacy_paths
             except (OSError, RuntimeError, ValueError):
                 return False
 

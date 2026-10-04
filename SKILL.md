@@ -28,7 +28,7 @@ tools. On iOS, Hermes Agent supports foreground, non-PTY commands only:
 background jobs and interactive terminal sessions are unavailable. Do not
 promise that a terminal command can keep running after the tool returns.
 
-The default workspace is the Files-visible `Documents/workspace`. Use explicit
+The default workspace is the Files-visible `Documents` directory. Use explicit
 workspace paths and avoid assuming that a shell's `HOME` is the Files-visible
 Documents folder.
 
