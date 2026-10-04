@@ -75,7 +75,7 @@ REPLACEMENTS = (
             '\t\t\t\tCODE_SIGN_IDENTITY = "iPhone Developer";\n'
             '\t\t\t\t"CODE_SIGN_IDENTITY[sdk=iphoneos*]" = "iPhone Developer";\n'
             '\t\t\t\tCODE_SIGN_STYLE = Automatic;\n'
-            '\t\t\t\tCURRENT_PROJECT_VERSION = 1098;\n'
+            '\t\t\t\tCURRENT_PROJECT_VERSION = 0;\n'
             '\t\t\t\tDEAD_CODE_STRIPPING = NO;\n'
             '\t\t\t\tDEBUG_INFORMATION_FORMAT = "dwarf-with-dsym";\n'
             '\t\t\t\tDEFINES_MODULE = YES;\n'

@@ -32,7 +32,7 @@ REPLACEMENTS = (
             '\t\t\t\tCODE_SIGN_IDENTITY = "iPhone Developer";\n'
             '\t\t\t\t"CODE_SIGN_IDENTITY[sdk=iphoneos*]" = "iPhone Developer";\n'
             '\t\t\t\tCODE_SIGN_STYLE = Automatic;\n'
-            '\t\t\t\tCURRENT_PROJECT_VERSION = 1098;\n'
+            '\t\t\t\tCURRENT_PROJECT_VERSION = 0;\n'
             '\t\t\t\tDEAD_CODE_STRIPPING = NO;\n'
             '\t\t\t\tDEFINES_MODULE = YES;\n'
             '\t\t\t\tDEVELOPMENT_TEAM = A2H2CL32AG;\n'
@@ -51,7 +51,7 @@ REPLACEMENTS = (
             '\t\t\t\t\t"$(inherited)",\n'
             '\t\t\t\t\t"$(PROJECT_DIR)/Frameworks",\n'
             '\t\t\t\t);\n'
-            '\t\t\t\tMARKETING_VERSION = 18.7.0;\n'
+            '\t\t\t\tMARKETING_VERSION = 18.8.0;\n'
             '\t\t\t\tNEW_SETTING = "";\n'
             '\t\t\t\tOTHER_CFLAGS = "$(BLINK_OTHER_CFLAGS)";\n'
         ),
@@ -63,7 +63,7 @@ REPLACEMENTS = (
             '\t\t\t\t\t"$(inherited)",\n'
             '\t\t\t\t\t"$(PROJECT_DIR)/Frameworks",\n'
             '\t\t\t\t);\n'
-            '\t\t\t\tMARKETING_VERSION = 18.7.0;\n'
+            '\t\t\t\tMARKETING_VERSION = 18.8.0;\n'
             '\t\t\t\tNEW_SETTING = "";\n'
             '\t\t\t\tOTHER_CFLAGS = "$(BLINK_OTHER_CFLAGS)";\n'
         ),

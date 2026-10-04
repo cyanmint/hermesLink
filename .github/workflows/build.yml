@@ -46,6 +46,7 @@ concurrency:
 
 env:
   HERMES_RUNTIME_RELEASE_TAG: hermesrt-latest
+  HERMESLINK_BUILD_NUMBER: ${{ github.run_number }}
 
 jobs:
   decide:
@@ -513,7 +514,7 @@ jobs:
           path: |
             ${{ runner.temp }}/HermesLink.xcarchive
             ${{ runner.temp }}/hermeslink-archive.log
-          key: ${{ runner.os }}-hermes-app-${{ github.sha }}-${{ steps.runtime_hash.outputs.sha256 }}-${{ hashFiles('blink/**') }}-${{ hashFiles('scripts/hermes/build/**') }}-${{ hashFiles('ishbridge/**') }}-${{ hashFiles('scripts/install_hermes_runtime.sh') }}
+          key: ${{ runner.os }}-hermes-app-${{ github.sha }}-${{ github.run_number }}-${{ steps.runtime_hash.outputs.sha256 }}-${{ hashFiles('blink/**') }}-${{ hashFiles('scripts/hermes/build/**') }}-${{ hashFiles('ishbridge/**') }}-${{ hashFiles('scripts/install_hermes_runtime.sh') }}
 
       - name: Cache framework builds
         id: cache
@@ -551,6 +552,7 @@ jobs:
             CODE_SIGN_IDENTITY='' \
             CODE_SIGNING_REQUIRED=NO \
             CODE_SIGNING_ALLOWED=NO \
+            CURRENT_PROJECT_VERSION="$HERMESLINK_BUILD_NUMBER" \
             ONLY_ACTIVE_ARCH=NO | tee "$RUNNER_TEMP/hermeslink-archive.log" | xcpretty
 
       - name: Show raw Xcode linker diagnostics
@@ -783,6 +785,7 @@ jobs:
             ARCHS=arm64 \
             ONLY_ACTIVE_ARCH=YES \
             IPHONEOS_DEPLOYMENT_TARGET='16.1' \
+            CURRENT_PROJECT_VERSION="$HERMESLINK_BUILD_NUMBER" \
             CODE_SIGNING_ALLOWED=NO | tee "$RUNNER_TEMP/hermeslink-simulator-e2e-build.log" | xcpretty
           app="$RUNNER_TEMP/HermesLinkSimulatorE2E/Build/Products/Debug-iphonesimulator/HermesLink.app"
           test -d "$app"

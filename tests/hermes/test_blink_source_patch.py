@@ -89,6 +89,43 @@ class BlinkSourcePatchTests(unittest.TestCase):
                 self.assertIn('chdir(documentsPath.UTF8String);', patched_source)
                 self.assertNotIn('stringByAppendingPathComponent:@"workspace"', patched_source)
 
+    def test_app_version_is_bumped_and_build_number_defaults_to_zero(self) -> None:
+        version_patches = "\n".join(
+            (PATCH_DIR / patch_name).read_text(encoding="utf-8")
+            for patch_name in (
+                "patch-blink-xcodeproj-project-pbxproj-08.py",
+                "patch-blink-xcodeproj-project-pbxproj-09.py",
+                "patch-blink-xcodeproj-project-pbxproj-10.py",
+            )
+        )
+        self.assertEqual(version_patches.count("MARKETING_VERSION = 18.8.0;"), 4)
+        self.assertEqual(version_patches.count("CURRENT_PROJECT_VERSION = 0;"), 2)
+        self.assertNotIn("MARKETING_VERSION = 18.7.0;", version_patches)
+        self.assertNotIn("CURRENT_PROJECT_VERSION = 1098;", version_patches)
+
+    def test_workflow_uses_run_number_for_app_build_number(self) -> None:
+        build_app = self.workflow["jobs"]["build-app"]
+        simulator = self.workflow["jobs"]["simulator-e2e"]
+        self.assertEqual(
+            self.workflow["env"]["HERMESLINK_BUILD_NUMBER"],
+            "${{ github.run_number }}",
+        )
+        archive = next(
+            step for step in build_app["steps"]
+            if step.get("name") == "Build unsigned device archive"
+        )
+        simulator_build = next(
+            step for step in simulator["steps"]
+            if step.get("name") == "Build HermesLink simulator app"
+        )
+        self.assertIn('CURRENT_PROJECT_VERSION="$HERMESLINK_BUILD_NUMBER"', archive["run"])
+        self.assertIn('CURRENT_PROJECT_VERSION="$HERMESLINK_BUILD_NUMBER"', simulator_build["run"])
+        app_cache = next(
+            step for step in build_app["steps"]
+            if step.get("name") == "Cache unsigned app archive"
+        )
+        self.assertIn("${{ github.run_number }}", app_cache["with"]["key"])
+
     def test_blink_app_sources_are_not_tracked_in_this_repository(self) -> None:
         tracked = subprocess.check_output(
             ["git", "ls-files", "-z"],
