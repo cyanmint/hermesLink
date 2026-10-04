@@ -20,8 +20,8 @@ extern void HermesLinkAppendLog(const char *message);
  * i.e. `ish <command...>` — not a Blink-side `ish container` subcommand. See
  * DEVELOP.md for the overall design: a single, shared iSH Linux kernel +
  * persistent Alpine guest root is booted once per app process
- * (ISHBridge/ish_kernel_bridge.m), and every `ish` invocation runs its
- * command inside that already-booted guest, bridging the guest pty to this
+ * (ISHBridge/ish_kernel_bridge.m), and `ish <command...>` runs inside that
+ * already-booted guest, bridging the guest pty to this
  * ios_system command's own stdio so it behaves like any other Blink shell
  * command (correct $?, live interactive I/O, Ctrl-C/Ctrl-D passthrough via
  * the normal ios_system signal/EOF path on thread_stdin). */
@@ -31,6 +31,14 @@ static int ish_configure_documents_for_command(void) {
 
 __attribute__((visibility("default")))
 int ish_main(int argc, char *argv[]) {
+  if (argc < 2) {
+    fprintf(thread_stdout,
+            "Usage: ish <command...>\n"
+            "Run a command inside the persistent Alpine Linux guest.\n"
+            "Example: ish apk add curl\n");
+    return 0;
+  }
+
   NSError *profileError = nil;
   NSString *ishRoot = ISHRootfsActiveProfilePath(&profileError);
   if (ishRoot == nil) {
@@ -48,15 +56,11 @@ int ish_main(int argc, char *argv[]) {
   }
 
   NSMutableString *command = [NSMutableString new];
-  if (argc < 2) {
-    [command appendString:@"/bin/sh"];
-  } else {
-    for (int i = 1; i < argc; i++) {
-      if (i > 1) {
-        [command appendString:@" "];
-      }
-      [command appendString:[NSString stringWithUTF8String:argv[i]]];
+  for (int i = 1; i < argc; i++) {
+    if (i > 1) {
+      [command appendString:@" "];
     }
+    [command appendString:[NSString stringWithUTF8String:argv[i]]];
   }
 
   int input_fd = thread_stdin != NULL ? fileno(thread_stdin) : -1;

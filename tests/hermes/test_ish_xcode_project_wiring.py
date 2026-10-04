@@ -77,6 +77,16 @@ class CommandRegistrationTests(unittest.TestCase):
         self.assertNotIn("do_mount(", bridge)
 
 
+class BareIshCommandTests(unittest.TestCase):
+    def test_bare_ish_prints_usage_without_starting_a_shell(self) -> None:
+        source = (
+            ROOT / "blink" / "overlay" / "Blink" / "Commands" / "ish.m"
+        ).read_text(encoding="utf-8")
+        self.assertIn("if (argc < 2)", source)
+        self.assertIn("Usage: ish <command...>", source)
+        self.assertNotIn('[command appendString:@"/bin/sh"]', source)
+
+
 @unittest.skipUnless(
     PBXPROJ.is_file(),
     "Blink source is materialized from the pinned upstream checkout during builds",
