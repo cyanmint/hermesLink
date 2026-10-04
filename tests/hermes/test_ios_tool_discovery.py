@@ -49,6 +49,7 @@ def discover_builtin_tools(tools_dir=None):
     imported = [path.stem for path in tools_path.glob("*.py")]
     return imported
 
+
 def _discovery_cache_path():
     return None
 '''

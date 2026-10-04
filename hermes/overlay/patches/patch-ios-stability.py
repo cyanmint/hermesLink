@@ -327,7 +327,6 @@ def patch_zip_tool_discovery(path: Path) -> None:
     marker = "_HERMESLINK_ORIGINAL_DISCOVER_BUILTIN_TOOLS"
     if marker in text:
         return
-    anchor = "    return imported\n\ndef _discovery_cache_path()"
     replacement = '''    return imported
 
 
@@ -400,10 +399,21 @@ def discover_builtin_tools(tools_dir=None):
     return imported
 
 
-def _discovery_cache_path()'''
-    if text.count(anchor) != 1:
+'''
+    anchor = re.compile(
+        r"(?m)^    return imported\n(?:[ \t]*\n)+def _discovery_cache_path\(\)"
+    )
+    matches = list(anchor.finditer(text))
+    if len(matches) != 1:
         raise SystemExit(f"tool discovery ZIP patch anchor expected once: {path}")
-    path.write_text(text.replace(anchor, replacement, 1), encoding="utf-8", newline="\n")
+    match = matches[0]
+    patched = (
+        text[:match.start()]
+        + replacement
+        + "def _discovery_cache_path()"
+        + text[match.end():]
+    )
+    path.write_text(patched, encoding="utf-8", newline="\n")
 
 
 def main() -> int:
