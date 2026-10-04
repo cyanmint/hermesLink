@@ -98,9 +98,9 @@ class BlinkSourcePatchTests(unittest.TestCase):
                 "patch-blink-xcodeproj-project-pbxproj-10.py",
             )
         )
-        self.assertEqual(version_patches.count("MARKETING_VERSION = 18.8.0;"), 4)
+        self.assertEqual(version_patches.count("MARKETING_VERSION = 18.8.0;"), 2)
+        self.assertEqual(version_patches.count("MARKETING_VERSION = 18.7.0;"), 2)
         self.assertEqual(version_patches.count("CURRENT_PROJECT_VERSION = 0;"), 2)
-        self.assertNotIn("MARKETING_VERSION = 18.7.0;", version_patches)
         self.assertNotIn("CURRENT_PROJECT_VERSION = 1098;", version_patches)
 
     def test_workflow_uses_run_number_for_app_build_number(self) -> None:

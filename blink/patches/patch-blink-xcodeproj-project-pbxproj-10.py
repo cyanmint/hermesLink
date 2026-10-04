@@ -51,7 +51,7 @@ REPLACEMENTS = (
             '\t\t\t\t\t"$(inherited)",\n'
             '\t\t\t\t\t"$(PROJECT_DIR)/Frameworks",\n'
             '\t\t\t\t);\n'
-            '\t\t\t\tMARKETING_VERSION = 18.8.0;\n'
+            '\t\t\t\tMARKETING_VERSION = 18.7.0;\n'
             '\t\t\t\tNEW_SETTING = "";\n'
             '\t\t\t\tOTHER_CFLAGS = "$(BLINK_OTHER_CFLAGS)";\n'
         ),
