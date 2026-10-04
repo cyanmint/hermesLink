@@ -1,5 +1,6 @@
 import importlib.util
 import os
+import shlex
 import sys
 import threading
 import types
@@ -67,13 +68,51 @@ class IshToolTests(unittest.TestCase):
 
         native = FakeHermesIos()
         with patch.dict(sys.modules, {"_hermesios": native}):
-            result = module._run_in_guest("printf output", 5)
+            result = module._run_in_guest("printf output", 5, workdir="/workspace with spaces")
 
         native.writer.join(1)
         self.assertFalse(native.writer.is_alive())
         self.assertEqual(result["output"].encode(), payload)
         self.assertEqual(result["exit_code"], 0)
-        self.assertEqual(native.asserted_command, "ish -c 'printf output'")
+        self.assertEqual(
+            shlex.split(native.asserted_command),
+            ["ish", "-c", "cd '/workspace with spaces' && printf output"],
+        )
+
+    def test_terminal_compatible_foreground_options(self):
+        module = _load_tool()
+        self.assertEqual(
+            set(module.ISH_SCHEMA["parameters"]["properties"]),
+            {
+                "command", "background", "timeout", "workdir", "pty", "notify",
+                "heartbeat", "persist_on_release",
+            },
+        )
+
+        with patch.object(module, "_run_in_guest", return_value="ran") as run:
+            self.assertEqual(
+                module._handle_ish({"command": "pwd", "timeout": 30, "workdir": "/tmp"}),
+                "ran",
+            )
+        run.assert_called_once_with("pwd", 30.0, workdir="/tmp")
+
+    def test_rejects_terminal_modes_unavailable_to_ios_ish_backend(self):
+        module = _load_tool()
+        for unsupported in ({"background": True}, {"pty": True}):
+            with self.subTest(unsupported=unsupported):
+                result = module._handle_ish({"command": "sleep 1", **unsupported})
+                self.assertIn("foreground non-PTY", result["error"])
+
+        result = module._handle_ish({"command": "pwd", "workdir": "relative/path"})
+        self.assertIn("absolute path", result["error"])
+
+    def test_rejects_background_only_options_on_foreground_ish_calls(self):
+        module = _load_tool()
+        result = module._handle_ish({"command": "pwd", "notify": True})
+        self.assertIn("only apply to background", result["error"])
+
+        result = module._handle_ish({"command": "pwd", "persist_on_release": True})
+        self.assertIn("only applies to background", result["error"])
 
 
 if __name__ == "__main__":

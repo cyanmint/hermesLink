@@ -52,9 +52,11 @@ def check_ish_requirements() -> bool:
     return True
 
 
-def _run_in_guest(command: str, timeout) -> str:
+def _run_in_guest(command: str, timeout, workdir=None) -> str:
     import _hermesios
 
+    if workdir is not None:
+        command = f"cd {shlex.quote(workdir)} && {command}"
     ios_command = "ish -c " + shlex.quote(command)
     try:
         task_id, output_fd = _hermesios.spawn(ios_command)
@@ -111,12 +113,31 @@ def _handle_ish(args, **_kw):
     command = args.get("command")
     if not isinstance(command, str) or not command.strip():
         return tool_error("ish requires a non-empty 'command' string")
+    if args.get("background", False) or args.get("pty", False):
+        return tool_error(
+            "The ios_system iSH backend supports foreground non-PTY commands only; "
+            "background processes and PTY sessions are unavailable."
+        )
+    if args.get("notify") or args.get("notify_on_complete") or args.get("watch_patterns") or args.get("heartbeat"):
+        return tool_error(
+            "notify/heartbeat only apply to background commands (foreground "
+            "results return directly). Either drop them, or run as "
+            "ish(command=..., background=true, notify=...)."
+        )
+    if args.get("persist_on_release", False):
+        return tool_error(
+            "persist_on_release only applies to background commands. "
+            "The iSH backend supports foreground commands only."
+        )
+    workdir = args.get("workdir")
+    if workdir is not None and (not isinstance(workdir, str) or not workdir.startswith("/")):
+        return tool_error("workdir must be an absolute path inside the iSH guest")
     timeout = args.get("timeout") or ISH_DEFAULT_TIMEOUT
     try:
         timeout = min(float(timeout), ISH_MAX_FOREGROUND_TIMEOUT)
     except (TypeError, ValueError):
         timeout = ISH_DEFAULT_TIMEOUT
-    return _run_in_guest(command, timeout)
+    return _run_in_guest(command, timeout, workdir=workdir)
 
 
 ISH_SCHEMA = {
@@ -136,10 +157,42 @@ ISH_SCHEMA = {
                 "type": "string",
                 "description": "The shell command to run inside the Alpine guest (via /bin/sh -c).",
             },
+            "background": {
+                "type": "boolean",
+                "description": "Run in the background. Unavailable in the iOS iSH backend.",
+                "default": False,
+            },
             "timeout": {
                 "type": "integer",
                 "description": f"Max seconds to wait (default: {ISH_DEFAULT_TIMEOUT}, max: {ISH_MAX_FOREGROUND_TIMEOUT}).",
                 "minimum": 1,
+            },
+            "workdir": {
+                "type": "string",
+                "description": "Absolute working directory inside the iSH guest.",
+            },
+            "pty": {
+                "type": "boolean",
+                "description": "Run in a pseudo-terminal. Unavailable in the iOS iSH backend.",
+                "default": False,
+            },
+            "notify": {
+                "description": "With background=true: notify on completion or matching output. Background execution is unavailable.",
+                "anyOf": [
+                    {"type": "boolean"},
+                    {"type": "array", "items": {"type": "string"}},
+                ],
+            },
+            "heartbeat": {
+                "type": "integer",
+                "minimum": 0,
+                "default": 0,
+                "description": "With background=true: notify periodically. Background execution is unavailable.",
+            },
+            "persist_on_release": {
+                "type": "boolean",
+                "default": False,
+                "description": "With background=true: keep the process alive across agent lifecycle cleanup. Background execution is unavailable.",
             },
         },
         "required": ["command"],
