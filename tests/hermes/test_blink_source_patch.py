@@ -131,7 +131,16 @@ class BlinkSourcePatchTests(unittest.TestCase):
                 self.assertIn(license_name, copying)
                 self.assertIn(license_name, about_patch)
         self.assertIn("HermesLink components and licenses", about_patch)
-        self.assertIn("Blink Shell upstream acknowledgments", about_patch)
+        self.assertNotIn("Blink Shell upstream acknowledgments", about_patch)
+        for dependency in (
+            "Mosh", "HTerm", "OpenSSL Toolkit", "Eric Young", "Libssh2",
+            "UICKeyChainStore", "MBProgressHUD", "Protobuf", "React",
+            "Replxx", "network_ios", "Source Code Pro Font", "DejaVu Sans Mono",
+            "Roboto Mono", "Entypo pictograms",
+        ):
+            with self.subTest(dependency=dependency):
+                self.assertIn(dependency, about_patch)
+        self.assertIn("HermesLink and Blink Shell make use of the following open-source projects", about_patch)
 
     def test_app_and_e2e_jobs_checkout_and_patch_pinned_blink_first(self) -> None:
         for job_name, build_step in (
