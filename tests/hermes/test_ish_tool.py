@@ -73,7 +73,7 @@ class IshToolTests(unittest.TestCase):
         self.assertFalse(native.writer.is_alive())
         self.assertEqual(result["output"].encode(), payload)
         self.assertEqual(result["exit_code"], 0)
-        self.assertEqual(native.asserted_command, "ish 'printf output'")
+        self.assertEqual(native.asserted_command, "ish -c 'printf output'")
 
 
 if __name__ == "__main__":

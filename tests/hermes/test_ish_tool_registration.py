@@ -44,7 +44,7 @@ class IshToolModuleTests(unittest.TestCase):
         self.assertIn('name="ish"', source)
         self.assertIn("registry.register(", source)
         self.assertIn("_hermesios.spawn", source)
-        self.assertIn("ish \" + shlex.quote(command)", source)
+        self.assertIn('ios_command = "ish -c " + shlex.quote(command)', source)
 
     def test_tool_description_distinguishes_guest_from_host_terminal(self) -> None:
         source = TOOL_MODULE.read_text(encoding="utf-8")

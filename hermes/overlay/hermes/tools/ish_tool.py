@@ -55,7 +55,7 @@ def check_ish_requirements() -> bool:
 def _run_in_guest(command: str, timeout) -> str:
     import _hermesios
 
-    ios_command = "ish " + shlex.quote(command)
+    ios_command = "ish -c " + shlex.quote(command)
     try:
         task_id, output_fd = _hermesios.spawn(ios_command)
     except OSError as error:
