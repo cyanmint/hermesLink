@@ -113,6 +113,42 @@ class BlinkSourcePatchTests(unittest.TestCase):
                 self.assertIn(exclude, self.script)
         self.assertNotIn("--exclude='/Frameworks'", self.script)
 
+    def test_unavailable_icloud_container_does_not_create_a_nil_directory(self) -> None:
+        patch = PATCH_DIR / "patch-blinkconfig-blinkpaths-m.py"
+        source = (
+            "  return __documentsPath;\n"
+            "}\n\n"
+            "+ (NSString *)groupContainerPath {\n"
+            "  if (__groupContainerPath == nil) {\n\n"
+            "\n"
+            "    NSFileManager *fm = [NSFileManager defaultManager];\n"
+            "    NSString *path = [fm containerURLForSecurityApplicationGroupIdentifier:groupID].path;\n"
+            "    __groupContainerPath = path;\n"
+            "  }\n"
+            "  return __groupContainerPath;\n"
+            "\n"
+            "+ (void)_linkAtPath:(NSString *)path destinationPath:(NSString *)destinationPath {\n"
+            "  NSFileManager *fm = [NSFileManager defaultManager];\n"
+            "  \n"
+            "  // Don't use fileExists as that would traverse the symlink.\n"
+            "  if ([fm attributesOfItemAtPath:path error:nil]) {\n"
+            "+ (void)_ensureFolderAtPath:(NSString *)path {\n"
+            "  BOOL isDir = NO;\n"
+        )
+        with tempfile.TemporaryDirectory() as temporary:
+            source_root = Path(temporary)
+            blink_paths = source_root / "BlinkConfig" / "BlinkPaths.m"
+            blink_paths.parent.mkdir()
+            blink_paths.write_text(source, encoding="utf-8")
+
+            subprocess.run([sys.executable, str(patch), str(source_root)], check=True)
+            patched = blink_paths.read_text(encoding="utf-8")
+            self.assertIn('if (path.length == 0) {', patched)
+            self.assertIn('Skipping folder creation for unavailable path', patched)
+
+            subprocess.run([sys.executable, str(patch), str(source_root)], check=True)
+            self.assertEqual(blink_paths.read_text(encoding="utf-8"), patched)
+
     def test_about_page_lists_every_named_component_with_license_links(self) -> None:
         copying = (ROOT / "COPYING.md").read_text(encoding="utf-8")
         about_patch = (PATCH_DIR / "patch-settings-viewcontrollers-about-about-html.py").read_text(encoding="utf-8")
