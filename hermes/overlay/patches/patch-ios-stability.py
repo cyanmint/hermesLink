@@ -321,6 +321,91 @@ def _ios_system_run_command(command: str, env: dict, stdin_data=None):
     path.write_text(text, encoding="utf-8", newline="\n")
 
 
+def patch_zip_tool_discovery(path: Path) -> None:
+    """Discover self-registering tool modules when the runtime is imported from hermesrt.zip."""
+    text = path.read_text(encoding="utf-8")
+    marker = "_HERMESLINK_ORIGINAL_DISCOVER_BUILTIN_TOOLS"
+    if marker in text:
+        return
+    anchor = "    return imported\n\ndef _discovery_cache_path()"
+    replacement = '''    return imported
+
+
+_HERMESLINK_ORIGINAL_DISCOVER_BUILTIN_TOOLS = discover_builtin_tools
+
+
+def discover_builtin_tools(tools_dir=None):
+    """Use the upstream filesystem scan for checkouts and a ZIP scan for embedded iOS."""
+    import zipfile
+
+    archive_location = __file__.rsplit(".zip/", 1)
+    if (
+        tools_dir is not None
+        or len(archive_location) != 2
+        or not archive_location[1].endswith("tools/registry.py")
+    ):
+        return _HERMESLINK_ORIGINAL_DISCOVER_BUILTIN_TOOLS(tools_dir)
+
+    archive_path = archive_location[0] + ".zip"
+    tools_prefix = archive_location[1][:-len("tools/registry.py")]
+    try:
+        with zipfile.ZipFile(archive_path) as archive:
+            names = set(archive.namelist())
+            candidates = sorted(
+                name for name in names
+                if name.startswith(tools_prefix + "tools/")
+                and name.endswith(".py")
+                and (
+                    len(name[len(tools_prefix):].split("/")) == 2
+                    or (
+                        len(name[len(tools_prefix):].split("/")) == 3
+                        and name.endswith("/tool.py")
+                    )
+                )
+            )
+            module_names = []
+            for name in candidates:
+                module_path = name[len(tools_prefix):]
+                parts = module_path.split("/")
+                if module_path in {"tools/__init__.py", "tools/registry.py", "tools/mcp_tool.py"}:
+                    continue
+                if len(parts) == 3 and f"{tools_prefix}tools/{parts[1]}/__init__.py" not in names:
+                    continue
+                try:
+                    source = archive.read(name).decode("utf-8")
+                    tree = ast.parse(source, filename=name)
+                except (KeyError, UnicodeDecodeError, SyntaxError):
+                    continue
+                registers = any(
+                    _is_registry_register_call(statement)
+                    or (
+                        isinstance(statement, ast.For)
+                        and any(_is_registry_register_call(child) for child in statement.body)
+                    )
+                    for statement in tree.body
+                )
+                if registers:
+                    module_names.append(".".join(Path(module_path).with_suffix("").parts))
+    except (OSError, zipfile.BadZipFile) as error:
+        logger.warning("Could not scan zipped built-in tools in %s: %s", archive_path, error)
+        return []
+
+    imported = []
+    for module_name in module_names:
+        try:
+            importlib.import_module(module_name)
+            imported.append(module_name)
+        except Exception as error:
+            logger.warning("Could not import tool module %s: %s", module_name, error)
+    return imported
+
+
+def _discovery_cache_path()'''
+    if text.count(anchor) != 1:
+        raise SystemExit(f"tool discovery ZIP patch anchor expected once: {path}")
+    path.write_text(text.replace(anchor, replacement, 1), encoding="utf-8", newline="\n")
+
+
 def main() -> int:
     if len(sys.argv) != 2:
         raise SystemExit("usage: patch-ios-stability.py <staging-hermes-root>")
@@ -330,6 +415,7 @@ def main() -> int:
     patch_ios_terminal(root / "hermes_cli" / "main.py")
     patch_ios_local_terminal(root / "tools" / "terminal_tool.py")
     patch_ios_local_environment(root / "tools" / "environments" / "local.py")
+    patch_zip_tool_discovery(root / "tools" / "registry.py")
     return 0
 
 

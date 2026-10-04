@@ -90,6 +90,8 @@ class IshTogglePatchTests(unittest.TestCase):
         _run_patch(fixture)
         module = _load_module(fixture, "toolsets_fixture_patched")
         self.assertIn("ish", module._HERMES_CORE_TOOLS)
+        for tool_name in ("terminal", "process_manage", "read_file", "write_file"):
+            self.assertIn(tool_name, module._HERMES_CORE_TOOLS)
         self.assertEqual(module.TOOLSETS["ish"]["tools"], ["ish"])
         self.assertIn("ish", module.TOOLSETS["debugging"]["tools"])
 
