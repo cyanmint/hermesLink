@@ -78,13 +78,28 @@ class CommandRegistrationTests(unittest.TestCase):
 
 
 class BareIshCommandTests(unittest.TestCase):
-    def test_bare_ish_prints_usage_without_starting_a_shell(self) -> None:
+    def test_bare_ish_starts_an_interactive_guest_shell(self) -> None:
         source = (
             ROOT / "blink" / "overlay" / "Blink" / "Commands" / "ish.m"
         ).read_text(encoding="utf-8")
         self.assertIn("if (argc < 2)", source)
-        self.assertIn("Usage: ish <command...>", source)
-        self.assertNotIn('[command appendString:@"/bin/sh"]', source)
+        self.assertIn('[command appendString:@"exec /bin/sh -i"]', source)
+
+    def test_c_option_passes_the_full_command_to_the_guest_shell(self) -> None:
+        source = (
+            ROOT / "blink" / "overlay" / "Blink" / "Commands" / "ish.m"
+        ).read_text(encoding="utf-8")
+        self.assertIn('strcmp(argv[1], "-c") == 0', source)
+        self.assertIn('[command appendString:@"exec /bin/sh -c "]', source)
+        self.assertIn("ish_append_shell_argument(command, argv[2])", source)
+
+    def test_script_arguments_are_shell_quoted(self) -> None:
+        source = (
+            ROOT / "blink" / "overlay" / "Blink" / "Commands" / "ish.m"
+        ).read_text(encoding="utf-8")
+        self.assertIn('[command appendString:@"exec /bin/sh "]', source)
+        self.assertIn("ish_append_shell_argument(command, argv[i])", source)
+        self.assertIn("withString:@\"'\\\\''\"", source)
 
 
 @unittest.skipUnless(

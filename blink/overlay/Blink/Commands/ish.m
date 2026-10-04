@@ -20,25 +20,24 @@ extern void HermesLinkAppendLog(const char *message);
  * i.e. `ish <command...>` — not a Blink-side `ish container` subcommand. See
  * DEVELOP.md for the overall design: a single, shared iSH Linux kernel +
  * persistent Alpine guest root is booted once per app process
- * (ISHBridge/ish_kernel_bridge.m), and `ish <command...>` runs inside that
- * already-booted guest, bridging the guest pty to this
- * ios_system command's own stdio so it behaves like any other Blink shell
+ * (ISHBridge/ish_kernel_bridge.m), and `ish` bridges shell commands into that
+ * already-booted guest, forwarding the guest pty through this ios_system
+ * command's stdio so it behaves like any other Blink shell
  * command (correct $?, live interactive I/O, Ctrl-C/Ctrl-D passthrough via
  * the normal ios_system signal/EOF path on thread_stdin). */
 static int ish_configure_documents_for_command(void) {
   return ish_configure_documents(ISHDocumentsHostPath().UTF8String);
 }
 
+static void ish_append_shell_argument(NSMutableString *command, const char *argument) {
+  NSString *value = [NSString stringWithUTF8String:argument];
+  [command appendString:@"'"];
+  [command appendString:[value stringByReplacingOccurrencesOfString:@"'" withString:@"'\\''"]];
+  [command appendString:@"'"];
+}
+
 __attribute__((visibility("default")))
 int ish_main(int argc, char *argv[]) {
-  if (argc < 2) {
-    fprintf(thread_stdout,
-            "Usage: ish <command...>\n"
-            "Run a command inside the persistent Alpine Linux guest.\n"
-            "Example: ish apk add curl\n");
-    return 0;
-  }
-
   NSError *profileError = nil;
   NSString *ishRoot = ISHRootfsActiveProfilePath(&profileError);
   if (ishRoot == nil) {
@@ -56,11 +55,27 @@ int ish_main(int argc, char *argv[]) {
   }
 
   NSMutableString *command = [NSMutableString new];
-  for (int i = 1; i < argc; i++) {
-    if (i > 1) {
-      [command appendString:@" "];
+  if (argc < 2) {
+    [command appendString:@"exec /bin/sh -i"];
+  } else if (strcmp(argv[1], "-c") == 0) {
+    if (argc < 3) {
+      fprintf(thread_stderr, "Usage: ish [-c command] [script [args...]]\n");
+      return 2;
     }
-    [command appendString:[NSString stringWithUTF8String:argv[i]]];
+    [command appendString:@"exec /bin/sh -c "];
+    ish_append_shell_argument(command, argv[2]);
+    for (int i = 3; i < argc; i++) {
+      [command appendString:@" "];
+      ish_append_shell_argument(command, argv[i]);
+    }
+  } else {
+    [command appendString:@"exec /bin/sh "];
+    for (int i = 1; i < argc; i++) {
+      if (i > 1) {
+        [command appendString:@" "];
+      }
+      ish_append_shell_argument(command, argv[i]);
+    }
   }
 
   int input_fd = thread_stdin != NULL ? fileno(thread_stdin) : -1;
