@@ -268,7 +268,13 @@ class BlinkSourcePatchTests(unittest.TestCase):
         ):
             with self.subTest(dependency=dependency):
                 self.assertIn(dependency, about_patch)
-        self.assertIn("HermesLink makes use of and would like to thank the following open source projects", about_patch)
+        self.assertEqual(
+            about_patch.count(
+                '<a href="https://github.com/blinksh/blink/blob/a90b4423c8b7a86770c24a7eaa6c13b0a5904b18/COPYING">'
+                "Blink Shell</a>"
+            ),
+            1,
+        )
 
     def test_app_and_e2e_jobs_checkout_and_patch_pinned_blink_first(self) -> None:
         for job_name, build_step in (
