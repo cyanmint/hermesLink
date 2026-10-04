@@ -90,6 +90,21 @@ REPLACEMENTS = (
             '  if ([fm attributesOfItemAtPath:path error:nil]) {\n'
         ),
     ),
+    (
+        155,
+        (
+            '+ (void)_ensureFolderAtPath:(NSString *)path {\n'
+            '  BOOL isDir = NO;\n'
+        ),
+        (
+            '+ (void)_ensureFolderAtPath:(NSString *)path {\n'
+            '  if (path.length == 0) {\n'
+            '    NSLog(@"Skipping folder creation for unavailable path");\n'
+            '    return;\n'
+            '  }\n'
+            '  BOOL isDir = NO;\n'
+        ),
+    ),
 )
 
 
