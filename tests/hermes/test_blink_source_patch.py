@@ -86,7 +86,7 @@ class BlinkSourcePatchTests(unittest.TestCase):
 
     def test_root_attribution_and_license_files_are_hermeslink_specific(self) -> None:
         authors = (ROOT / "AUTHORS").read_text(encoding="utf-8")
-        copying = (ROOT / "COPYING").read_text(encoding="utf-8")
+        copying = (ROOT / "COPYING.md").read_text(encoding="utf-8")
         readme = (ROOT / "README.md").read_text(encoding="utf-8")
         self.assertIn("HermesLink authorship", authors)
         self.assertIn("generated with", authors)
@@ -106,12 +106,32 @@ class BlinkSourcePatchTests(unittest.TestCase):
         self.assertIn("rsync -a", self.script)
         for excluded_path in (
             ".git", ".github", ".gitignore", ".gitmodules", "AUTHORS",
-            "COPYING", "README.md", "BUILD.md", "DEVELOP.md",
+            "COPYING", "COPYING.md", "README.md", "BUILD.md", "DEVELOP.md",
         ):
             with self.subTest(path=excluded_path):
                 exclude = f"--exclude='{excluded_path if excluded_path == '.git' else '/' + excluded_path}'"
                 self.assertIn(exclude, self.script)
         self.assertNotIn("--exclude='/Frameworks'", self.script)
+
+    def test_about_page_lists_every_named_component_with_license_links(self) -> None:
+        copying = (ROOT / "COPYING.md").read_text(encoding="utf-8")
+        about_patch = (PATCH_DIR / "patch-settings-viewcontrollers-about-about-html.py").read_text(encoding="utf-8")
+        for component in (
+            "Hermes Agent", "Hermes WebUI", "Blink Shell", "a-Shell",
+            "CPython", "iSH", "ios_system",
+        ):
+            with self.subTest(component=component):
+                self.assertIn(component, copying)
+                self.assertIn(f">{component}</a>", about_patch)
+        for license_name in (
+            "MIT License", "GNU GPL version 3", "BSD 3-Clause License",
+            "Python Software Foundation License Version 2",
+        ):
+            with self.subTest(license=license_name):
+                self.assertIn(license_name, copying)
+                self.assertIn(license_name, about_patch)
+        self.assertIn("HermesLink components and licenses", about_patch)
+        self.assertIn("Blink Shell upstream acknowledgments", about_patch)
 
     def test_app_and_e2e_jobs_checkout_and_patch_pinned_blink_first(self) -> None:
         for job_name, build_step in (

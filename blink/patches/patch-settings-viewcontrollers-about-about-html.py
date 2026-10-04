@@ -56,8 +56,7 @@ REPLACEMENTS = (
             '\t  <div class="twelve column">\n'
             '\t    <h4>HermesLink</h4>\n'
             '\t    <p>HermesLink is the project as a whole. It is distributed under the GNU General Public License, version 3 (GPLv3).</p>\n'
-            "\t    <p>HermesLink is built on <strong>Blink</strong>, which is included as a dependency and remains subject to Blink's GPLv3 license and additional terms under GNU GPL version 3 section 7.</p>\n"
-            '\t    <p>This project includes the following Hermes components: <strong>Hermes Agent</strong> (MIT license, Copyright © 2025 Nous Research) and <strong>Hermes WebUI</strong> (MIT license, Copyright © 2025 Hermes Web UI Contributors).</p>\n'
+            "\t    <p>HermesLink is built on <strong>Blink</strong>, which is included as a dependency and remains subject to the <a href=\"https://www.gnu.org/licenses/gpl-3.0.html\">GNU GPL version 3</a> and <a href=\"https://github.com/blinksh/blink/blob/a90b4423c8b7a86770c24a7eaa6c13b0a5904b18/COPYING\">Blink Additional Terms</a>.</p>\n"
             '\t    <p>The HermesLink glue code and component customizations were generated with AI assistance; see the project\'s <strong>AUTHORS</strong> notice. This does not alter the licenses or copyright notices of Blink or other third-party components.</p>\n'
             '\t  </div>\n'
             '\t</div>\n'
@@ -69,7 +68,7 @@ REPLACEMENTS = (
             '\t    <ul>\n'
             '\t      <li><a href="https://github.com/NousResearch/hermes-agent/blob/2246c245f51e03eb6a151d19119009156e84659a/LICENSE">Hermes Agent</a> — MIT License.</li>\n'
             '\t      <li><a href="https://github.com/nesquena/hermes-webui/blob/e36f77389191fe9d81cd3a7416772e2f7b022e19/LICENSE">Hermes WebUI</a> — MIT License.</li>\n'
-            '\t      <li><a href="https://github.com/blinksh/blink/blob/a90b4423c8b7a86770c24a7eaa6c13b0a5904b18/COPYING">Blink Shell</a> — GNU GPL version 3 with Blink Additional Terms.</li>\n'
+            '\t      <li><a href="https://github.com/blinksh/blink/blob/a90b4423c8b7a86770c24a7eaa6c13b0a5904b18/COPYING">Blink Shell</a> — <a href="https://www.gnu.org/licenses/gpl-3.0.html">GNU GPL version 3</a> with Blink Additional Terms.</li>\n'
             '\t      <li><a href="https://github.com/holzschu/a-shell/blob/master/LICENSE">a-Shell</a> — BSD 3-Clause License.</li>\n'
             '\t      <li><a href="https://github.com/python/cpython/blob/v3.13.9/LICENSE">CPython</a> — Python Software Foundation License Version 2.</li>\n'
             '\t      <li><a href="https://github.com/ish-app/ish/blob/83348361fe65311f6e87ad2e1cbb0ac38d123f69/LICENSE.md">iSH</a> — GNU GPL version 3; see also <a href="https://github.com/ish-app/ish/blob/83348361fe65311f6e87ad2e1cbb0ac38d123f69/LICENSE.IOS">iSH iOS additional terms</a>.</li>\n'

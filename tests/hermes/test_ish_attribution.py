@@ -19,7 +19,7 @@ class AttributionTests(unittest.TestCase):
         self.assertIn("generated with\nAI assistance", authors)
 
     def test_copying_lists_upstream_component_license_links(self) -> None:
-        copying = (ROOT / "COPYING").read_text(encoding="utf-8")
+        copying = (ROOT / "COPYING.md").read_text(encoding="utf-8")
         for component in (
             "Hermes Agent", "Hermes WebUI", "Blink Shell", "a-Shell",
             "CPython", "iSH", "ios_system",

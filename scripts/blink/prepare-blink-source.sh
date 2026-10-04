@@ -29,6 +29,7 @@ rsync -a \
   --exclude='/.gitmodules' \
   --exclude='/AUTHORS' \
   --exclude='/COPYING' \
+  --exclude='/COPYING.md' \
   --exclude='/README.md' \
   --exclude='/BUILD.md' \
   --exclude='/DEVELOP.md' \
