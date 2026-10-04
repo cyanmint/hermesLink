@@ -33,6 +33,67 @@ ISH_MAX_FOREGROUND_TIMEOUT = 600
 ISH_DEFAULT_TIMEOUT = 180
 
 
+class _IshProcess:
+    def __init__(self, native, task_id, output_fd, input_fd=None):
+        self._native = native
+        self._task_id = task_id
+        self._native_closed = False
+        self.pid = None
+        self.returncode = None
+        self.stdout = os.fdopen(output_fd, "r", encoding="utf-8", errors="replace")
+        self.stdin = (
+            os.fdopen(input_fd, "wb", buffering=0)
+            if input_fd is not None else None
+        )
+
+    def _close_native(self):
+        if not self._native_closed:
+            self._native.close(self._task_id)
+            self._native_closed = True
+
+    def poll(self):
+        if self.returncode is None:
+            self.returncode = self._native.poll(self._task_id)
+        return self.returncode
+
+    def wait(self, timeout=None):
+        if self.returncode is None:
+            self.returncode = self._native.wait(self._task_id, timeout)
+        if self.returncode is not None:
+            self._close_native()
+        return self.returncode
+
+    def kill(self):
+        if self.returncode is None:
+            self._native.kill(self._task_id)
+            self.wait(2.0)
+
+
+class _IshPty:
+    def __init__(self, process, interactive):
+        self.process = process
+        self.interactive = interactive
+
+    def write(self, data):
+        if not self.interactive or self.process.stdin is None:
+            raise OSError("Process stdin not available")
+        self.process.stdin.write(data)
+        self.process.stdin.flush()
+
+    def sendeof(self):
+        if not self.interactive or self.process.stdin is None:
+            raise OSError("Process stdin not available")
+        self.write(b"\x04")
+        self.process.stdin.close()
+
+    def terminate(self, force=False):
+        self.process.kill()
+
+    def close(self):
+        if self.process.stdin is not None and not self.process.stdin.closed:
+            self.process.stdin.close()
+
+
 def _ios_system_runtime() -> bool:
     """True when running embedded in HermesLink's iOS ios_system host (or
     under test with HERMES_IOS_TERMINAL=1), mirroring the same check used by
@@ -109,29 +170,113 @@ def _run_in_guest(command: str, timeout, workdir=None) -> str:
         os.close(output_fd)
 
 
+def _spawn_background_in_guest(command, workdir, interactive, task_id, session_key, notify, watch_patterns):
+    import _hermesios
+    from tools.process_registry import process_registry
+
+    guest_command = command
+    if workdir is not None:
+        guest_command = f"cd {shlex.quote(workdir)} && {guest_command}"
+    ios_command = "ish -c " + shlex.quote(guest_command)
+    try:
+        spawned = _hermesios.spawn(ios_command, interactive)
+    except OSError as error:
+        return tool_error(f"could not start the iSH guest process: {error}")
+    native_task_id, output_fd, *input_fds = spawned
+    process = _IshProcess(
+        _hermesios, native_task_id, output_fd,
+        input_fd=input_fds[0] if input_fds else None,
+    )
+    session = None
+    try:
+        session_key = session_key or task_id or ""
+        session = process_registry._new_session(
+            command, task_id or "", task_id or "", session_key, workdir or "/",
+        )
+        session.process = process
+        session._pty = _IshPty(process, interactive)
+        session.notify_on_complete = notify
+        session.watch_patterns = list(watch_patterns or [])
+        result = {
+            "output": "Background iSH process started",
+            "session_id": session.id,
+            "pid": None,
+            "exit_code": 0,
+            "status": "running",
+        }
+        if notify or watch_patterns:
+            from tools.terminal_tool_background import (
+                _apply_async_support, _register_completion_watcher,
+            )
+
+            notify, watch_patterns = _apply_async_support(
+                session, result, notify, list(watch_patterns or []) or None,
+            )
+            session.notify_on_complete = bool(notify)
+            session.watch_patterns = list(watch_patterns or [])
+        process_registry._track_started(
+            session, process_registry._reader_loop, f"ish-proc-reader-{session.id}",
+        )
+    except Exception:
+        process.kill()
+        process.wait(2.0)
+        for stream in (process.stdout, process.stdin):
+            if stream is not None:
+                stream.close()
+        _hermesios.close(native_task_id)
+        raise
+
+    if notify and session.watcher_platform:
+        _register_completion_watcher(process_registry, session, session_key)
+    return tool_result(**result)
+
+
 def _handle_ish(args, **_kw):
     command = args.get("command")
     if not isinstance(command, str) or not command.strip():
         return tool_error("ish requires a non-empty 'command' string")
-    if args.get("background", False) or args.get("pty", False):
+    background = bool(args.get("background", False))
+    interactive = bool(args.get("pty", False))
+    if interactive and not background:
         return tool_error(
-            "The ios_system iSH backend supports foreground non-PTY commands only; "
-            "background processes and PTY sessions are unavailable."
+            "pty requires background=true so the iSH guest session can be managed "
+            "with process_manage write/submit actions."
         )
-    if args.get("notify") or args.get("notify_on_complete") or args.get("watch_patterns") or args.get("heartbeat"):
+    notify = args.get("notify", args.get("notify_on_complete", False))
+    watch_patterns = args.get("watch_patterns")
+    if isinstance(notify, list):
+        watch_patterns = notify
+        notify = False
+    if not isinstance(notify, bool):
+        return tool_error("notify must be true/false or a list of strings")
+    if watch_patterns is not None and (
+        not isinstance(watch_patterns, list)
+        or any(not isinstance(pattern, str) for pattern in watch_patterns)
+    ):
+        return tool_error("watch_patterns must be a list of strings")
+    if args.get("heartbeat"):
+        return tool_error("heartbeat notifications are not available for iSH processes")
+    if not background and (notify or watch_patterns):
         return tool_error(
             "notify/heartbeat only apply to background commands (foreground "
             "results return directly). Either drop them, or run as "
             "ish(command=..., background=true, notify=...)."
         )
-    if args.get("persist_on_release", False):
-        return tool_error(
-            "persist_on_release only applies to background commands. "
-            "The iSH backend supports foreground commands only."
-        )
     workdir = args.get("workdir")
     if workdir is not None and (not isinstance(workdir, str) or not workdir.startswith("/")):
         return tool_error("workdir must be an absolute path inside the iSH guest")
+    if background:
+        try:
+            from tools.approval import get_current_session_key
+            session_key = get_current_session_key(default="") or _kw.get("task_id") or ""
+        except ImportError:
+            session_key = _kw.get("task_id") or ""
+
+        return _spawn_background_in_guest(
+            command, workdir, interactive, _kw.get("task_id"),
+            session_key,
+            notify, watch_patterns,
+        )
     timeout = args.get("timeout") or ISH_DEFAULT_TIMEOUT
     try:
         timeout = min(float(timeout), ISH_MAX_FOREGROUND_TIMEOUT)
@@ -147,8 +292,8 @@ ISH_SCHEMA = {
         "(a real Linux kernel + userland, distinct from the host `terminal` "
         "tool's ios_system environment). Useful for tools that need an actual "
         "Linux syscall surface, apk-installable packages, or a filesystem that "
-        "persists guest-side state across turns. Foreground only (like "
-        "`terminal` on iOS); no background/PTY modes."
+        "persists guest-side state across turns. Background sessions are managed "
+        "with process_manage; add pty=true for an interactive guest terminal."
     ),
     "parameters": {
         "type": "object",
@@ -159,12 +304,12 @@ ISH_SCHEMA = {
             },
             "background": {
                 "type": "boolean",
-                "description": "Run in the background. Unavailable in the iOS iSH backend.",
+                "description": "Run in the background and manage it with process_manage.",
                 "default": False,
             },
             "timeout": {
                 "type": "integer",
-                "description": f"Max seconds to wait (default: {ISH_DEFAULT_TIMEOUT}, max: {ISH_MAX_FOREGROUND_TIMEOUT}).",
+                "description": f"Foreground wait limit in seconds (default: {ISH_DEFAULT_TIMEOUT}, max: {ISH_MAX_FOREGROUND_TIMEOUT}); background sessions continue until stopped or completed.",
                 "minimum": 1,
             },
             "workdir": {
@@ -173,26 +318,15 @@ ISH_SCHEMA = {
             },
             "pty": {
                 "type": "boolean",
-                "description": "Run in a pseudo-terminal. Unavailable in the iOS iSH backend.",
+                "description": "With background=true, allow interactive input through the guest PTY.",
                 "default": False,
             },
             "notify": {
-                "description": "With background=true: notify on completion or matching output. Background execution is unavailable.",
+                "description": "With background=true: notify on completion or matching output.",
                 "anyOf": [
                     {"type": "boolean"},
                     {"type": "array", "items": {"type": "string"}},
                 ],
-            },
-            "heartbeat": {
-                "type": "integer",
-                "minimum": 0,
-                "default": 0,
-                "description": "With background=true: notify periodically. Background execution is unavailable.",
-            },
-            "persist_on_release": {
-                "type": "boolean",
-                "default": False,
-                "description": "With background=true: keep the process alive across agent lifecycle cleanup. Background execution is unavailable.",
             },
         },
         "required": ["command"],

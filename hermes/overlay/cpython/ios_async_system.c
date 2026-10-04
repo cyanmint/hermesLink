@@ -36,7 +36,10 @@ typedef struct {
     pid_t ios_pid;
     int status;
     char *command;
+    /* Reuse a bounded set of isolated ios_system sessions for parallel tasks. */
+    char runner_session_id[48];
     FILE *writer;
+    FILE *input_reader;
     pthread_t worker;
     pthread_cond_t changed;
 } ios_task;
@@ -44,8 +47,6 @@ typedef struct {
 static ios_task tasks[IOS_TASK_CAPACITY];
 static pthread_mutex_t tasks_mutex = PTHREAD_MUTEX_INITIALIZER;
 static unsigned long long next_task_id = 1;
-/* ios_closeSession removes the map entry but does not free its sessionParameters. */
-static const char runner_session_id[] = "hermes-ios-runner";
 
 static void *ios_symbol(const char *name)
 {
@@ -66,6 +67,10 @@ static void clear_task_locked(ios_task *task)
 {
     free(task->command);
     task->command = NULL;
+    if (task->input_reader != NULL) {
+        fclose(task->input_reader);
+        task->input_reader = NULL;
+    }
     task->writer = NULL;
     task->used = 0;
     task->done = 0;
@@ -123,6 +128,7 @@ static void *run_ios_task(void *opaque)
     FILE *saved_stdout = NULL;
     FILE *saved_stderr = NULL;
     FILE *command_writer = NULL;
+    FILE *command_input = NULL;
     int command_stream_transferred = 0;
 
     if (switch_session == NULL || set_streams == NULL ||
@@ -133,10 +139,18 @@ static void *run_ios_task(void *opaque)
         goto finished;
     }
 
-    switch_session(runner_session_id);
+    switch_session(task->runner_session_id);
     saved_stdin = get_stdin();
     saved_stdout = get_stdout();
     saved_stderr = get_stderr();
+    if (task->input_reader != NULL) {
+        int input_fd = dup(fileno(task->input_reader));
+        if (input_fd < 0 || (command_input = fdopen(input_fd, "r")) == NULL) {
+            if (input_fd >= 0) close(input_fd);
+            write_runner_error(task, "could not create command input stream");
+            goto restore_streams;
+        }
+    }
     if (saved_stdin == NULL) saved_stdin = stdin;
     if (saved_stdout == NULL) saved_stdout = stdout;
     if (saved_stderr == NULL) saved_stderr = stderr;
@@ -147,7 +161,7 @@ static void *run_ios_task(void *opaque)
         goto restore_streams;
     }
     (void)setvbuf(command_writer, NULL, _IONBF, 0);
-    set_streams(saved_stdin, command_writer, command_writer);
+    set_streams(command_input != NULL ? command_input : saved_stdin, command_writer, command_writer);
 
     pthread_mutex_lock(&tasks_mutex);
     int cancelled_before_start = task->cancelled;
@@ -187,8 +201,15 @@ restore_streams:
         command_writer = NULL;
     }
     set_streams(saved_stdin, saved_stdout, saved_stderr);
+    if (command_input != NULL) fclose(command_input);
 
 finished:
+    pthread_mutex_lock(&tasks_mutex);
+    if (task->input_reader != NULL) {
+        fclose(task->input_reader);
+        task->input_reader = NULL;
+    }
+    pthread_mutex_unlock(&tasks_mutex);
     if (task->writer != NULL) {
         fflush(task->writer);
         fclose(task->writer);
@@ -210,7 +231,8 @@ static PyObject *py_spawn(PyObject *self, PyObject *args)
 {
     (void)self;
     const char *command;
-    if (!PyArg_ParseTuple(args, "s:spawn", &command)) {
+    int with_stdin = 0;
+    if (!PyArg_ParseTuple(args, "s|p:spawn", &command, &with_stdin)) {
         return NULL;
     }
     const char *required_symbols[] = {
@@ -229,8 +251,36 @@ static PyObject *py_spawn(PyObject *self, PyObject *args)
     if (pipe(fds) != 0) {
         return PyErr_SetFromErrno(PyExc_OSError);
     }
+    int input_fds[2] = {-1, -1};
+    FILE *input_reader = NULL;
+    if (with_stdin) {
+        if (pipe(input_fds) != 0) {
+            int saved_errno = errno;
+            close(fds[0]);
+            close(fds[1]);
+            errno = saved_errno;
+            return PyErr_SetFromErrno(PyExc_OSError);
+        }
+        input_reader = fdopen(input_fds[0], "r");
+        if (input_reader == NULL) {
+            int saved_errno = errno;
+            close(fds[0]);
+            close(fds[1]);
+            close(input_fds[0]);
+            close(input_fds[1]);
+            errno = saved_errno;
+            return PyErr_SetFromErrno(PyExc_OSError);
+        }
+    }
     (void)fcntl(fds[0], F_SETFD, FD_CLOEXEC);
     (void)fcntl(fds[1], F_SETFD, FD_CLOEXEC);
+    if (with_stdin) {
+        (void)fcntl(input_fds[0], F_SETFD, FD_CLOEXEC);
+        (void)fcntl(input_fds[1], F_SETFD, FD_CLOEXEC);
+#ifdef F_SETNOSIGPIPE
+        (void)fcntl(input_fds[1], F_SETNOSIGPIPE, 1);
+#endif
+    }
 #ifdef F_SETNOSIGPIPE
     (void)fcntl(fds[1], F_SETNOSIGPIPE, 1);
 #endif
@@ -239,25 +289,20 @@ static PyObject *py_spawn(PyObject *self, PyObject *args)
         int saved_errno = errno;
         close(fds[0]);
         close(fds[1]);
+        if (input_reader != NULL) fclose(input_reader);
+        if (with_stdin) close(input_fds[1]);
         errno = saved_errno;
         return PyErr_SetFromErrno(PyExc_OSError);
     }
     (void)setvbuf(writer, NULL, _IONBF, 0);
 
     pthread_mutex_lock(&tasks_mutex);
-    for (size_t index = 0; index < IOS_TASK_CAPACITY; ++index) {
-        if (tasks[index].used && !tasks[index].done) {
-            pthread_mutex_unlock(&tasks_mutex);
-            fclose(writer);
-            close(fds[0]);
-            errno = EBUSY;
-            return PyErr_SetFromErrno(PyExc_OSError);
-        }
-    }
     ios_task *task = NULL;
     for (size_t index = 0; index < IOS_TASK_CAPACITY; ++index) {
         if (!tasks[index].used) {
             task = &tasks[index];
+            snprintf(task->runner_session_id, sizeof(task->runner_session_id),
+                     "hermes-ios-runner-%zu", index);
             break;
         }
     }
@@ -265,6 +310,8 @@ static PyObject *py_spawn(PyObject *self, PyObject *args)
         pthread_mutex_unlock(&tasks_mutex);
         fclose(writer);
         close(fds[0]);
+        if (input_reader != NULL) fclose(input_reader);
+        if (with_stdin) close(input_fds[1]);
         errno = EBUSY;
         return PyErr_SetFromErrno(PyExc_OSError);
     }
@@ -282,12 +329,14 @@ static PyObject *py_spawn(PyObject *self, PyObject *args)
     }
     task->command = strdup(command);
     task->writer = writer;
+    task->input_reader = input_reader;
 
     if (task->command == NULL) {
         clear_task_locked(task);
         pthread_mutex_unlock(&tasks_mutex);
         fclose(writer);
         close(fds[0]);
+        if (with_stdin) close(input_fds[1]);
         return PyErr_NoMemory();
     }
     if (!task->condition_initialized) {
@@ -297,6 +346,7 @@ static PyObject *py_spawn(PyObject *self, PyObject *args)
             pthread_mutex_unlock(&tasks_mutex);
             fclose(writer);
             close(fds[0]);
+            if (with_stdin) close(input_fds[1]);
             errno = condition_error;
             return PyErr_SetFromErrno(PyExc_OSError);
         }
@@ -308,15 +358,19 @@ static PyObject *py_spawn(PyObject *self, PyObject *args)
         pthread_mutex_unlock(&tasks_mutex);
         fclose(writer);
         close(fds[0]);
+        if (with_stdin) close(input_fds[1]);
         errno = thread_error;
         return PyErr_SetFromErrno(PyExc_OSError);
     }
     pthread_detach(task->worker);
     unsigned long long task_id = task->id;
     pthread_mutex_unlock(&tasks_mutex);
-    PyObject *result = Py_BuildValue("Ki", task_id, fds[0]);
+    PyObject *result = with_stdin
+        ? Py_BuildValue("Kii", task_id, fds[0], input_fds[1])
+        : Py_BuildValue("Ki", task_id, fds[0]);
     if (result == NULL) {
         close(fds[0]);
+        if (with_stdin) close(input_fds[1]);
         pthread_mutex_lock(&tasks_mutex);
         task->close_requested = 1;
         maybe_clear_task_locked(task);
@@ -501,7 +555,7 @@ static PyObject *py_close(PyObject *self, PyObject *args)
 }
 
 static PyMethodDef ios_methods[] = {
-    {"spawn", py_spawn, METH_VARARGS, "Start an ios_system command with pipe-captured output."},
+    {"spawn", py_spawn, METH_VARARGS, "Start an ios_system command with pipe-captured output and optional piped stdin."},
     {"poll", py_poll, METH_VARARGS, "Return an ios_system command status, or None while running."},
     {"wait", py_wait, METH_VARARGS, "Wait for an ios_system command, optionally with a timeout."},
     {"kill", py_kill, METH_VARARGS, "Interrupt and cancel an ios_system command."},
