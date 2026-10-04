@@ -31,4 +31,5 @@ rsync -a \
   --exclude='/COPYING' \
   --exclude='/README.md' \
   --exclude='/BUILD.md' \
+  --exclude='/DEVELOP.md' \
   "$source_root/" "$target_root/"

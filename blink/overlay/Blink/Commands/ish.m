@@ -18,7 +18,7 @@ extern void HermesLinkAppendLog(const char *message);
 
 /* Registered as the native `ish` shell command (Resources/blinkCommandsDictionary.plist),
  * i.e. `ish <command...>` — not a Blink-side `ish container` subcommand. See
- * BUILD.md for the overall design: a single, shared iSH Linux kernel +
+ * DEVELOP.md for the overall design: a single, shared iSH Linux kernel +
  * persistent Alpine guest root is booted once per app process
  * (ISHBridge/ish_kernel_bridge.m), and every `ish` invocation runs its
  * command inside that already-booted guest, bridging the guest pty to this
@@ -103,7 +103,7 @@ int ish_main(int argc, char *argv[]) {
     case ISH_RUN_ERR_NOT_AVAILABLE:
       fprintf(thread_stderr,
               "ish: this build does not include the native Linux guest kernel "
-              "(see BUILD.md's iSH integration status)\n");
+              "(see DEVELOP.md's iSH integration status)\n");
       return 69;
     case ISH_RUN_ERR_NO_EXIT_SENTINEL:
       /* The guest session ended without reporting a status — most commonly

@@ -10,7 +10,7 @@ This is the one part of the native iSH integration that can be exercised
 end-to-end in a Linux CI/dev environment: the Objective-C kernel-boot and
 PTY-bridging glue under ishbridge/*.m requires an iOS toolchain and the
 compiled upstream Linux-kernel-as-library target, neither of which is
-available here (see BUILD.md)."""
+available here (see DEVELOP.md)."""
 
 from __future__ import annotations
 

@@ -58,7 +58,7 @@ REPLACEMENTS = (
             '\t    <p>HermesLink is the project as a whole. It is distributed under the GNU General Public License, version 3 (GPLv3).</p>\n'
             "\t    <p>HermesLink is built on <strong>Blink</strong>, which is included as a dependency and remains subject to Blink's GPLv3 license and additional terms under GNU GPL version 3 section 7.</p>\n"
             '\t    <p>This project includes the following Hermes components: <strong>Hermes Agent</strong> (MIT license, Copyright © 2025 Nous Research) and <strong>Hermes WebUI</strong> (MIT license, Copyright © 2025 Hermes Web UI Contributors).</p>\n'
-            "\t    <p>The HermesLink glue files listed in the project's <strong>AI-GENERATED-FILES.md</strong> notice were created by cyanmint's coding agent. AI-generated content has no copyright holder and is not subject to copyright; these files are provided as non-copyrightable glue code. This notice does not alter the licenses or copyright notices of Blink or other third-party components.</p>\n"
+            '\t    <p>The HermesLink glue code and component customizations were generated with AI assistance; see the project\'s <strong>AUTHORS</strong> notice. This does not alter the licenses or copyright notices of Blink or other third-party components.</p>\n'
             '\t  </div>\n'
             '\t</div>\n'
             '      </div>\n'

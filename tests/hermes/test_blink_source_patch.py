@@ -89,8 +89,8 @@ class BlinkSourcePatchTests(unittest.TestCase):
         copying = (ROOT / "COPYING").read_text(encoding="utf-8")
         readme = (ROOT / "README.md").read_text(encoding="utf-8")
         self.assertIn("HermesLink contributors", authors)
-        self.assertIn("LICENSES/GPL-3.0.txt", copying)
-        self.assertTrue((ROOT / "LICENSES" / "GPL-3.0.txt").is_file())
+        self.assertIn("https://www.gnu.org/licenses/gpl-3.0.html", copying)
+        self.assertFalse((ROOT / "LICENSES").exists())
         self.assertIn("HermesLink", readme)
         self.assertNotIn("Do Blink!", readme)
 
@@ -105,7 +105,7 @@ class BlinkSourcePatchTests(unittest.TestCase):
         self.assertIn("rsync -a", self.script)
         for excluded_path in (
             ".git", ".github", ".gitignore", ".gitmodules", "AUTHORS",
-            "COPYING", "README.md", "BUILD.md",
+            "COPYING", "README.md", "BUILD.md", "DEVELOP.md",
         ):
             with self.subTest(path=excluded_path):
                 exclude = f"--exclude='{excluded_path if excluded_path == '.git' else '/' + excluded_path}'"

@@ -11,7 +11,7 @@ extern "C" {
  * Blink/Commands/ish.m. This header intentionally has no Foundation/UIKit
  * dependency so it can be included from plain C callers too.
  *
- * Design (see BUILD.md and ishbridge/ish_kernel_bridge.m for the full
+ * Design (see DEVELOP.md and ishbridge/ish_kernel_bridge.m for the full
  * rationale): the pinned upstream iSH Linux kernel
  * (hermes/build/external/ish/source, built by scripts/hermes/build/build-ish-static.sh
  * into libraries this target links against) is booted exactly once per app

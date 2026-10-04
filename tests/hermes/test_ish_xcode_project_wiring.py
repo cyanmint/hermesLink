@@ -9,7 +9,7 @@
   command as `ish_main` (not an `ish container` subcommand).
 
 This does not invoke xcodebuild (unavailable in this sandbox; see
-BUILD.md); it validates the project file's own structure/content."""
+DEVELOP.md); it validates the project file's own structure/content."""
 
 from __future__ import annotations
 

@@ -1,7 +1,7 @@
 # HermesLink AI-generated glue code; created by cyanmint's coding agent.
 # AI-generated content has no copyright holder and is not subject to copyright.
 """`ish` tool: run a shell command in HermesLink's persistent Alpine Linux
-guest (the iSH-based kernel booted once per app process; see BUILD.md and
+guest (the iSH-based kernel booted once per app process; see DEVELOP.md and
 ishbridge/ish_kernel_bridge.m), alongside the existing `terminal` tool which
 runs commands in the host ios_system environment.
 
