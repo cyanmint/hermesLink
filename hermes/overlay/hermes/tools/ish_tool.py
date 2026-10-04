@@ -20,8 +20,10 @@ stdout, so nothing further needs to be stripped here.
 from __future__ import annotations
 
 import os
+import select
 import shlex
 import sys
+import time
 
 from tools.registry import registry, tool_error, tool_result
 
@@ -59,29 +61,50 @@ def _run_in_guest(command: str, timeout) -> str:
     except OSError as error:
         return tool_error(f"could not start the ish guest command: {error}")
 
-    output_file = os.fdopen(output_fd, "r", encoding="utf-8", errors="replace")
+    output = bytearray()
+    deadline = time.monotonic() + timeout
+    output_open = True
     try:
-        status = _hermesios.wait(task_id, timeout)
+        while True:
+            status = _hermesios.poll(task_id)
+            if status is not None:
+                while output_open and select.select([output_fd], [], [], 0)[0]:
+                    chunk = os.read(output_fd, 65536)
+                    if not chunk:
+                        output_open = False
+                        break
+                    output.extend(chunk)
+                return tool_result(
+                    output=output.decode("utf-8", errors="replace"),
+                    exit_code=status,
+                    status="completed" if status == 0 else "failed",
+                )
+
+            remaining = deadline - time.monotonic()
+            if remaining <= 0:
+                try:
+                    _hermesios.kill(task_id)
+                except OSError:
+                    pass
+                _hermesios.wait(task_id, 2.0)
+                return tool_error(
+                    f"ish command timed out after {timeout}s and was killed",
+                    exit_code=124, status="timeout",
+                )
+
+            if output_open:
+                readable, _, _ = select.select([output_fd], [], [], min(0.1, remaining))
+                if readable:
+                    chunk = os.read(output_fd, 65536)
+                    if chunk:
+                        output.extend(chunk)
+                    else:
+                        output_open = False
+            else:
+                time.sleep(min(0.1, remaining))
     finally:
-        pass
-
-    if status is None:
-        try:
-            _hermesios.kill(task_id)
-        except OSError:
-            pass
-        _hermesios.wait(task_id, 2.0)
         _hermesios.close(task_id)
-        output_file.close()
-        return tool_error(
-            f"ish command timed out after {timeout}s and was killed",
-            exit_code=124, status="timeout",
-        )
-
-    output = output_file.read()
-    output_file.close()
-    _hermesios.close(task_id)
-    return tool_result(output=output, exit_code=status, status="completed" if status == 0 else "failed")
+        os.close(output_fd)
 
 
 def _handle_ish(args, **_kw):
