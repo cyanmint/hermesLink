@@ -100,12 +100,12 @@ jobs:
           while IFS= read -r path; do
             [ -n "$path" ] || continue
             case "$path" in
-              scripts/hermes/build/build-hermesrt-zip.sh|scripts/hermes/build/fetch-sources.sh|scripts/hermes/build/validate-runtime-zip.py|hermes/overlay/hermes/*|hermes/overlay/patches/*|hermes/overlay/python/*|hermes/build/external/SOURCES)
+              scripts/hermes/build/build-hermesrt-zip.sh|scripts/hermes/build/fetch-sources.sh|scripts/hermes/build/validate-runtime-zip.py|hermes/overlay/*)
                 python_runtime_changed=true
                 ;;
             esac
             case "$path" in
-              scripts/hermes/build/build-native-ios.sh|scripts/hermes/build/package-native-ios.sh|hermes/overlay/cpython/*|hermes/patches/*|scripts/hermes/build/generate-native-module-registry.py|scripts/hermes/build/configure_native_modules.py)
+              scripts/hermes/build/build-native-ios.sh|scripts/hermes/build/package-native-ios.sh|hermes/overlay/cpython/*|hermes/overlay/patches/patch-cpython-ios-system.py|scripts/hermes/build/generate-native-module-registry.py|scripts/hermes/build/configure_native_modules.py)
                 native_runtime_changed=true
                 ;;
             esac
@@ -120,7 +120,7 @@ jobs:
                 ;;
             esac
             case "$path" in
-              blink/*|scripts/blink/prepare-blink-source.sh|ishbridge/*|ishbridge/ISHNative.xcconfig|scripts/install_ish_runtime.sh|scripts/install_hermes_runtime.sh)
+              blink/*|scripts/blink/*|ishbridge/ISHNative.xcconfig|ishbridge/*|scripts/install_ish_runtime.sh|scripts/install_hermes_runtime.sh)
                 app_changed=true
                 ;;
             esac

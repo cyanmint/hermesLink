@@ -4,6 +4,8 @@
 
 from __future__ import annotations
 
+import fnmatch
+import re
 import unittest
 from pathlib import Path
 
@@ -170,13 +172,58 @@ class IshRuntimeWorkflowTests(unittest.TestCase):
                 self.assertIn(marker, self.text)
 
     def test_ish_bridge_changes_also_trigger_app_builds(self) -> None:
-        self.assertIn("ishbridge/ISHNative.xcconfig|ishbridge/*)", self.text)
         self.assertIn(
-            "blink/*|scripts/blink/prepare-blink-source.sh|ishbridge/*|",
+            "scripts/hermes/build/package-ish-framework.sh|ishbridge/ISHNative.xcconfig|ishbridge/*)",
+            self.text,
+        )
+        self.assertIn(
+            "blink/*|scripts/blink/*|ishbridge/ISHNative.xcconfig|ishbridge/*|",
             self.text,
         )
         self.assertGreaterEqual(self.text.count("ishbridge/ISHNative.xcconfig"), 1)
         self.assertGreaterEqual(self.text.count("scripts/install_ish_runtime.sh"), 1)
+
+    def test_decide_maps_reorganized_component_paths_to_their_build_stages(self) -> None:
+        decision = next(
+            step["run"] for step in self.workflow["jobs"]["decide"]["steps"]
+            if step.get("id") == "decision"
+        )
+        cases = [
+            block.split("esac", 1)[0]
+            for block in decision.split('case "$path" in')[1:]
+        ]
+        patterns = [
+            re.search(r"^\s*([^\n]+)\)\s*$", block, re.MULTILINE).group(1).split("|")
+            for block in cases
+        ]
+
+        def stages(path: str) -> set[str]:
+            return {
+                stage for stage, stage_patterns in zip(
+                    ("python", "native", "ish-meson", "ish-xcode", "app"),
+                    patterns,
+                    strict=True,
+                )
+                if any(fnmatch.fnmatchcase(path, pattern) for pattern in stage_patterns)
+            }
+
+        expected = {
+            "hermes/overlay/hermes/tools/ish_tool.py": {"python"},
+            "hermes/overlay/python/sitecustomize.py": {"python"},
+            "hermes/overlay/cpython/Programs/hermes_main.c": {"python", "native"},
+            "hermes/overlay/patches/patch-cpython-ios-system.py": {"python", "native"},
+            "scripts/hermes/build/build-native-ios.sh": {"native"},
+            "scripts/hermes/build/patch-ish-documents-fs.py": {"ish-meson"},
+            "scripts/hermes/build/prepare-ish-xcode-project.py": {"ish-xcode"},
+            "ishbridge/ISHRootfsProfiles.m": {"ish-xcode", "app"},
+            "ishbridge/ISHNative.xcconfig": {"ish-xcode", "app"},
+            "blink/patches/patch-settings-viewcontrollers-about-about-html.py": {"app"},
+            "scripts/blink/prepare-blink-source.sh": {"app"},
+            "tests/hermes/test_ish_ci_workflow.py": set(),
+        }
+        for path, expected_stages in expected.items():
+            with self.subTest(path=path):
+                self.assertEqual(stages(path), expected_stages)
 
     def test_app_archive_excludes_runtime_frameworks_and_rootfs(self) -> None:
         job = self.workflow["jobs"]["build-app"]
