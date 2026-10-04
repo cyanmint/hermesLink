@@ -1,5 +1,12 @@
-HermesLink contributors
-======================
+HermesLink authorship and AI-generated work
+==========================================
 
-Project-specific authorship is recorded in the Git history. The pinned Blink
-source retains its own original authorship and attribution records.
+Project-specific authorship and changes are recorded in the Git history.
+Upstream components retain their own authorship, copyright notices, and
+attribution as described in COPYING.
+
+The HermesLink-specific integration code in this repository—including glue
+code, Blink modifications, overlays, and build/test support—was generated with
+AI assistance. This statement identifies how the project-specific material was
+created; it does not replace or change any upstream copyright, license, or
+attribution notices.

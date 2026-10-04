@@ -1,28 +1,22 @@
-*~
-#*#
-.DS_Store
-__pycache__/
+# Build and compiler outputs
+/build/
+/.build/
+/DerivedData/
+*.xcarchive
+*.ipa
+*.dSYM
+*.dSYM.zip
+*.o
+*.a
+*.dylib
+*.framework/
+*.log
 *.py[cod]
+__pycache__/
 
-## Build generated
-build/
-.build
-DerivedData/
-
-# Hermes build sources are checked in; only generated runtime artifacts are ignored.
-!hermes/
-!scripts/
-!scripts/hermes/
-!scripts/hermes/build/
-!scripts/hermes/build/**
-!hermes/overlay/
-!hermes/overlay/**
-/hermes/hermes
-/hermes/hermesrt.zip
-/hermes/build/external/
-/ISHBridge/
-
-## Various settings
+# Xcode user state and local signing configuration
+xcuserdata/
+*.xcuserstate
 *.pbxuser
 !default.pbxuser
 *.mode1v3
@@ -30,57 +24,12 @@ DerivedData/
 *.mode2v3
 !default.mode2v3
 *.perspectivev3
-!default.perspectivev3
-xcuserdata/
-
-## libs
-Frameworks/include/*
-Frameworks/lib/*
-
-## Precompiled frameworks
-Frameworks/libmoshios.framework
-Frameworks/libssh2.framework
-Frameworks/openssl.framework
-
-Resources/AppFont/
-
-## Other
-*.moved-aside
-*.xcuserstate
 developer_setup.xcconfig
-main.m
 
-## Obj-C/Swift specific
-*.hmap
-*.ipa
-*.dSYM.zip
-*.dSYM
-
-# make and build files
-*.lst
-*.eep
-*.o
-*.lo
-*.la
-*.dylib
-*.lss
-*.map
-*.sym
-
-## Fonts
-Resources/Fonts/Pragmata*
-.swiftpm
-
-Blink.xcodeproj/project.xcworkspace/xcshareddata
-
-# Blink source is materialized from the pinned upstream checkout for builds.
+# Downloaded upstream sources and generated Blink build workspace
 /.blink-upstream/
 /.gitmodules
 /Frameworks/
-/.clang-format
-/.vscode/
-/AppKitBridge/
-/Appearance-Style-and-Display.md
 /Blink.xcodeproj/
 /Blink/
 /BlinkCode/
@@ -96,17 +45,16 @@ Blink.xcodeproj/project.xcworkspace/xcshareddata
 /BlinkSnippets/
 /BlinkSnippetsTests/
 /BlinkTests/
-/CHANGELOG.old.md
-/CODE.md
 /Common/
+/Sessions/
+/Settings/
+/SSH/
+/SSHTests/
+/AppKitBridge/
 /DarkAppIcon/
 /KB/
 /Media.xcassets/
 /Resources/
-/SSH/
-/SSHTests/
-/Sessions/
-/Settings/
 /xcfs/
 /files_header.sh
 /get_frameworks.sh
@@ -114,9 +62,26 @@ Blink.xcodeproj/project.xcworkspace/xcshareddata
 /header
 /ios_patches.h
 /ios_patches.m
+/main.m
 /template_setup.xcconfig
 /update_cacert.sh
+/.clang-format
+/.vscode/
+/CHANGELOG.old.md
+/CODE.md
+/Appearance-Style-and-Display.md
 
-# Keep generated Python caches ignored even under unignored source trees.
-__pycache__/
-*.py[cod]
+# Generated runtime inputs, packages, and downloaded build sources
+/hermes/build/external/
+/hermes/build/ish-native/
+/hermes/build/native-ios/
+/hermes/build/python-runtime/
+/hermes/hermes
+/hermes/hermesrt.zip
+/hermes/HermesRuntime.framework.zip
+/Resources/hermesrt.zip
+/Resources/ish-rootfs.tar.gz
+
+# Local macOS noise
+.DS_Store
+*.moved-aside
