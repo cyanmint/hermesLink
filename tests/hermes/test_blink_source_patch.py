@@ -234,19 +234,32 @@ class BlinkSourcePatchTests(unittest.TestCase):
         self.assertIn("HermesLink components and licenses", about_patch)
         self.assertNotIn("Blink Shell upstream acknowledgments", about_patch)
         self.assertIn(
-            '<a href="https://github.com/cyanmint/hermesLink">HermesLink</a> — '
-            '<a href="https://www.gnu.org/licenses/gpl-3.0.html">GNU GPL version 3</a>. '
-            "The integration and glue code were generated with AI assistance; no copyright holder is claimed",
+            '<p>HermesLink is distributed under the '
+            '<a href="https://www.gnu.org/licenses/gpl-3.0.html">GNU GPL version 3 (GPLv3)</a>.</p>',
             about_patch,
         )
-        blink_entry = (
+        self.assertNotIn("About HermesLink</h4>", about_patch)
+        self.assertNotIn("HermesLink makes use of and would like to thank", about_patch)
+        self.assertNotIn(
             '<a href="https://github.com/blinksh/blink/blob/a90b4423c8b7a86770c24a7eaa6c13b0a5904b18">'
-            "Blink Shell</a> — "
-            '<a href="https://www.gnu.org/licenses/gpl-3.0.html">GNU GPL version 3</a> with '
-            '<a href="https://github.com/blinksh/blink/blob/a90b4423c8b7a86770c24a7eaa6c13b0a5904b18/COPYING">'
-            "Blink Additional Terms</a>. © 2019 The Blink Shell Project."
+            "Blink Shell</a>",
+            about_patch.split("HermesLink components and licenses", 1)[0],
         )
-        self.assertIn(blink_entry, about_patch)
+        components = about_patch.split("HermesLink components and licenses", 1)[1]
+        self.assertLess(
+            components.index(
+                '<a href="https://github.com/cyanmint/hermesLink">'
+                "HermesLink glue and bridge code and magical mod patches</a>"
+            ),
+            components.index(
+                '<a href="https://github.com/NousResearch/hermes-agent/'
+            ),
+        )
+        self.assertIn(
+            "— AI generated content by the agent of @cyanmint; "
+            "not applicable to copyright protection.",
+            components,
+        )
         for dependency in (
             "Mosh", "HTerm", "OpenSSL Toolkit", "Eric Young", "Libssh2",
             "UICKeyChainStore", "MBProgressHUD", "Protobuf", "React",
