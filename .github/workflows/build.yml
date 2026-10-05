@@ -427,7 +427,7 @@ jobs:
             exit 2
           fi
           export LD64="${linker_candidates[0]}"
-          "$LD64" -version
+          test -x "$LD64"
           mkdir -p "$RUNNER_TEMP/ish-native-package/Frameworks"
           bash scripts/hermes/build/package-ish-framework.sh \
             hermes/build/external/ish/lib \
