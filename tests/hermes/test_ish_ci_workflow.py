@@ -156,6 +156,7 @@ class IshRuntimeWorkflowTests(unittest.TestCase):
         self.assertIn("build-ish-meson.result == 'skipped'", ipa_condition)
         self.assertIn("build-ish-runtime.result == 'skipped'", ipa_condition)
         self.assertIn("build-app.result == 'skipped'", ipa_condition)
+        self.assertIn("publish-app.result == 'skipped'", ipa_condition)
         self.assertIn("needs.decide.outputs.run_ish_runtime != 'true'", ipa_condition)
 
     def test_workflow_only_changes_do_not_force_runtime_rebuilds(self) -> None:
@@ -252,18 +253,36 @@ class IshRuntimeWorkflowTests(unittest.TestCase):
                 self.assertEqual(stages(path), expected_stages)
 
     def test_app_archive_excludes_runtime_frameworks_and_rootfs(self) -> None:
-        job = self.workflow["jobs"]["build-app"]
-        steps_text = str(job["steps"])
-        self.assertNotIn("ISHLinuxNative.zip", steps_text)
-        self.assertNotIn("scripts/install_ish_runtime.sh", steps_text)
-        self.assertIn("ISH_NATIVE_AVAILABLE = YES", steps_text)
-        self.assertIn("ish_kernel_bridge_stub.m", steps_text)
-        self.assertIn("ish_rootfs.c", steps_text)
-        self.assertIn("-D_DARWIN_C_SOURCE=1", steps_text)
-        self.assertIn("@rpath/Ish.framework/Ish", steps_text)
-        self.assertIn('test ! -e "$app/Frameworks/HermesRuntime.framework"', steps_text)
-        self.assertIn('test ! -e "$app/Frameworks/Ish.framework"', steps_text)
-        self.assertIn('test ! -e "$app/ish-rootfs.tar.gz"', steps_text)
+        build_steps = str(self.workflow["jobs"]["build-app"]["steps"])
+        publish_steps = str(self.workflow["jobs"]["publish-app"]["steps"])
+        self.assertNotIn("ISHLinuxNative.zip", build_steps)
+        self.assertNotIn("scripts/install_ish_runtime.sh", build_steps)
+        self.assertIn("ISH_NATIVE_AVAILABLE = YES", build_steps)
+        self.assertIn("ish_kernel_bridge_stub.m", build_steps)
+        self.assertIn("ish_rootfs.c", build_steps)
+        self.assertIn("-D_DARWIN_C_SOURCE=1", build_steps)
+        self.assertIn("@rpath/Ish.framework/Ish", build_steps)
+        self.assertIn('test ! -e "$app/Frameworks/HermesRuntime.framework"', publish_steps)
+        self.assertIn('test ! -e "$app/Frameworks/Ish.framework"', publish_steps)
+        self.assertIn('test ! -e "$app/ish-rootfs.tar.gz"', publish_steps)
+
+    def test_runtime_free_app_packaging_and_release_upload_run_on_linux(self) -> None:
+        jobs = self.workflow["jobs"]
+        build_app = jobs["build-app"]
+        self.assertEqual(build_app["runs-on"], "macos-latest")
+        build_steps = str(build_app["steps"])
+        self.assertIn("HermesLink.app.tar.gz", build_steps)
+        self.assertIn("actions/upload-artifact@v7", build_steps)
+
+        publish_app = jobs["publish-app"]
+        self.assertEqual(publish_app["runs-on"], "ubuntu-latest")
+        self.assertIn("build-app", publish_app["needs"])
+        publish_steps = str(publish_app["steps"])
+        self.assertIn("actions/download-artifact@v7", publish_steps)
+        self.assertIn("zip -q -r -X", publish_steps)
+        self.assertIn("gh release upload", publish_steps)
+        self.assertIn("HermesLink.app.zip", publish_steps)
+        self.assertIn("publish-app", jobs["assemble-ipa"]["needs"])
 
     def test_ipa_assembles_runtime_frameworks_and_rootfs_after_app_build(self) -> None:
         steps_text = str(self.workflow["jobs"]["assemble-ipa"]["steps"])
