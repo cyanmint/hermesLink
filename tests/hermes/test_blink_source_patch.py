@@ -201,6 +201,14 @@ class BlinkSourcePatchTests(unittest.TestCase):
                 '        std::string versions = environment.resolve("VERSIONS_FOLDER_PATH");\n',
                 encoding="utf-8",
             )
+            build_rules = root / "Libraries/pbxbuild/Sources/Target/BuildRules.cpp"
+            build_rules.parent.mkdir(parents=True)
+            build_rules.write_text(
+                "                if (std::find(fileTypes.begin(), fileTypes.end(), FT) != fileTypes.end()) {\n"
+                "                    return buildRule;\n"
+                "                }\n",
+                encoding="utf-8",
+            )
 
             subprocess.run([sys.executable, str(XCBUILD_PATCH), str(root)], check=True)
             patched = resolver.read_text(encoding="utf-8")
@@ -210,6 +218,8 @@ class BlinkSourcePatchTests(unittest.TestCase):
             patched_product_type_resolver = product_type_resolver.read_text(encoding="utf-8")
             self.assertIn('platformName == "iphoneos"', patched_product_type_resolver)
             self.assertIn('platformName == "iphonesimulator"', patched_product_type_resolver)
+            patched_build_rules = build_rules.read_text(encoding="utf-8")
+            self.assertIn("ruleFileType->identifier() == FT->identifier()", patched_build_rules)
             product_types = root / "Specifications/HermesLink-iOS-ProductTypes.xcspec"
             specifications = product_types.read_text(encoding="utf-8")
             self.assertIn("com.apple.product-type.application", specifications)
@@ -222,6 +232,7 @@ class BlinkSourcePatchTests(unittest.TestCase):
             self.assertEqual(resolver.read_text(encoding="utf-8"), patched)
             self.assertEqual(symlink_resolver.read_text(encoding="utf-8"), patched_symlink_resolver)
             self.assertEqual(product_type_resolver.read_text(encoding="utf-8"), patched_product_type_resolver)
+            self.assertEqual(build_rules.read_text(encoding="utf-8"), patched_build_rules)
             self.assertEqual(product_types.read_text(encoding="utf-8"), specifications)
 
     def test_linux_xcbuild_patch_fails_closed_when_upstream_anchor_changes(self) -> None:

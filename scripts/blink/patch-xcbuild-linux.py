@@ -71,6 +71,29 @@ def patch_ios_framework_layout(xcbuild_root: Path) -> None:
     source.write_text(contents.replace(original, patched, 1), encoding="utf-8", newline="\n")
 
 
+def patch_build_rule_type_matching(xcbuild_root: Path) -> None:
+    source = xcbuild_root / "Libraries/pbxbuild/Sources/Target/BuildRules.cpp"
+    contents = source.read_text(encoding="utf-8")
+    original = (
+        "                if (std::find(fileTypes.begin(), fileTypes.end(), FT) != fileTypes.end()) {\n"
+        "                    return buildRule;\n"
+        "                }"
+    )
+    patched = (
+        "                for (pbxspec::PBX::FileType::shared_ptr const &ruleFileType : fileTypes) {\n"
+        "                    if (ruleFileType->identifier() == FT->identifier()) {\n"
+        "                        return buildRule;\n"
+        "                    }\n"
+        "                }"
+    )
+
+    if patched in contents:
+        return
+    if contents.count(original) != 1:
+        raise SystemExit(f"expected one BuildRules file-type patch anchor in {source}")
+    source.write_text(contents.replace(original, patched, 1), encoding="utf-8", newline="\n")
+
+
 def stage_ios_product_types(xcbuild_root: Path) -> None:
     source = Path(__file__).with_name("linux-ios-product-types.xcspec")
     destination = xcbuild_root / "Specifications" / "HermesLink-iOS-ProductTypes.xcspec"
@@ -87,6 +110,7 @@ def main() -> None:
     patch_dependency_resolver(xcbuild_root)
     patch_symlink_resolver(xcbuild_root)
     patch_ios_framework_layout(xcbuild_root)
+    patch_build_rule_type_matching(xcbuild_root)
     stage_ios_product_types(xcbuild_root)
 
 
