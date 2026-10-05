@@ -116,6 +116,8 @@ class BlinkSourcePatchTests(unittest.TestCase):
             if step.get("name") == "Build HermesLink simulator app"
         )
         self.assertNotIn("CURRENT_PROJECT_VERSION=", app_build["run"])
+        self.assertIn("ARCHS=arm64", app_build["run"])
+        self.assertIn("VALID_ARCHS=arm64", app_build["run"])
         self.assertNotIn("CURRENT_PROJECT_VERSION=", simulator_build["run"])
         self.assertNotIn("${{ github.run_number }}", str(build_app["steps"]))
         assembly_steps = self.workflow["jobs"]["assemble-ipa"]["steps"]
@@ -202,11 +204,24 @@ class BlinkSourcePatchTests(unittest.TestCase):
                 encoding="utf-8",
             )
             build_rules = root / "Libraries/pbxbuild/Sources/Target/BuildRules.cpp"
-            build_rules.parent.mkdir(parents=True)
+            build_rules.parent.mkdir(parents=True, exist_ok=True)
             build_rules.write_text(
                 "                if (std::find(fileTypes.begin(), fileTypes.end(), FT) != fileTypes.end()) {\n"
                 "                    return buildRule;\n"
                 "                }\n",
+                encoding="utf-8",
+            )
+            clang_spec = root / "Specifications/Compiler/com.apple.compilers.llvm.clang.1_0.xcspec"
+            clang_spec.parent.mkdir(parents=True, exist_ok=True)
+            clang_spec.write_text(
+                "    Identifier = com.apple.compilers.llvm.clang.1_0;\n"
+                '    Name = "LLVM Clang";\n',
+                encoding="utf-8",
+            )
+            clang_dispatch = root / "Libraries/pbxbuild/Sources/Phase/Context.cpp"
+            clang_dispatch.parent.mkdir(parents=True, exist_ok=True)
+            clang_dispatch.write_text(
+                "} else if (toolIdentifier == Tool::ClangResolver::ToolIdentifier()) {\n",
                 encoding="utf-8",
             )
 
@@ -220,6 +235,10 @@ class BlinkSourcePatchTests(unittest.TestCase):
             self.assertIn('platformName == "iphonesimulator"', patched_product_type_resolver)
             patched_build_rules = build_rules.read_text(encoding="utf-8")
             self.assertIn("ruleFileType->identifier() == FT->identifier()", patched_build_rules)
+            patched_clang_spec = clang_spec.read_text(encoding="utf-8")
+            self.assertIn("SynthesizeBuildRule = YES;", patched_clang_spec)
+            patched_clang_dispatch = clang_dispatch.read_text(encoding="utf-8")
+            self.assertIn('toolIdentifier == "com.apple.compilers.llvm.clang.1_0"', patched_clang_dispatch)
             product_types = root / "Specifications/HermesLink-iOS-ProductTypes.xcspec"
             specifications = product_types.read_text(encoding="utf-8")
             self.assertIn("com.apple.product-type.application", specifications)
@@ -233,6 +252,8 @@ class BlinkSourcePatchTests(unittest.TestCase):
             self.assertEqual(symlink_resolver.read_text(encoding="utf-8"), patched_symlink_resolver)
             self.assertEqual(product_type_resolver.read_text(encoding="utf-8"), patched_product_type_resolver)
             self.assertEqual(build_rules.read_text(encoding="utf-8"), patched_build_rules)
+            self.assertEqual(clang_spec.read_text(encoding="utf-8"), patched_clang_spec)
+            self.assertEqual(clang_dispatch.read_text(encoding="utf-8"), patched_clang_dispatch)
             self.assertEqual(product_types.read_text(encoding="utf-8"), specifications)
 
     def test_linux_xcbuild_patch_fails_closed_when_upstream_anchor_changes(self) -> None:

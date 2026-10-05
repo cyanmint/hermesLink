@@ -689,6 +689,8 @@ jobs:
             CONFIGURATION_BUILD_DIR="$RUNNER_TEMP/build-products" \
             CODE_SIGNING_REQUIRED=NO \
             CODE_SIGNING_ALLOWED=NO \
+            ARCHS=arm64 \
+            VALID_ARCHS=arm64 \
             ONLY_ACTIVE_ARCH=NO \
             LD="$LD64" \
             build 2>&1 | tee "$RUNNER_TEMP/hermeslink-linux-xcbuild.log"
