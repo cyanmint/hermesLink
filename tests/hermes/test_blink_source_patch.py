@@ -103,13 +103,9 @@ class BlinkSourcePatchTests(unittest.TestCase):
         self.assertEqual(version_patches.count("CURRENT_PROJECT_VERSION = 0;"), 2)
         self.assertNotIn("CURRENT_PROJECT_VERSION = 1098;", version_patches)
 
-    def test_workflow_uses_run_number_for_app_build_number(self) -> None:
+    def test_workflow_assigns_build_number_only_during_ipa_assembly(self) -> None:
         build_app = self.workflow["jobs"]["build-app"]
         simulator = self.workflow["jobs"]["simulator-e2e"]
-        self.assertEqual(
-            self.workflow["env"]["HERMESLINK_BUILD_NUMBER"],
-            "${{ github.run_number }}",
-        )
         archive = next(
             step for step in build_app["steps"]
             if step.get("name") == "Build unsigned device archive"
@@ -118,13 +114,21 @@ class BlinkSourcePatchTests(unittest.TestCase):
             step for step in simulator["steps"]
             if step.get("name") == "Build HermesLink simulator app"
         )
-        self.assertIn('CURRENT_PROJECT_VERSION="$HERMESLINK_BUILD_NUMBER"', archive["run"])
-        self.assertIn('CURRENT_PROJECT_VERSION="$HERMESLINK_BUILD_NUMBER"', simulator_build["run"])
+        self.assertNotIn("CURRENT_PROJECT_VERSION=", archive["run"])
+        self.assertNotIn("CURRENT_PROJECT_VERSION=", simulator_build["run"])
         app_cache = next(
             step for step in build_app["steps"]
             if step.get("name") == "Cache unsigned app archive"
         )
-        self.assertIn("${{ github.run_number }}", app_cache["with"]["key"])
+        self.assertNotIn("${{ github.run_number }}", app_cache["with"]["key"])
+        assembly_steps = self.workflow["jobs"]["assemble-ipa"]["steps"]
+        set_version = next(step for step in assembly_steps if step.get("name") == "Set IPA build number")
+        self.assertEqual(set_version["env"]["HERMESLINK_BUILD_NUMBER"], "${{ github.run_number }}")
+        self.assertIn("set-ipa-build-number.py", set_version["run"])
+        self.assertLess(
+            assembly_steps.index(set_version),
+            next(i for i, step in enumerate(assembly_steps) if step.get("name") == "Sign and package IPA"),
+        )
 
     def test_blink_app_sources_are_not_tracked_in_this_repository(self) -> None:
         tracked = subprocess.check_output(

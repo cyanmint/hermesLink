@@ -46,7 +46,6 @@ concurrency:
 
 env:
   HERMES_RUNTIME_RELEASE_TAG: hermesrt-latest
-  HERMESLINK_BUILD_NUMBER: ${{ github.run_number }}
 
 jobs:
   decide:
@@ -514,7 +513,7 @@ jobs:
           path: |
             ${{ runner.temp }}/HermesLink.xcarchive
             ${{ runner.temp }}/hermeslink-archive.log
-          key: ${{ runner.os }}-hermes-app-${{ github.sha }}-${{ github.run_number }}-${{ steps.runtime_hash.outputs.sha256 }}-${{ hashFiles('blink/**') }}-${{ hashFiles('scripts/hermes/build/**') }}-${{ hashFiles('ishbridge/**') }}-${{ hashFiles('scripts/install_hermes_runtime.sh') }}
+          key: ${{ runner.os }}-hermes-app-${{ github.sha }}-${{ steps.runtime_hash.outputs.sha256 }}-${{ hashFiles('blink/**') }}-${{ hashFiles('scripts/hermes/build/**') }}-${{ hashFiles('ishbridge/**') }}-${{ hashFiles('scripts/install_hermes_runtime.sh') }}
 
       - name: Cache framework builds
         id: cache
@@ -552,7 +551,6 @@ jobs:
             CODE_SIGN_IDENTITY='' \
             CODE_SIGNING_REQUIRED=NO \
             CODE_SIGNING_ALLOWED=NO \
-            CURRENT_PROJECT_VERSION="$HERMESLINK_BUILD_NUMBER" \
             ONLY_ACTIVE_ARCH=NO | tee "$RUNNER_TEMP/hermeslink-archive.log" | xcpretty
 
       - name: Show raw Xcode linker diagnostics
@@ -785,7 +783,6 @@ jobs:
             ARCHS=arm64 \
             ONLY_ACTIVE_ARCH=YES \
             IPHONEOS_DEPLOYMENT_TARGET='16.1' \
-            CURRENT_PROJECT_VERSION="$HERMESLINK_BUILD_NUMBER" \
             CODE_SIGNING_ALLOWED=NO | tee "$RUNNER_TEMP/hermeslink-simulator-e2e-build.log" | xcpretty
           app="$RUNNER_TEMP/HermesLinkSimulatorE2E/Build/Products/Debug-iphonesimulator/HermesLink.app"
           test -d "$app"
@@ -878,7 +875,23 @@ jobs:
           python3 scripts/hermes/build/verify-ish-source.py \
             --rootfs "$RUNNER_TEMP/Payload/HermesLink.app/ish-rootfs.tar.gz"
 
+      - name: Set IPA build number
+        id: ipa_build_number
+        env:
+          HERMESLINK_BUILD_NUMBER: ${{ github.run_number }}
+        run: |
+          set -euo pipefail
+          app="$RUNNER_TEMP/Payload/HermesLink.app"
+          python3 scripts/hermes/build/set-ipa-build-number.py \
+            "$app/Info.plist" "$HERMESLINK_BUILD_NUMBER"
+          actual="$(/usr/libexec/PlistBuddy -c 'Print :CFBundleVersion' "$app/Info.plist")"
+          test "$actual" = "$HERMESLINK_BUILD_NUMBER"
+          printf 'Verified IPA CFBundleVersion=%s\n' "$actual"
+          printf 'version=%s\n' "$actual" >> "$GITHUB_OUTPUT"
+
       - name: Sign and package IPA
+        env:
+          EXPECTED_IPA_BUILD_NUMBER: ${{ steps.ipa_build_number.outputs.version }}
         run: |
           set -euo pipefail
           app="$RUNNER_TEMP/Payload/HermesLink.app"
@@ -894,6 +907,10 @@ jobs:
           unzip -Z1 "$RUNNER_TEMP/HermesLink.ipa" | grep -Fx 'Payload/HermesLink.app/ish-rootfs.tar.gz'
           unzip -Z1 "$RUNNER_TEMP/HermesLink.ipa" | grep -Fx 'Payload/HermesLink.app/Frameworks/HermesRuntime.framework/HermesRuntime'
           unzip -Z1 "$RUNNER_TEMP/HermesLink.ipa" | grep -Fx 'Payload/HermesLink.app/Frameworks/Ish.framework/Ish'
+          unzip -p "$RUNNER_TEMP/HermesLink.ipa" Payload/HermesLink.app/Info.plist > "$RUNNER_TEMP/ipa-Info.plist"
+          packaged_version="$(/usr/libexec/PlistBuddy -c 'Print :CFBundleVersion' "$RUNNER_TEMP/ipa-Info.plist")"
+          test "$packaged_version" = "$EXPECTED_IPA_BUILD_NUMBER"
+          printf 'Verified packaged IPA CFBundleVersion=%s\n' "$packaged_version"
 
       - name: Upload universal HermesLink IPA
         uses: actions/upload-artifact@v7
