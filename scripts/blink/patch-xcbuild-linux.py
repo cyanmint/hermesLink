@@ -36,6 +36,41 @@ def patch_dependency_resolver(xcbuild_root: Path) -> None:
     source.write_text(contents.replace(original, patched, 1), encoding="utf-8", newline="\n")
 
 
+def patch_symlink_resolver(xcbuild_root: Path) -> None:
+    source = xcbuild_root / "Libraries/pbxbuild/Sources/Tool/SymlinkResolver.cpp"
+    contents = source.read_text(encoding="utf-8")
+    original = 'invocation.arguments() = { "-sfh", targetPath, symlinkPath };'
+    patched = 'invocation.arguments() = { "-sfn", targetPath, symlinkPath };'
+
+    if patched in contents:
+        return
+    if contents.count(original) != 1:
+        raise SystemExit(f"expected one SymlinkResolver patch anchor in {source}")
+    source.write_text(contents.replace(original, patched, 1), encoding="utf-8", newline="\n")
+
+
+def patch_ios_framework_layout(xcbuild_root: Path) -> None:
+    source = xcbuild_root / "Libraries/pbxbuild/Sources/Phase/ProductTypeResolver.cpp"
+    contents = source.read_text(encoding="utf-8")
+    original = (
+        "    if (Tool::SymlinkResolver const *symlinkResolver = phaseContext->symlinkResolver(phaseEnvironment)) {\n"
+        '        std::string versions = environment.resolve("VERSIONS_FOLDER_PATH");'
+    )
+    patched = (
+        '    std::string platformName = environment.resolve("PLATFORM_NAME");\n'
+        '    if (platformName == "iphoneos" || platformName == "iphonesimulator") {\n'
+        "        return true;\n"
+        "    }\n\n"
+        + original
+    )
+
+    if patched in contents:
+        return
+    if contents.count(original) != 1:
+        raise SystemExit(f"expected one framework-layout patch anchor in {source}")
+    source.write_text(contents.replace(original, patched, 1), encoding="utf-8", newline="\n")
+
+
 def stage_ios_product_types(xcbuild_root: Path) -> None:
     source = Path(__file__).with_name("linux-ios-product-types.xcspec")
     destination = xcbuild_root / "Specifications" / "HermesLink-iOS-ProductTypes.xcspec"
@@ -50,6 +85,8 @@ def main() -> None:
         raise SystemExit(f"usage: {Path(sys.argv[0]).name} XCBUILD_SOURCE_ROOT")
     xcbuild_root = Path(sys.argv[1])
     patch_dependency_resolver(xcbuild_root)
+    patch_symlink_resolver(xcbuild_root)
+    patch_ios_framework_layout(xcbuild_root)
     stage_ios_product_types(xcbuild_root)
 
 

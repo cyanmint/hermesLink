@@ -28,7 +28,11 @@
       WRAPPER_SUFFIX = ".$(WRAPPER_EXTENSION)";
       WRAPPER_NAME = "$(WRAPPER_PREFIX)$(PRODUCT_NAME)$(WRAPPER_SUFFIX)";
       FULL_PRODUCT_NAME = "$(WRAPPER_NAME)";
+      EXECUTABLE_FOLDER_PATH = "$(WRAPPER_NAME)";
+      UNLOCALIZED_RESOURCES_FOLDER_PATH = "$(WRAPPER_NAME)";
+      CONTENTS_FOLDER_PATH = "$(WRAPPER_NAME)";
       INFOPLIST_PATH = "$(WRAPPER_NAME)/Info.plist";
+      PKGINFO_PATH = "$(WRAPPER_NAME)/PkgInfo";
       CODE_SIGNING_ALLOWED = NO;
     };
     PackageTypes = ( com.apple.package-type.wrapper.application );
@@ -45,10 +49,40 @@
       WRAPPER_SUFFIX = ".$(WRAPPER_EXTENSION)";
       WRAPPER_NAME = "$(WRAPPER_PREFIX)$(PRODUCT_NAME)$(WRAPPER_SUFFIX)";
       FULL_PRODUCT_NAME = "$(WRAPPER_NAME)";
+      EXECUTABLE_FOLDER_PATH = "$(WRAPPER_NAME)";
+      UNLOCALIZED_RESOURCES_FOLDER_PATH = "$(WRAPPER_NAME)";
+      CONTENTS_FOLDER_PATH = "$(WRAPPER_NAME)";
       INFOPLIST_PATH = "$(WRAPPER_NAME)/Info.plist";
+      PKGINFO_PATH = "$(WRAPPER_NAME)/PkgInfo";
       PRODUCT_SPECIFIC_LDFLAGS = "-e _NSExtensionMain";
     };
     PackageTypes = ( com.apple.package-type.app-extension );
+  },
+  {
+    Type = ProductType;
+    Identifier = com.apple.product-type.framework;
+    BasedOn = com.apple.product-type.bundle;
+    Class = PBXFrameworkProductType;
+    Name = "Framework";
+    DefaultBuildProperties = {
+      MACH_O_TYPE = "mh_dylib";
+      FRAMEWORK_VERSION = "A";
+      WRAPPER_EXTENSION = "framework";
+      WRAPPER_SUFFIX = ".$(WRAPPER_EXTENSION)";
+      WRAPPER_NAME = "$(WRAPPER_PREFIX)$(PRODUCT_NAME)$(WRAPPER_SUFFIX)";
+      FULL_PRODUCT_NAME = "$(WRAPPER_NAME)";
+      EXECUTABLE_FOLDER_PATH = "$(WRAPPER_NAME)";
+      UNLOCALIZED_RESOURCES_FOLDER_PATH = "$(WRAPPER_NAME)/Resources";
+      CONTENTS_FOLDER_PATH = "$(WRAPPER_NAME)";
+      PUBLIC_HEADERS_FOLDER_PATH = "$(WRAPPER_NAME)/Headers";
+      PRIVATE_HEADERS_FOLDER_PATH = "$(WRAPPER_NAME)/PrivateHeaders";
+      MODULES_FOLDER_PATH = "$(WRAPPER_NAME)/Modules";
+      INFOPLIST_PATH = "$(WRAPPER_NAME)/Info.plist";
+      PKGINFO_PATH = "$(WRAPPER_NAME)/PkgInfo";
+      CODE_SIGNING_ALLOWED = NO;
+      CODE_SIGNING_REQUIRED = NO;
+    };
+    PackageTypes = ( com.apple.package-type.wrapper.framework );
   },
   {
     Type = PackageType;
@@ -70,6 +104,21 @@
       FileType = wrapper.application;
       Name = "$(WRAPPER_NAME)";
       IsLaunchable = YES;
+    };
+  },
+  {
+    Type = PackageType;
+    Identifier = com.apple.package-type.wrapper.framework;
+    BasedOn = com.apple.package-type.wrapper;
+    Name = "Framework Wrapper";
+    DefaultBuildSettings = {
+      PRODUCT_BUNDLE_PACKAGE_TYPE = "FMWK";
+      GENERATE_PKGINFO_FILE = YES;
+    };
+    ProductReference = {
+      FileType = wrapper.framework;
+      Name = "$(WRAPPER_NAME)";
+      IsLaunchable = NO;
     };
   },
   {

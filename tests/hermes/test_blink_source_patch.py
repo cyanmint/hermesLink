@@ -188,17 +188,40 @@ class BlinkSourcePatchTests(unittest.TestCase):
                 "            switch (file->fileRef()->type()) {",
                 encoding="utf-8",
             )
+            symlink_resolver = root / "Libraries/pbxbuild/Sources/Tool/SymlinkResolver.cpp"
+            symlink_resolver.parent.mkdir(parents=True)
+            symlink_resolver.write_text(
+                'invocation.arguments() = { "-sfh", targetPath, symlinkPath };\n',
+                encoding="utf-8",
+            )
+            product_type_resolver = root / "Libraries/pbxbuild/Sources/Phase/ProductTypeResolver.cpp"
+            product_type_resolver.parent.mkdir(parents=True)
+            product_type_resolver.write_text(
+                "    if (Tool::SymlinkResolver const *symlinkResolver = phaseContext->symlinkResolver(phaseEnvironment)) {\n"
+                '        std::string versions = environment.resolve("VERSIONS_FOLDER_PATH");\n',
+                encoding="utf-8",
+            )
 
             subprocess.run([sys.executable, str(XCBUILD_PATCH), str(root)], check=True)
             patched = resolver.read_text(encoding="utf-8")
             self.assertIn("file->fileRef() == nullptr", patched)
+            patched_symlink_resolver = symlink_resolver.read_text(encoding="utf-8")
+            self.assertIn('"-sfn"', patched_symlink_resolver)
+            patched_product_type_resolver = product_type_resolver.read_text(encoding="utf-8")
+            self.assertIn('platformName == "iphoneos"', patched_product_type_resolver)
+            self.assertIn('platformName == "iphonesimulator"', patched_product_type_resolver)
             product_types = root / "Specifications/HermesLink-iOS-ProductTypes.xcspec"
             specifications = product_types.read_text(encoding="utf-8")
             self.assertIn("com.apple.product-type.application", specifications)
             self.assertIn("com.apple.product-type.app-extension", specifications)
+            self.assertIn("com.apple.product-type.framework", specifications)
+            self.assertIn('PUBLIC_HEADERS_FOLDER_PATH = "$(WRAPPER_NAME)/Headers";', specifications)
+            self.assertIn('MODULES_FOLDER_PATH = "$(WRAPPER_NAME)/Modules";', specifications)
 
             subprocess.run([sys.executable, str(XCBUILD_PATCH), str(root)], check=True)
             self.assertEqual(resolver.read_text(encoding="utf-8"), patched)
+            self.assertEqual(symlink_resolver.read_text(encoding="utf-8"), patched_symlink_resolver)
+            self.assertEqual(product_type_resolver.read_text(encoding="utf-8"), patched_product_type_resolver)
             self.assertEqual(product_types.read_text(encoding="utf-8"), specifications)
 
     def test_linux_xcbuild_patch_fails_closed_when_upstream_anchor_changes(self) -> None:
