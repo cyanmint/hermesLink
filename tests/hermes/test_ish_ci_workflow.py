@@ -312,7 +312,7 @@ class IshRuntimeWorkflowTests(unittest.TestCase):
         self.assertIn("-Wno-error=address-of-packed-member", steps_text)
         self.assertIn("-Wno-error=range-loop-construct", steps_text)
         self.assertIn("-Wno-error=self-assign-field", steps_text)
-        self.assertIn("-Wno-error=uninitialized-const-pointer", steps_text)
+        self.assertNotIn("-Wno-error=uninitialized-const-pointer", steps_text)
         self.assertIn("SWIFTPM_MAX_CONCURRENT_OPERATIONS", steps_text)
 
     def test_ipa_assembles_runtime_frameworks_and_rootfs_after_app_build(self) -> None:

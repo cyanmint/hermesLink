@@ -766,7 +766,7 @@ jobs:
                   source.write_text(contents.replace(anchor, include + anchor, 1), encoding="utf-8")
           PY
           CC=clang CXX=clang++ \
-            CXXFLAGS='-Wno-error=deprecated-declarations -Wno-error=address-of-packed-member -Wno-error=range-loop-construct -Wno-error=self-assign-field -Wno-error=uninitialized-const-pointer -include cstdint -include cstdlib' \
+            CXXFLAGS='-Wno-error=deprecated-declarations -Wno-error=address-of-packed-member -Wno-error=range-loop-construct -Wno-error=self-assign-field -include cstdint -include cstdlib' \
             CMAKE_FLAGS='-DCMAKE_POLICY_VERSION_MINIMUM=3.5' \
             make -C "$RUNNER_TEMP/xcbuild" -j"$(nproc)" 2>&1 | tee "$RUNNER_TEMP/xcbuild-build.log"
           test -x "$RUNNER_TEMP/xcbuild/build/xcbuild"
