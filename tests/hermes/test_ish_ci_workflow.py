@@ -58,9 +58,9 @@ class IshRuntimeWorkflowTests(unittest.TestCase):
         ish_case = self.text.split('case "$path" in')[3].split("esac", 1)[0]
         self.assertNotIn("ishbridge/*", ish_case)
 
-    def test_ish_runtime_job_runs_on_macos_and_is_blocking(self) -> None:
+    def test_ish_runtime_job_runs_on_linux_and_is_blocking(self) -> None:
         job = self.workflow["jobs"]["build-ish-runtime"]
-        self.assertEqual(job["runs-on"], "macos-latest")
+        self.assertEqual(job["runs-on"], "ubuntu-latest")
         self.assertFalse(job.get("continue-on-error", False))
         self.assertIn("run_ish_runtime", str(job["if"]))
 
@@ -74,17 +74,21 @@ class IshRuntimeWorkflowTests(unittest.TestCase):
         self.assertIn("gh release upload", steps_text)
         self.assertIn("build/ios-toolchain", steps_text)
         self.assertIn("source", steps_text)
+        self.assertIn("clang lld llvm meson ninja-build curl rsync", steps_text)
 
-    def test_macos_ish_job_downloads_linux_release_and_builds_xcode_targets(self) -> None:
+    def test_linux_ish_job_builds_host_interop_and_framework_without_xcode(self) -> None:
         job = self.workflow["jobs"]["build-ish-runtime"]
+        self.assertEqual(job["runs-on"], "ubuntu-latest")
         self.assertIn("build-ish-meson", job["needs"])
         steps_text = str(job["steps"])
         self.assertIn("gh release download", steps_text)
         self.assertIn("ISHMesonBuild.tar.gz", steps_text)
         self.assertIn("tar -xzf", steps_text)
         self.assertNotIn("actions/download-artifact@v7", steps_text)
-        self.assertIn("build-ish-static.sh --xcode-only", steps_text)
-        self.assertNotIn("Adapt Linux Meson build metadata for macOS", steps_text)
+        self.assertIn("build-ish-static.sh --framework-only", steps_text)
+        self.assertIn("package-ish-framework.sh", steps_text)
+        self.assertNotIn("xcodebuild", steps_text)
+        self.assertNotIn("xcrun", steps_text)
 
     def test_simulator_e2e_builds_and_installs_a_simulator_native_ish_runtime(self) -> None:
         build_job = self.workflow["jobs"]["build-ish-simulator-runtime"]
@@ -269,19 +273,14 @@ class IshRuntimeWorkflowTests(unittest.TestCase):
         self.assertIn("ish-release-check/ISHLinuxNative.zip", decision_script)
         self.assertIn("grep -Fxq Resources/ish-rootfs.tar.gz", decision_script)
 
-    def test_macos_ish_build_compiles_upstream_section_anchors_for_app_link(self) -> None:
+    def test_linux_ish_build_compiles_upstream_section_anchors_for_app_link(self) -> None:
         job = self.workflow["jobs"]["build-ish-runtime"]
-        steps = job["steps"]
-        compile_step = next(step for step in steps if step["name"] == "Compile iSH Mach-O section anchors")
-        self.assertIn("arch/ish/kernel/sections.S", compile_step["run"])
-        self.assertIn("ish-sections.o", compile_step["run"])
-        self.assertLess(
-            steps.index(compile_step),
-            next(i for i, step in enumerate(steps) if step["name"] == "Package iSH native build output"),
-        )
-        self.assertIn("package-ish-framework.sh", str(steps))
-        package_step = next(step for step in steps if step["name"] == "Package iSH dynamic framework")
-        self.assertIn("Frameworks", package_step["run"])
+        steps_text = str(job["steps"])
+        helper = (ROOT / "scripts" / "hermes" / "build" / "build-ish-host-libs.sh").read_text()
+        self.assertIn("arch/ish/kernel/sections.S", helper)
+        self.assertIn("ish-sections.o", helper)
+        self.assertIn("package-ish-framework.sh", steps_text)
+        self.assertIn("Frameworks", steps_text)
 
     def test_ish_linker_configuration_changes_only_the_macos_ish_stage(self) -> None:
         case = self.text.split('case "$path" in')[4].split("esac", 1)[0]

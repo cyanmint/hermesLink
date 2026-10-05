@@ -28,6 +28,8 @@ if [ "$MODE" = all ]; then
     echo "missing initialized iSH submodule at $ISH_MODULE_SOURCE; clone with --recurse-submodules" >&2
     exit 2
   }
+  git -C "$ISH_MODULE_SOURCE" -c submodule.deps/linux.update=checkout \
+    submodule update --init --checkout --depth 1 -- deps/linux
   python3 "$VERIFY" --source "$ISH_MODULE_SOURCE"
   if [ -e "$SOURCE" ] && [ ! -f "$SOURCE/.hermeslink-source-revision" ]; then
     echo "refusing to replace non-generated iSH source path: $SOURCE" >&2

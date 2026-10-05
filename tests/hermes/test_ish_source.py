@@ -3,6 +3,7 @@
 """Focused tests for pinned iSH source and rootfs acquisition."""
 
 import importlib.util
+import tempfile
 import unittest
 from pathlib import Path
 
@@ -35,13 +36,27 @@ class IshSourceTests(unittest.TestCase):
         with self.assertRaisesRegex(ValueError, "fixture SHA-256 mismatch"):
             verify.require_sha256(digest, "0" * 64, "fixture")
 
+    def test_source_verifier_allows_only_submodules_marked_update_none(self):
+        with tempfile.TemporaryDirectory() as temp_dir:
+            source = Path(temp_dir)
+            (source / ".gitmodules").write_text(
+                '[submodule "deps/linux"]\n'
+                '\tpath = deps/linux\n'
+                '\tupdate = none\n',
+                encoding="utf-8",
+            )
+            self.assertEqual(
+                verify.intentional_uninitialized_submodules(source), {"deps/linux"}
+            )
+
     def test_source_script_uses_the_iSH_submodule_and_fetches_only_the_rootfs_asset(self):
         script = (ROOT / "scripts" / "hermes" / "build" / "fetch-ish-source.sh").read_text(
             encoding="utf-8"
         )
         self.assertIn("modules/ish", script)
         self.assertIn(verify.ROOTFS_URL, script)
-        self.assertNotIn("submodule update", script)
+        self.assertIn("submodule.deps/linux.update=checkout", script)
+        self.assertIn("submodule update --init --checkout --depth 1 -- deps/linux", script)
         self.assertIn('python3 "$VERIFY" --source "$ISH_MODULE_SOURCE" --rootfs "$ROOTFS"', script)
         self.assertIn('MODE=rootfs-only', script)
         self.assertIn('if [ "$MODE" = all ]; then', script)

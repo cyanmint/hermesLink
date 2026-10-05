@@ -41,6 +41,38 @@ def require_sha256(actual: str, expected: str, description: str) -> None:
         )
 
 
+def intentional_uninitialized_submodules(source: Path) -> set[str]:
+    updates = subprocess.run(
+        [
+            "git", "-C", str(source), "config", "-f", ".gitmodules",
+            "--get-regexp", r"^submodule\..*\.update$",
+        ],
+        capture_output=True,
+        text=True,
+        check=False,
+    )
+    paths: set[str] = set()
+    if updates.returncode not in (0, 1):
+        raise ValueError(f"could not inspect iSH submodule update policy: {source}")
+    for entry in updates.stdout.splitlines():
+        key, _, update = entry.partition(" ")
+        if update != "none" or not key.startswith("submodule.") or not key.endswith(".update"):
+            continue
+        name = key.removeprefix("submodule.").removesuffix(".update")
+        path = subprocess.run(
+            [
+                "git", "-C", str(source), "config", "-f", ".gitmodules",
+                "--get", f"submodule.{name}.path",
+            ],
+            capture_output=True,
+            text=True,
+            check=False,
+        )
+        if path.returncode == 0:
+            paths.add(path.stdout.strip())
+    return paths
+
+
 def _archive_sha256(source: Path) -> str:
     process = subprocess.Popen(
         ["git", "-C", str(source), "archive", "--format=tar", ISH_COMMIT],
@@ -91,7 +123,14 @@ def verify_source(source: Path) -> None:
         )
     # `git status` above ignores submodule worktree noise (notably the macOS
     # Linux-kernel checkout); this recursive status still pins every gitlink.
-    if any(line and line[0] != " " for line in status.splitlines()):
+    optional_uninitialized = intentional_uninitialized_submodules(source)
+    for line in status.splitlines():
+        if not line or line[0] == " ":
+            continue
+        fields = line[1:].split(maxsplit=1)
+        path = fields[1].partition(" (")[0] if len(fields) == 2 else ""
+        if line[0] == "-" and path in optional_uninitialized:
+            continue
         raise ValueError("iSH submodules are uninitialized or differ from pinned revisions")
 
 

@@ -17,7 +17,7 @@ on:
         options: [auto, true, false]
         default: auto
       ish_runtime:
-        description: Build and publish iSH native framework (macOS)
+        description: Build and publish iSH native framework (Linux)
         required: true
         type: choice
         options: [auto, true, false]
@@ -95,7 +95,7 @@ jobs:
           python_runtime_changed=false
           native_runtime_changed=false
           ish_meson_changed=false
-          ish_xcode_changed=false
+          ish_framework_changed=false
           app_changed=false
           while IFS= read -r path; do
             [ -n "$path" ] || continue
@@ -115,8 +115,8 @@ jobs:
                 ;;
             esac
             case "$path" in
-              scripts/hermes/build/prepare-ish-xcode-project.py|scripts/hermes/build/repack-ish-meson-archives.py|scripts/hermes/build/package-ish-framework.sh|ishbridge/ISHNative.xcconfig|ishbridge/*)
-                ish_xcode_changed=true
+              scripts/hermes/build/prepare-ish-xcode-project.py|scripts/hermes/build/repack-ish-meson-archives.py|scripts/hermes/build/build-ish-host-libs.sh|scripts/hermes/build/package-ish-framework.sh|ishbridge/ISHNative.xcconfig|ishbridge/*)
+                ish_framework_changed=true
                 ;;
             esac
             case "$path" in
@@ -137,7 +137,7 @@ jobs:
           has_asset hermesrt.zip || python_runtime_changed=true
           has_asset HermesRuntime.framework.zip || native_runtime_changed=true
           has_asset ISHMesonBuild.tar.gz || ish_meson_changed=true
-          has_asset ISHLinuxNative.zip || ish_xcode_changed=true
+          has_asset ISHLinuxNative.zip || ish_framework_changed=true
           if has_asset ISHLinuxNative.zip; then
             mkdir -p "$RUNNER_TEMP/ish-release-check"
             if gh release download "$HERMES_RUNTIME_RELEASE_TAG" \
@@ -145,10 +145,10 @@ jobs:
               --dir "$RUNNER_TEMP/ish-release-check"; then
               if ! unzip -Z1 "$RUNNER_TEMP/ish-release-check/ISHLinuxNative.zip" |
                 grep -Fxq Resources/ish-rootfs.tar.gz; then
-                ish_xcode_changed=true
+                ish_framework_changed=true
               fi
             else
-              ish_xcode_changed=true
+              ish_framework_changed=true
             fi
           fi
           has_asset HermesLink.app.zip || app_changed=true
@@ -164,17 +164,17 @@ jobs:
           run_python_runtime="$(choose "$PYTHON_RUNTIME_OVERRIDE" "$python_runtime_changed")"
           run_native_runtime="$(choose "$NATIVE_RUNTIME_OVERRIDE" "$native_runtime_changed")"
           run_ish_meson="$(choose "$ISH_RUNTIME_OVERRIDE" "$ish_meson_changed")"
-          ish_xcode_auto="$ish_xcode_changed"
+          ish_framework_auto="$ish_framework_changed"
           if [ "$run_ish_meson" = true ]; then
-            ish_xcode_auto=true
+            ish_framework_auto=true
           fi
-          run_ish_runtime="$(choose "$ISH_RUNTIME_OVERRIDE" "$ish_xcode_auto")"
+          run_ish_runtime="$(choose "$ISH_RUNTIME_OVERRIDE" "$ish_framework_auto")"
           if [ "$run_ish_runtime" = true ]; then
             app_changed=true
           fi
           run_app="$(choose "$APP_OVERRIDE" "$app_changed")"
-          printf 'python_runtime_changed=%s native_runtime_changed=%s ish_meson_changed=%s ish_xcode_changed=%s app_changed=%s\n' \
-            "$python_runtime_changed" "$native_runtime_changed" "$ish_meson_changed" "$ish_xcode_changed" "$app_changed"
+          printf 'python_runtime_changed=%s native_runtime_changed=%s ish_meson_changed=%s ish_framework_changed=%s app_changed=%s\n' \
+            "$python_runtime_changed" "$native_runtime_changed" "$ish_meson_changed" "$ish_framework_changed" "$app_changed"
           printf 'run_python_runtime=%s\n' "$run_python_runtime" >> "$GITHUB_OUTPUT"
           printf 'run_native_runtime=%s\n' "$run_native_runtime" >> "$GITHUB_OUTPUT"
           printf 'run_ish_meson=%s\n' "$run_ish_meson" >> "$GITHUB_OUTPUT"
@@ -319,7 +319,7 @@ jobs:
       - name: Install Linux iOS cross-compilation tools
         run: |
           sudo apt-get update
-          sudo apt-get install -y clang lld llvm meson ninja-build
+          sudo apt-get install -y clang lld llvm meson ninja-build curl rsync
 
       - name: Fetch pinned iSH source and Alpine rootfs
         run: |
@@ -356,7 +356,7 @@ jobs:
         run: gh release upload "$HERMES_RUNTIME_RELEASE_TAG" "$RUNNER_TEMP/ISHMesonBuild.tar.gz" --clobber
 
   build-ish-runtime:
-    name: Build iSH native framework (macOS)
+    name: Build iSH native framework (Linux cross-compile)
     needs: [decide, prepare-release, build-ish-meson]
     if: >-
       always() &&
@@ -364,15 +364,17 @@ jobs:
       needs.prepare-release.result == 'success' &&
       (needs.build-ish-meson.result == 'success' ||
        (needs.build-ish-meson.result == 'skipped' && needs.decide.outputs.run_ish_meson != 'true'))
-    runs-on: macos-latest
+    runs-on: ubuntu-latest
     permissions:
       contents: write
     steps:
       - name: Check out HermesLink
         uses: actions/checkout@v7
 
-      - name: Install LLVM, LLD, Meson, and Ninja
-        run: brew install llvm lld meson ninja
+      - name: Install Linux iOS cross-compilation tools
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y clang lld llvm meson ninja-build
 
       - name: Initialize pinned iSH source tree
         run: git submodule update --init --recursive --checkout --depth 1 -- modules/ish
@@ -390,25 +392,22 @@ jobs:
           test -x /tmp/hermeslink-ish/build/ios-toolchain/clang
           test -f /tmp/hermeslink-ish/source/.hermeslink-source-revision
 
-      - name: Build iSH Xcode host-interop libraries
+      - name: Build iSH host-interop libraries and Mach-O section anchors
         env:
           BUILD_ROOT: /tmp/hermeslink-ish/build
           MESON_BUILD_DIR: /tmp/hermeslink-ish/build/meson
           ISH_SOURCE: /tmp/hermeslink-ish/source
           IPHONEOS_DEPLOYMENT_TARGET: '16.1'
-        run: bash scripts/hermes/build/build-ish-static.sh --xcode-only
+        run: bash scripts/hermes/build/build-ish-static.sh --framework-only
 
-      - name: Compile iSH Mach-O section anchors
-        run: |
-          xcrun --sdk iphoneos clang \
-            -target arm64-apple-ios16.1 \
-            -isysroot "$(xcrun --sdk iphoneos --show-sdk-path)" \
-            -c /tmp/hermeslink-ish/source/deps/linux/arch/ish/kernel/sections.S \
-            -o hermes/build/external/ish/lib/ish-sections.o
+      - name: Verify Linux-built Mach-O section anchors
+        run: test -s hermes/build/external/ish/lib/ish-sections.o
 
       - name: Package iSH dynamic framework
         env:
           IPHONEOS_DEPLOYMENT_TARGET: '16.1'
+          SDKROOT: /tmp/hermeslink-ish/build/sdks/iPhoneOS16.5.sdk
+          CC: /tmp/hermeslink-ish/build/ios-toolchain/clang
         run: |
           set -euo pipefail
           mkdir -p "$RUNNER_TEMP/ish-native-package/Frameworks"

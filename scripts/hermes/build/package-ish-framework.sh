@@ -9,15 +9,28 @@ OUTPUT_DIR=${2:?directory for the packaged Ish.framework}
 FRAMEWORK="$OUTPUT_DIR/Ish.framework"
 SDK_NAME=${SDK_NAME:-iphoneos}
 DEPLOYMENT_TARGET=${IPHONEOS_DEPLOYMENT_TARGET:-16.1}
+HOST_OS=$(uname -s)
 case "$SDK_NAME" in
   iphoneos)
-    SDKROOT=$(xcrun --sdk iphoneos --show-sdk-path)
+    if [ -z "${SDKROOT:-}" ]; then
+      if [ "$HOST_OS" = Darwin ]; then
+        SDKROOT=$(xcrun --sdk iphoneos --show-sdk-path)
+      else
+        SDKROOT=${IOS_SDK_ROOT:-}
+      fi
+    fi
     TARGET=arm64-apple-ios"$DEPLOYMENT_TARGET"
     MIN_VERSION_FLAG=-miphoneos-version-min
     SUPPORTED_PLATFORM=iPhoneOS
     ;;
   iphonesimulator)
-    SDKROOT=$(xcrun --sdk iphonesimulator --show-sdk-path)
+    if [ -z "${SDKROOT:-}" ]; then
+      if [ "$HOST_OS" = Darwin ]; then
+        SDKROOT=$(xcrun --sdk iphonesimulator --show-sdk-path)
+      else
+        SDKROOT=${IOS_SIMULATOR_SDK_ROOT:-}
+      fi
+    fi
     TARGET=arm64-apple-ios"$DEPLOYMENT_TARGET"-simulator
     MIN_VERSION_FLAG=-mios-simulator-version-min
     SUPPORTED_PLATFORM=iPhoneSimulator
@@ -27,6 +40,19 @@ case "$SDK_NAME" in
     exit 2
     ;;
 esac
+[ -d "${SDKROOT:-}" ] || { echo "missing Apple SDK root for $SDK_NAME" >&2; exit 2; }
+if [ -n "${CC:-}" ]; then
+  CLANG=$CC
+elif [ "$HOST_OS" = Darwin ]; then
+  CLANG=$(xcrun --sdk "$SDK_NAME" --find clang)
+else
+  CLANG=$(command -v clang || true)
+  [ -n "$CLANG" ] || { echo "missing Clang on Linux" >&2; exit 2; }
+fi
+LINKER_FLAGS=()
+if [ "$HOST_OS" = Linux ]; then
+  LINKER_FLAGS=(-fuse-ld=lld)
+fi
 BUILD_DIR=$(mktemp -d "${TMPDIR:-/tmp}/ish-framework.XXXXXX")
 trap 'rm -rf "$BUILD_DIR"' EXIT
 
@@ -50,15 +76,15 @@ COMMON_FLAGS=(
   -I"$ROOT/ishbridge"
 )
 
-xcrun --sdk "$SDK_NAME" clang "${COMMON_FLAGS[@]}" -fobjc-arc -fblocks \
+"$CLANG" "${COMMON_FLAGS[@]}" -fobjc-arc -fblocks \
   -I"$LIB_DIR" -c "$ROOT/ishbridge/ish_kernel_bridge.m" -o "$BUILD_DIR/ish_kernel_bridge.o"
 for source in ish_rootfs ish_path_safety ish_exit_protocol; do
-  xcrun --sdk "$SDK_NAME" clang "${COMMON_FLAGS[@]}" \
+  "$CLANG" "${COMMON_FLAGS[@]}" \
     -c "$ROOT/ishbridge/$source.c" -o "$BUILD_DIR/$source.o"
 done
 
 # Match arch/ish/Makefile: Mach-O per-CPU anchors require page alignment.
-xcrun --sdk "$SDK_NAME" clang "${COMMON_FLAGS[@]}" -dynamiclib \
+"$CLANG" "${COMMON_FLAGS[@]}" "${LINKER_FLAGS[@]}" -dynamiclib \
   -Wl,-sectalign,__DATA,__percpu_first,1000 \
   -Wl,-sectalign,__DATA,__tracepoints,20 \
   "$LIB_DIR/ish-sections.o" \

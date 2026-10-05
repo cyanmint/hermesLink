@@ -2,11 +2,12 @@
 # HermesLink AI-generated glue code; created by cyanmint's coding agent.
 # AI-generated content has no copyright holder and is not subject to copyright.
 #
-# Builds the pinned upstream iSH kernel. Linux cross-compiles the Meson/Ninja
-# archives; macOS builds the Xcode host-interop libraries and assembles them.
+# Builds the pinned upstream iSH kernel and host interop. Linux cross-compiles
+# the Meson/Ninja archives and directly builds the iOS framework inputs with
+# Clang/LLD; macOS is retained for simulator builds driven by Xcode.
 #
 # Linux Meson builds require Clang/LLD, Meson/Ninja, and the Theos iOS SDK.
-# The Xcode host-interop stage requires macOS, Xcode, and Homebrew LLVM/LLD.
+# The simulator host-interop stage requires macOS, Xcode, and Homebrew LLVM/LLD.
 set -euo pipefail
 
 SCRIPT_DIR=$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)
@@ -45,11 +46,18 @@ case "$SDK_PLATFORM" in
 esac
 
 case "$BUILD_MODE" in
-  all|--meson-only|--xcode-only|--simulator) ;;
+  all|--meson-only|--framework-only|--xcode-only|--simulator) ;;
   *) fail "unknown build mode: $BUILD_MODE" ;;
 esac
 
 [ -d "$ISH_MODULE_SOURCE/.git" ] || [ -f "$ISH_MODULE_SOURCE/.git" ] || fail "missing initialized iSH submodule at $ISH_MODULE_SOURCE; clone with --recurse-submodules"
+if [ "$BUILD_MODE" != "--framework-only" ] &&
+  [ ! -f "$ISH_MODULE_SOURCE/deps/linux/arch/ish/kernel/sections.S" ]; then
+  echo "build-ish-static.sh: initializing pinned Linux-kernel submodule (update=none upstream) ..."
+  git -C "$ISH_MODULE_SOURCE" -c submodule.deps/linux.update=checkout \
+    submodule update --init --checkout --depth 1 -- deps/linux ||
+    fail "could not initialize the pinned deps/linux submodule"
+fi
 python3 "$SCRIPT_DIR/verify-ish-source.py" --source "$ISH_MODULE_SOURCE" || fail "pinned iSH submodule failed integrity verification"
 if [ -d "$ISH_SOURCE" ] && [ "$(cd "$ISH_SOURCE" && pwd)" = "$(cd "$ISH_MODULE_SOURCE" && pwd)" ]; then
   ISH_SOURCE="$BUILD_ROOT/source"
@@ -60,19 +68,22 @@ if [ ! -d "$ISH_SOURCE" ]; then
   rsync -a --exclude='.git' "$ISH_MODULE_SOURCE/" "$ISH_SOURCE/"
 fi
 [ -f "$ISH_SOURCE/meson.build" ] || fail "missing staged iSH source at $ISH_SOURCE"
+if [ "$BUILD_MODE" != "--framework-only" ]; then
+  [ -f "$ISH_SOURCE/deps/linux/arch/ish/kernel/sections.S" ] ||
+    fail "staged source is missing pinned deps/linux; rerun fetch-ish-source.sh"
+fi
 
 command -v meson >/dev/null 2>&1 || fail "requires Meson (https://mesonbuild.com); 'meson' not found on PATH"
 command -v ninja >/dev/null 2>&1 || fail "requires Ninja; 'ninja' not found on PATH"
 TOOLCHAIN_BIN="$BUILD_ROOT/ios-toolchain"
 mkdir -p "$TOOLCHAIN_BIN"
 HOST_OS=$(uname -s)
-if [ "$BUILD_MODE" = "--xcode-only" ] && [ "$HOST_OS" != Darwin ]; then
-  [ -x "$TOOLCHAIN_BIN/clang" ] && [ -x "$TOOLCHAIN_BIN/xcrun" ] || fail "missing Linux Meson toolchain artifact"
-elif [ "$HOST_OS" = Darwin ]; then
+if [ "$HOST_OS" = Darwin ]; then
   command -v xcrun >/dev/null 2>&1 || fail "requires Xcode command line tools: 'xcrun' not found"
   if [ "$BUILD_MODE" != "--meson-only" ]; then
     command -v xcodebuild >/dev/null 2>&1 || fail "requires Xcode command line tools: 'xcodebuild' not found"
   fi
+  [ "$BUILD_MODE" != "--framework-only" ] || fail "--framework-only is the Linux device-framework stage"
   xcrun --sdk "$SDK_PLATFORM" --find clang >/dev/null 2>&1 || fail "requires an installed $SDK_PLATFORM SDK"
   command -v brew >/dev/null 2>&1 || fail "requires Homebrew to locate LLVM/LLD"
   LLVM_BIN="$(brew --prefix llvm)/bin"
@@ -82,7 +93,10 @@ elif [ "$HOST_OS" = Darwin ]; then
   HOST_CLANG="$LLVM_BIN/clang"
   export PATH="$LLVM_BIN:$LLD_BIN:$PATH"
 elif [ "$HOST_OS" = Linux ]; then
-  [ "$BUILD_MODE" = "--meson-only" ] || fail "the iSH Xcode targets require macOS; use --meson-only for the Linux cross-build stage"
+  case "$BUILD_MODE" in
+    all|--meson-only|--framework-only) ;;
+    *) fail "Linux supports all, --meson-only, or --framework-only" ;;
+  esac
   command -v clang >/dev/null 2>&1 || fail "requires Clang (install clang)"
   command -v llvm-ar >/dev/null 2>&1 || fail "requires LLVM archiver (install llvm)"
   command -v llvm-ranlib >/dev/null 2>&1 || fail "requires LLVM ranlib (install llvm)"
@@ -179,8 +193,7 @@ MESON_NINJA_TARGETS="${MESON_XCODE_ARCHIVES[*]}"
 if [ "$BUILD_MODE" = "--xcode-only" ]; then
   export NINJA_TARGETS="$MESON_NINJA_TARGETS"
 fi
-
-if [ "$BUILD_MODE" != "--xcode-only" ]; then
+if [ "$BUILD_MODE" != "--framework-only" ] && [ "$BUILD_MODE" != "--xcode-only" ]; then
   echo "build-ish-static.sh: configuring (meson) ..."
   bash "$ISH_SOURCE/app/xcode-meson.sh"
 
@@ -202,13 +215,20 @@ if [ "$BUILD_MODE" = "--meson-only" ]; then
   exit 0
 fi
 
-[ "$HOST_OS" = Darwin ] || fail "Xcode static-library targets require macOS"
 [ -f "$MESON_BUILD_DIR/build.ninja" ] || fail "Meson build directory is missing: $MESON_BUILD_DIR"
 
 # The embedded kernel can reach the rootfs initcall before PTY initialization.
 # Patch the pinned host glue to resolve ptmx_path lazily and publish session
 # readiness from a late initcall. Its source is restored on every exit.
 python3 "$SCRIPT_DIR/patch-ish-pty.py" "$ISH_SOURCE"
+
+if [ "$HOST_OS" = Linux ]; then
+  CC="$TOOLCHAIN_BIN/clang" \
+    bash "$SCRIPT_DIR/build-ish-host-libs.sh" \
+      "$ISH_SOURCE" "$MESON_BUILD_DIR" "$OUTPUT_DIR"
+  echo "build-ish-static.sh: Linux device-framework inputs are ready in $OUTPUT_DIR"
+  exit 0
+fi
 
 # Build upstream's iOS host interop targets as well as its Meson kernel
 # archive. The host library contains LinuxInterop.c and the PTY/rootfs glue

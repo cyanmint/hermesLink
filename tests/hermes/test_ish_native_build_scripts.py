@@ -1,10 +1,6 @@
 # HermesLink AI-generated glue code; created by cyanmint's coding agent.
 # AI-generated content has no copyright holder and is not subject to copyright.
-"""Validates the iSH native build/install scripts: preflight robustness of
-scripts/hermes/build/build-ish-static.sh (it must fail clearly when Xcode/Meson/Ninja
-are unavailable, as in this Linux sandbox, rather than attempt a broken
-partial build) and the install/copy behavior of scripts/install_ish_runtime.sh,
-exercised end-to-end against the real pinned rootfs archive when present."""
+"""Validates Linux cross-build wiring and iSH install behavior."""
 
 from __future__ import annotations
 
@@ -35,18 +31,19 @@ class BuildIshStaticScriptTests(unittest.TestCase):
         result = subprocess.run(["bash", "-n", str(BUILD_SCRIPT)], capture_output=True, text=True)
         self.assertEqual(result.returncode, 0, result.stderr)
 
-    def test_script_preflights_darwin_meson_and_ninja(self) -> None:
+    def test_script_supports_linux_framework_stage_and_simulator_stage(self) -> None:
         source = BUILD_SCRIPT.read_text(encoding="utf-8")
         self.assertIn('uname -s', source)
         self.assertIn("command -v meson", source)
         self.assertIn("command -v ninja", source)
-        self.assertIn('xcrun --sdk "$SDK_PLATFORM" --find clang', source)
+        self.assertIn("--target=arm64-apple-ios${IPHONEOS_DEPLOYMENT_TARGET}", source)
+        self.assertIn("--framework-only", source)
+        self.assertIn("--xcode-only", source)
         self.assertIn("BUILD_MODE=${1:-all}", source)
         self.assertIn('--meson-only', source)
-        self.assertIn('--xcode-only', source)
         self.assertIn('--simulator', source)
         self.assertIn('SDK_PLATFORM=iphonesimulator', source)
-        self.assertIn('if [ "$BUILD_MODE" = "--xcode-only" ] && [ "$HOST_OS" != Darwin ]; then', source)
+        self.assertIn('build-ish-host-libs.sh', source)
 
     def test_build_patches_pty_and_session_readiness_only_for_the_host_library_build(self) -> None:
         source = BUILD_SCRIPT.read_text(encoding="utf-8")
@@ -186,14 +183,14 @@ class BuildIshStaticScriptTests(unittest.TestCase):
         self.assertIn("PTY_INIT = \"\"\"static __init int ios_pty_init(void)", source)
         self.assertNotIn("PTY_INIT = \"\"\"static int __init ios_pty_init(void)", source)
 
-    def test_script_builds_upstream_kernel_and_host_interop_targets(self) -> None:
+    def test_script_routes_linux_framework_inputs_around_the_darwin_xcode_stage(self) -> None:
         source = BUILD_SCRIPT.read_text(encoding="utf-8")
         self.assertIn("app/xcode-meson.sh", source)
         self.assertIn("app/xcode-ninja.sh", source)
-        self.assertIn('xcodebuild \\', source)
-        self.assertIn('-target "$target"', source)
-        self.assertNotIn('-derivedDataPath "$BUILD_ROOT/xcode"', source)
-        self.assertIn('CONFIGURATION_BUILD_DIR="$PRODUCTS_DIR"', source)
+        linux_stage = source.index('if [ "$HOST_OS" = Linux ]; then', source.index('patch-ish-pty.py'))
+        xcode_stage = source.index('xcodebuild \\\n')
+        self.assertLess(linux_stage, xcode_stage)
+        self.assertIn('build-ish-host-libs.sh', source)
         self.assertIn('PRODUCTS_DIR="$BUILD_ROOT/xcode/Build/Products/$CONFIGURATION-$SDK_PLATFORM"', source)
         self.assertIn('libiSHLinux.a', source)
         self.assertIn('deps/liblinux.a', source)
@@ -222,6 +219,11 @@ class BuildIshStaticScriptTests(unittest.TestCase):
 
 
 class PackageIshFrameworkTests(unittest.TestCase):
+    def test_linux_host_library_helper_has_valid_bash_syntax(self) -> None:
+        helper = ROOT / "scripts" / "hermes" / "build" / "build-ish-host-libs.sh"
+        result = subprocess.run(["bash", "-n", str(helper)], capture_output=True, text=True)
+        self.assertEqual(result.returncode, 0, result.stderr)
+
     def test_script_has_valid_bash_syntax(self) -> None:
         result = subprocess.run(["bash", "-n", str(PACKAGE_FRAMEWORK_SCRIPT)], capture_output=True, text=True)
         self.assertEqual(result.returncode, 0, result.stderr)
@@ -256,26 +258,25 @@ class PackageIshFrameworkTests(unittest.TestCase):
         self.assertIn('SDK_NAME=${SDK_NAME:-iphoneos}', source)
         self.assertIn("iPhoneSimulator", source)
         self.assertIn("-simulator", source)
+        self.assertIn('SDKROOT=${IOS_SDK_ROOT:-}', source)
+        self.assertIn('CLANG=$CC', source)
+        self.assertIn('LINKER_FLAGS=(-fuse-ld=lld)', source)
+        self.assertIn('xcrun --sdk "$SDK_NAME" --find clang', source)
 
     def test_script_verifies_pinned_source_before_building(self) -> None:
         source = BUILD_SCRIPT.read_text(encoding="utf-8")
         self.assertIn("verify-ish-source.py", source)
 
-    @unittest.skipUnless(PINNED_SOURCE.exists(), "pinned iSH source has not been fetched")
-    def test_script_fails_clearly_and_safely_without_macos_xcode_meson(self) -> None:
-        # This IS the genuinely-blocked validation path: on this Linux
-        # sandbox there is no Xcode/Meson, so the script must stop at the
-        # preflight check with a clear, actionable message and a non-zero
-        # exit code, rather than attempt (and likely corrupt) a partial
-        # native build.
-        result = subprocess.run(["bash", str(BUILD_SCRIPT)], capture_output=True, text=True)
-        self.assertNotEqual(result.returncode, 0)
-        combined = result.stdout + result.stderr
-        self.assertIn("build-ish-static.sh:", combined)
-        self.assertTrue(
-            any(keyword in combined for keyword in ("Darwin", "macOS", "meson", "Xcode")),
-            combined,
-        )
+    def test_linux_host_library_helper_is_part_of_the_build(self) -> None:
+        helper = ROOT / "scripts" / "hermes" / "build" / "build-ish-host-libs.sh"
+        self.assertTrue(helper.is_file())
+        text = helper.read_text(encoding="utf-8")
+        for marker in (
+            "LinuxInterop.c", "LinuxPTY.c", "LinuxRoot.c", "PasteboardDeviceLinux.c",
+            "linux/fakefs.c", "emu_asbestos.c", "sections.S", "llvm-ar",
+        ):
+            with self.subTest(marker=marker):
+                self.assertIn(marker, text)
 
 
 class PrepareIshXcodeProjectTests(unittest.TestCase):
