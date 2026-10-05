@@ -376,6 +376,14 @@ jobs:
           sudo apt-get update
           sudo apt-get install -y clang lld llvm meson ninja-build
 
+      - name: Install Apple arm64 linker
+        uses: mamba-org/setup-micromamba@v3
+        with:
+          environment-name: ish-linker
+          create-args: >-
+            cctools_osx-arm64=1030.6.3
+            ld64_osx-arm64=956.6
+
       - name: Initialize pinned iSH source tree
         run: git submodule update --init --recursive --checkout --depth 1 -- modules/ish
 
@@ -404,12 +412,22 @@ jobs:
         run: test -s hermes/build/external/ish/lib/ish-sections.o
 
       - name: Package iSH dynamic framework
+        shell: micromamba-shell {0}
         env:
           IPHONEOS_DEPLOYMENT_TARGET: '16.1'
           SDKROOT: /tmp/hermeslink-ish/build/sdks/iPhoneOS16.5.sdk
-          CC: /tmp/hermeslink-ish/build/ios-toolchain/clang
+          CC: /usr/bin/clang
         run: |
           set -euo pipefail
+          shopt -s nullglob
+          linker_candidates=("$CONDA_PREFIX"/bin/arm64-apple-darwin*-ld)
+          if [ "${#linker_candidates[@]}" -ne 1 ] || [ ! -x "${linker_candidates[0]}" ]; then
+            printf 'expected one executable arm64 cctools ld64, found %s\n' "${#linker_candidates[@]}" >&2
+            printf '  %s\n' "${linker_candidates[@]}" >&2
+            exit 2
+          fi
+          export LD64="${linker_candidates[0]}"
+          "$LD64" -version
           mkdir -p "$RUNNER_TEMP/ish-native-package/Frameworks"
           bash scripts/hermes/build/package-ish-framework.sh \
             hermes/build/external/ish/lib \
@@ -417,6 +435,26 @@ jobs:
           mkdir -p "$RUNNER_TEMP/ish-native-package/Resources"
           bash scripts/hermes/build/fetch-ish-source.sh --rootfs-only \
             "$RUNNER_TEMP/ish-native-package/Resources/ish-rootfs.tar.gz"
+
+      - name: Verify Linux-linked iSH framework
+        run: |
+          set -euo pipefail
+          binary="$RUNNER_TEMP/ish-native-package/Frameworks/Ish.framework/Ish"
+          test -s "$binary"
+          file "$binary"
+          llvm-nm --undefined-only "$binary" > "$RUNNER_TEMP/ish-undefined-symbols.txt"
+          if grep -E 'section\$(start|end)\$|segment\$(start|end)\$' \
+            "$RUNNER_TEMP/ish-undefined-symbols.txt"; then
+            echo 'unresolved Mach-O section-boundary symbols remain' >&2
+            exit 1
+          fi
+          llvm-nm --defined-only "$binary" > "$RUNNER_TEMP/ish-defined-symbols.txt"
+          for symbol in _ish_configure _ish_configure_documents _ish_run_command; do
+            grep -Fq " $symbol" "$RUNNER_TEMP/ish-defined-symbols.txt" || {
+              echo "missing public iSH framework export: $symbol" >&2
+              exit 1
+            }
+          done
 
       - name: Package iSH native build output
         run: |

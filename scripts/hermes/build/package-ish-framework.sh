@@ -51,7 +51,12 @@ else
 fi
 LINKER_FLAGS=()
 if [ "$HOST_OS" = Linux ]; then
-  LINKER_FLAGS=(-fuse-ld=lld)
+  LD64=${LD64:-}
+  [ -x "$LD64" ] || {
+    echo "missing Apple Mach-O linker on Linux; set LD64 to the arm64 cctools ld64 executable" >&2
+    exit 2
+  }
+  LINKER_FLAGS=(--ld-path="$LD64")
 fi
 BUILD_DIR=$(mktemp -d "${TMPDIR:-/tmp}/ish-framework.XXXXXX")
 trap 'rm -rf "$BUILD_DIR"' EXIT

@@ -90,6 +90,25 @@ class IshRuntimeWorkflowTests(unittest.TestCase):
         self.assertNotIn("xcodebuild", steps_text)
         self.assertNotIn("xcrun", steps_text)
 
+    def test_linux_framework_job_installs_and_uses_apple_arm64_ld64(self) -> None:
+        job = self.workflow["jobs"]["build-ish-runtime"]
+        steps = job["steps"]
+        linker_setup = next(step for step in steps if step["name"] == "Install Apple arm64 linker")
+        self.assertEqual(linker_setup["uses"], "mamba-org/setup-micromamba@v3")
+        self.assertEqual(linker_setup["with"]["environment-name"], "ish-linker")
+        self.assertIn("cctools_osx-arm64=1030.6.3", linker_setup["with"]["create-args"])
+        self.assertIn("ld64_osx-arm64=956.6", linker_setup["with"]["create-args"])
+
+        package_step = next(step for step in steps if step["name"] == "Package iSH dynamic framework")
+        self.assertEqual(package_step["shell"], "micromamba-shell {0}")
+        self.assertIn("arm64-apple-darwin*-ld", package_step["run"])
+        self.assertIn("LD64=", package_step["run"])
+
+        verify_step = next(step for step in steps if step["name"] == "Verify Linux-linked iSH framework")
+        self.assertIn("llvm-nm --undefined-only", verify_step["run"])
+        self.assertIn("section\\$(start|end)\\$", verify_step["run"])
+        self.assertIn("_ish_run_command", verify_step["run"])
+
     def test_simulator_e2e_builds_and_installs_a_simulator_native_ish_runtime(self) -> None:
         build_job = self.workflow["jobs"]["build-ish-simulator-runtime"]
         self.assertEqual(build_job["runs-on"], "macos-latest")

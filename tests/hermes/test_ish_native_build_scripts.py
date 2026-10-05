@@ -260,7 +260,8 @@ class PackageIshFrameworkTests(unittest.TestCase):
         self.assertIn("-simulator", source)
         self.assertIn('SDKROOT=${IOS_SDK_ROOT:-}', source)
         self.assertIn('CLANG=$CC', source)
-        self.assertIn('LINKER_FLAGS=(-fuse-ld=lld)', source)
+        self.assertIn('LINKER_FLAGS=(--ld-path="$LD64")', source)
+        self.assertIn('LD64=${LD64:-}', source)
         self.assertIn('xcrun --sdk "$SDK_NAME" --find clang', source)
 
     def test_script_verifies_pinned_source_before_building(self) -> None:
