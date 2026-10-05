@@ -765,7 +765,7 @@ jobs:
                       raise SystemExit(f"unexpected xcbuild source layout: {source}")
                   source.write_text(contents.replace(anchor, include + anchor, 1), encoding="utf-8")
           PY
-          make -C "$RUNNER_TEMP/xcbuild" -j"$(nproc)" 2>&1 | tee "$RUNNER_TEMP/xcbuild-build.log"
+          CMAKE_FLAGS='-DCMAKE_CXX_FLAGS=-Wno-error=deprecated-declarations' make -C "$RUNNER_TEMP/xcbuild" -j"$(nproc)" 2>&1 | tee "$RUNNER_TEMP/xcbuild-build.log"
           test -x "$RUNNER_TEMP/xcbuild/build/xcbuild"
           echo "$RUNNER_TEMP/xcbuild/build" >> "$GITHUB_PATH"
 
