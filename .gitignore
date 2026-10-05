@@ -28,7 +28,6 @@ developer_setup.xcconfig
 
 # Downloaded upstream sources and generated Blink build workspace
 /.blink-upstream/
-/.gitmodules
 /Frameworks/
 /Blink.xcodeproj/
 /Blink/

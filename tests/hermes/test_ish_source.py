@@ -35,16 +35,17 @@ class IshSourceTests(unittest.TestCase):
         with self.assertRaisesRegex(ValueError, "fixture SHA-256 mismatch"):
             verify.require_sha256(digest, "0" * 64, "fixture")
 
-    def test_fetch_script_checks_source_asset_and_submodule_pins(self):
+    def test_source_script_uses_the_iSH_submodule_and_fetches_only_the_rootfs_asset(self):
         script = (ROOT / "scripts" / "hermes" / "build" / "fetch-ish-source.sh").read_text(
             encoding="utf-8"
         )
-        self.assertIn(verify.ISH_COMMIT, script)
+        self.assertIn("modules/ish", script)
         self.assertIn(verify.ROOTFS_URL, script)
-        self.assertIn("submodule update --init --recursive", script)
-        self.assertIn('python3 "$VERIFY" --source "$SOURCE" --rootfs "$ROOTFS"', script)
+        self.assertNotIn("submodule update", script)
+        self.assertIn('python3 "$VERIFY" --source "$ISH_MODULE_SOURCE" --rootfs "$ROOTFS"', script)
         self.assertIn('MODE=rootfs-only', script)
         self.assertIn('if [ "$MODE" = all ]; then', script)
+        self.assertNotRegex(script, r"\bgit\s+(?:clone|fetch)\b")
         self.assertIn("build-time inputs only", script)
 
     def test_rootfs_marker_set_matches_the_pinned_alpine_layout(self):

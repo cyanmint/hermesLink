@@ -145,7 +145,6 @@ class BlinkSourcePatchTests(unittest.TestCase):
             "Resources",
             "Sessions",
             "Settings",
-            ".gitmodules",
         )
         retained = [
             path for path in tracked
@@ -280,26 +279,22 @@ class BlinkSourcePatchTests(unittest.TestCase):
             1,
         )
 
-    def test_app_and_e2e_jobs_checkout_and_patch_pinned_blink_first(self) -> None:
+    def test_app_and_e2e_jobs_initialize_and_patch_pinned_blink_first(self) -> None:
         for job_name, build_step in (
             ("build-app", "Build unsigned device archive"),
             ("simulator-e2e", "Build HermesLink simulator app"),
         ):
             with self.subTest(job=job_name):
                 steps = self.workflow["jobs"][job_name]["steps"]
-                revision_step = next(step for step in steps if step.get("id") == "blink_revision")
-                source_checkout = next(
+                source_init = next(
                     step for step in steps
-                    if step.get("uses") == "actions/checkout@v7"
-                    and step.get("with", {}).get("repository") == "blinksh/blink"
+                    if step.get("name") == "Initialize pinned Blink source tree"
                 )
                 prepare = next(step for step in steps if step.get("name") == "Apply Blink integration and stage app sources")
                 build = next(step for step in steps if step.get("name") == build_step)
-                self.assertIn("blink/UPSTREAM_REVISION", revision_step["run"])
-                self.assertEqual(source_checkout["with"]["ref"], "${{ steps.blink_revision.outputs.sha }}")
-                self.assertEqual(source_checkout["with"]["path"], ".blink-upstream")
-                self.assertEqual(source_checkout["with"]["submodules"], "recursive")
-                self.assertLess(steps.index(source_checkout), steps.index(prepare))
+                self.assertIn("--recursive", source_init["run"])
+                self.assertIn("modules/blink", source_init["run"])
+                self.assertLess(steps.index(source_init), steps.index(prepare))
                 self.assertLess(steps.index(prepare), steps.index(build))
 
     def test_app_cache_and_path_filter_include_blink_integration_inputs(self) -> None:

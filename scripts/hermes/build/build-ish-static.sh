@@ -11,8 +11,10 @@ set -euo pipefail
 
 SCRIPT_DIR=$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)
 ROOT=$(cd "$SCRIPT_DIR/../../../hermes" && pwd)
-ISH_SOURCE=${ISH_SOURCE:-$ROOT/build/external/ish/source}
 BUILD_ROOT=${BUILD_ROOT:-$ROOT/build/ish-native}
+REPO_ROOT=$(cd "$SCRIPT_DIR/../../.." && pwd)
+ISH_MODULE_SOURCE=${ISH_MODULE_SOURCE:-$REPO_ROOT/modules/ish}
+ISH_SOURCE=${ISH_SOURCE:-$BUILD_ROOT/source}
 MESON_BUILD_DIR=${MESON_BUILD_DIR:-$BUILD_ROOT/meson}
 OUTPUT_DIR=${OUTPUT_DIR:-$ROOT/build/external/ish/lib}
 ARCHS=${ARCHS:-arm64}
@@ -47,8 +49,17 @@ case "$BUILD_MODE" in
   *) fail "unknown build mode: $BUILD_MODE" ;;
 esac
 
-[ -d "$ISH_SOURCE" ] || fail "pinned iSH source not found at $ISH_SOURCE; run scripts/hermes/build/fetch-ish-source.sh first"
-python3 "$SCRIPT_DIR/verify-ish-source.py" --source "$ISH_SOURCE" || fail "pinned iSH source failed integrity verification"
+[ -d "$ISH_MODULE_SOURCE/.git" ] || [ -f "$ISH_MODULE_SOURCE/.git" ] || fail "missing initialized iSH submodule at $ISH_MODULE_SOURCE; clone with --recurse-submodules"
+python3 "$SCRIPT_DIR/verify-ish-source.py" --source "$ISH_MODULE_SOURCE" || fail "pinned iSH submodule failed integrity verification"
+if [ -d "$ISH_SOURCE" ] && [ "$(cd "$ISH_SOURCE" && pwd)" = "$(cd "$ISH_MODULE_SOURCE" && pwd)" ]; then
+  ISH_SOURCE="$BUILD_ROOT/source"
+fi
+if [ ! -d "$ISH_SOURCE" ]; then
+  mkdir -p "$(dirname "$ISH_SOURCE")"
+  mkdir -p "$ISH_SOURCE"
+  rsync -a --exclude='.git' "$ISH_MODULE_SOURCE/" "$ISH_SOURCE/"
+fi
+[ -f "$ISH_SOURCE/meson.build" ] || fail "missing staged iSH source at $ISH_SOURCE"
 
 command -v meson >/dev/null 2>&1 || fail "requires Meson (https://mesonbuild.com); 'meson' not found on PATH"
 command -v ninja >/dev/null 2>&1 || fail "requires Ninja; 'ninja' not found on PATH"

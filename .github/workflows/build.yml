@@ -100,17 +100,17 @@ jobs:
           while IFS= read -r path; do
             [ -n "$path" ] || continue
             case "$path" in
-              scripts/hermes/build/build-hermesrt-zip.sh|scripts/hermes/build/fetch-sources.sh|scripts/hermes/build/validate-runtime-zip.py|hermes/overlay/*)
+              scripts/hermes/build/build-hermesrt-zip.sh|scripts/hermes/build/fetch-sources.sh|scripts/hermes/build/validate-runtime-zip.py|hermes/overlay/*|modules/hermes-agent|modules/hermes-webui|modules/cpython)
                 python_runtime_changed=true
                 ;;
             esac
             case "$path" in
-              scripts/hermes/build/build-native-ios.sh|scripts/hermes/build/package-native-ios.sh|hermes/overlay/cpython/*|hermes/overlay/patches/patch-cpython-ios-system.py|scripts/hermes/build/generate-native-module-registry.py|scripts/hermes/build/configure_native_modules.py)
+              scripts/hermes/build/build-native-ios.sh|scripts/hermes/build/package-native-ios.sh|hermes/overlay/cpython/*|hermes/overlay/patches/patch-cpython-ios-system.py|scripts/hermes/build/generate-native-module-registry.py|scripts/hermes/build/configure_native_modules.py|modules/cpython|modules/openssl)
                 native_runtime_changed=true
                 ;;
             esac
             case "$path" in
-              scripts/hermes/build/build-ish-static.sh|scripts/hermes/build/fetch-ish-source.sh|scripts/hermes/build/verify-ish-source.py|scripts/hermes/build/patch-ish-pty.py|scripts/hermes/build/patch-ish-documents-fs.py|scripts/hermes/build/ish-documents-fs.c)
+              scripts/hermes/build/build-ish-static.sh|scripts/hermes/build/fetch-ish-source.sh|scripts/hermes/build/verify-ish-source.py|scripts/hermes/build/patch-ish-pty.py|scripts/hermes/build/patch-ish-documents-fs.py|scripts/hermes/build/ish-documents-fs.c|modules/ish)
                 ish_meson_changed=true
                 ;;
             esac
@@ -120,7 +120,7 @@ jobs:
                 ;;
             esac
             case "$path" in
-              blink/*|scripts/blink/*|ishbridge/ISHNative.xcconfig|ishbridge/*|scripts/install_ish_runtime.sh|scripts/install_hermes_runtime.sh)
+              blink/*|scripts/blink/*|modules/blink|ishbridge/ISHNative.xcconfig|ishbridge/*|scripts/install_ish_runtime.sh|scripts/install_hermes_runtime.sh)
                 app_changed=true
                 ;;
             esac
@@ -216,6 +216,9 @@ jobs:
       - name: Check out HermesLink
         uses: actions/checkout@v7
 
+      - name: Initialize pinned Hermes build sources
+        run: git submodule update --init --depth 1 -- modules/cpython modules/hermes-agent modules/hermes-webui
+
       - name: Set up host Python
         uses: actions/setup-python@v7
         with:
@@ -229,8 +232,6 @@ jobs:
       - name: Build and validate pure-Python runtime archive
         env:
           BUILD_ROOT: ${{ runner.temp }}/hermes-build/python-runtime
-          CPYTHON_ROOT: ${{ runner.temp }}/hermes-build/cpython
-          CPYTHON_REF: v3.13.9
         run: |
           set -euo pipefail
           chmod +x scripts/hermes/build/*.sh
@@ -253,6 +254,9 @@ jobs:
     steps:
       - name: Check out HermesLink
         uses: actions/checkout@v7
+
+      - name: Initialize pinned native runtime sources
+        run: git submodule update --init --depth 1 -- modules/cpython modules/openssl
 
       - name: Install Linux iOS cross-compilation tools
         run: |
@@ -308,6 +312,9 @@ jobs:
     steps:
       - name: Check out HermesLink
         uses: actions/checkout@v7
+
+      - name: Initialize pinned iSH source tree
+        run: git submodule update --init --recursive --checkout --depth 1 -- modules/ish
 
       - name: Install Linux iOS cross-compilation tools
         run: |
@@ -367,6 +374,9 @@ jobs:
       - name: Install LLVM, LLD, Meson, and Ninja
         run: brew install llvm lld meson ninja
 
+      - name: Initialize pinned iSH source tree
+        run: git submodule update --init --recursive --checkout --depth 1 -- modules/ish
+
       - name: Download Linux iSH build from fixed release
         env:
           GH_TOKEN: ${{ github.token }}
@@ -378,7 +388,7 @@ jobs:
             --dir "$RUNNER_TEMP"
           tar -xzf "$RUNNER_TEMP/ISHMesonBuild.tar.gz" -C /tmp/hermeslink-ish
           test -x /tmp/hermeslink-ish/build/ios-toolchain/clang
-          test -d /tmp/hermeslink-ish/source/.git
+          test -f /tmp/hermeslink-ish/source/.hermeslink-source-revision
 
       - name: Build iSH Xcode host-interop libraries
         env:
@@ -431,20 +441,11 @@ jobs:
       - name: Check out HermesLink
         uses: actions/checkout@v7
 
-      - name: Read pinned Blink revision
-        id: blink_revision
-        run: echo "sha=$(tr -d '\r\n' < blink/UPSTREAM_REVISION)" >> "$GITHUB_OUTPUT"
-
-      - name: Check out pinned Blink source
-        uses: actions/checkout@v7
-        with:
-          repository: blinksh/blink
-          ref: ${{ steps.blink_revision.outputs.sha }}
-          path: .blink-upstream
-          submodules: recursive
+      - name: Initialize pinned Blink source tree
+        run: git submodule update --init --recursive --depth 1 -- modules/blink
 
       - name: Apply Blink integration and stage app sources
-        run: bash scripts/blink/prepare-blink-source.sh .blink-upstream "$GITHUB_WORKSPACE"
+        run: bash scripts/blink/prepare-blink-source.sh modules/blink "$GITHUB_WORKSPACE"
 
       - name: Install uv
         uses: astral-sh/setup-uv@v10.2.0
@@ -633,6 +634,9 @@ jobs:
       - name: Install LLVM, LLD, Meson, and Ninja
         run: brew install llvm lld meson ninja
 
+      - name: Initialize pinned iSH source tree
+        run: git submodule update --init --recursive --checkout --depth 1 -- modules/ish
+
       - name: Fetch pinned iSH source and Alpine rootfs
         run: bash scripts/hermes/build/fetch-ish-source.sh "$RUNNER_TEMP/ish-simulator-source"
 
@@ -690,20 +694,11 @@ jobs:
       - name: Check out HermesLink
         uses: actions/checkout@v7
 
-      - name: Read pinned Blink revision
-        id: blink_revision
-        run: echo "sha=$(tr -d '\r\n' < blink/UPSTREAM_REVISION)" >> "$GITHUB_OUTPUT"
-
-      - name: Check out pinned Blink source
-        uses: actions/checkout@v7
-        with:
-          repository: blinksh/blink
-          ref: ${{ steps.blink_revision.outputs.sha }}
-          path: .blink-upstream
-          submodules: recursive
+      - name: Initialize pinned Blink source tree
+        run: git submodule update --init --recursive --depth 1 -- modules/blink
 
       - name: Apply Blink integration and stage app sources
-        run: bash scripts/blink/prepare-blink-source.sh .blink-upstream "$GITHUB_WORKSPACE"
+        run: bash scripts/blink/prepare-blink-source.sh modules/blink "$GITHUB_WORKSPACE"
 
       - name: Install released runtime for simulator Copilot E2E
         env:

@@ -5,6 +5,7 @@ set -euo pipefail
 
 SCRIPT_DIR=$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)
 ROOT=$(cd "$SCRIPT_DIR/../../../hermes" && pwd)
+REPO_ROOT=$(cd "$SCRIPT_DIR/../../.." && pwd)
 BUILD_ROOT=${BUILD_ROOT:-/root/hermes-build/native-ios}
 SDK_VERSION=${IOS_SDK_VERSION:-16.5}
 DEPLOYMENT_TARGET=${IPHONEOS_DEPLOYMENT_TARGET:-13.0}
@@ -24,8 +25,9 @@ HOST_PYTHON=${HOST_PYTHON:-$BUILD_ROOT/host-python/bin/python3.13}
 export HOST_PYTHON
 CPYTHON_REF=${CPYTHON_REF:-v3.13.9}
 CPYTHON_IOS_SYSTEM_PATCH_VERSION=${CPYTHON_IOS_SYSTEM_PATCH_VERSION:-3}
-CPYTHON_ROOT=${CPYTHON_ROOT:-$BUILD_ROOT/cpython}
+CPYTHON_ROOT=${CPYTHON_ROOT:-$REPO_ROOT/modules/cpython}
 OPENSSL_REF=${OPENSSL_REF:-openssl-3.3.2}
+OPENSSL_SOURCE=${OPENSSL_SOURCE:-$REPO_ROOT/modules/openssl}
 OPENSSL_ROOT=${OPENSSL_ROOT:-$BUILD_ROOT/openssl}
 OPENSSL_INSTALL=${OPENSSL_INSTALL:-$BUILD_ROOT/openssl-install}
 TARGET_ROOT=${TARGET_ROOT:-$BUILD_ROOT/target}
@@ -42,14 +44,14 @@ if [ "$HOST_OS" != Darwin ] && [ ! -d "$SDK_ROOT" ]; then
 fi
 [ -d "$SDK_ROOT/usr/include" ] || { echo "missing iOS SDK: $SDK_ROOT" >&2; exit 3; }
 
-if [ ! -d "$CPYTHON_ROOT/.git" ]; then
-  git clone --filter=blob:none --depth=1 --branch "$CPYTHON_REF" https://github.com/python/cpython.git "$CPYTHON_ROOT"
-fi
+[ -f "$CPYTHON_ROOT/Configure" ] || { echo "missing initialized CPython submodule at $CPYTHON_ROOT; clone with --recurse-submodules" >&2; exit 2; }
 
 if [ ! -x "$HOST_PYTHON" ]; then
   HOST_ROOT=$BUILD_ROOT/host-cpython
-  if [ ! -d "$HOST_ROOT/.git" ]; then
-    git clone --filter=blob:none --depth=1 --branch "$CPYTHON_REF" https://github.com/python/cpython.git "$HOST_ROOT"
+  if [ ! -f "$HOST_ROOT/Makefile" ]; then
+    rm -rf "$HOST_ROOT"
+    mkdir -p "$HOST_ROOT"
+    git -C "$CPYTHON_ROOT" archive HEAD | tar -x -C "$HOST_ROOT"
     (cd "$HOST_ROOT" && env -u SDKROOT -u CC -u CFLAGS -u CPPFLAGS -u LDFLAGS \
       ./configure --prefix="$BUILD_ROOT/host-python" --without-ensurepip --disable-test-modules)
     (cd "$HOST_ROOT" && env -u SDKROOT -u CC -u CFLAGS -u CPPFLAGS -u LDFLAGS make -j"${JOBS:-16}")
@@ -95,8 +97,13 @@ sed -i.bak "s#__LLVM_AR__#$LLVM_AR#; s#__LLVM_RANLIB__#$LLVM_RANLIB#" \
   "$TOOLBIN/arm64-apple-ios-ar" "$TOOLBIN/arm64-apple-ios-ranlib"
 chmod +x "$TOOLBIN"/*
 
-if [ ! -d "$OPENSSL_ROOT/.git" ]; then
-  git clone --depth=1 --branch "$OPENSSL_REF" https://github.com/openssl/openssl.git "$OPENSSL_ROOT"
+[ -f "$OPENSSL_SOURCE/Configure" ] || { echo "missing initialized OpenSSL submodule at $OPENSSL_SOURCE; clone with --recurse-submodules" >&2; exit 2; }
+OPENSSL_STAMP="$OPENSSL_ROOT/.hermeslink-source-revision"
+if [ ! -f "$OPENSSL_STAMP" ] || [ "$(cat "$OPENSSL_STAMP")" != "$OPENSSL_REF" ]; then
+  rm -rf "$OPENSSL_ROOT"
+  mkdir -p "$OPENSSL_ROOT"
+  rsync -a --exclude='.git' "$OPENSSL_SOURCE/" "$OPENSSL_ROOT/"
+  printf '%s\n' "$OPENSSL_REF" > "$OPENSSL_STAMP"
 fi
 if [ ! -f "$OPENSSL_INSTALL/lib/libssl.a" ] || [ ! -f "$OPENSSL_INSTALL/lib/libcrypto.a" ]; then
   (

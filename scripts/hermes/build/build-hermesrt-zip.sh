@@ -4,30 +4,23 @@ set -euo pipefail
 
 SCRIPT_DIR=$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)
 ROOT=$(cd "$SCRIPT_DIR/../../../hermes" && pwd)
+REPO_ROOT=$(cd "$SCRIPT_DIR/../../.." && pwd)
 BUILD_ROOT=${BUILD_ROOT:-$ROOT/build/python-runtime}
-CPYTHON_REF=${CPYTHON_REF:-v3.13.9}
-CPYTHON_ROOT=${1:-${CPYTHON_ROOT:-$BUILD_ROOT/cpython}}
+CPYTHON_ROOT=${1:-${CPYTHON_ROOT:-$REPO_ROOT/modules/cpython}}
 ARCHIVE=${2:-$ROOT/hermesrt.zip}
 HOST_PYTHON=${HOST_PYTHON:-$(command -v python3.13 || command -v python3)}
-HERMES_SOURCE=${HERMES_SOURCE:-$ROOT/build/external/hermes-agent}
-WEBUI_SOURCE=${WEBUI_SOURCE:-$ROOT/build/external/hermes-webui}
+HERMES_SOURCE=${HERMES_SOURCE:-$REPO_ROOT/modules/hermes-agent}
+WEBUI_SOURCE=${WEBUI_SOURCE:-$REPO_ROOT/modules/hermes-webui}
 VENDOR_ROOT=${HERMES_VENDOR:-$BUILD_ROOT/vendor}
 
 mkdir -p "$BUILD_ROOT" "$(dirname "$ARCHIVE")"
-if [ ! -d "$CPYTHON_ROOT/Lib/encodings" ]; then
-  rm -rf "$CPYTHON_ROOT"
-  git clone --filter=blob:none --depth=1 --branch "$CPYTHON_REF" \
-    https://github.com/python/cpython.git "$CPYTHON_ROOT"
-fi
 [ -f "$CPYTHON_ROOT/Lib/encodings/__init__.py" ] || {
-  echo "missing CPython standard library: $CPYTHON_ROOT/Lib" >&2
+  echo "missing initialized CPython submodule at $CPYTHON_ROOT; clone with --recurse-submodules" >&2
   exit 2
 }
 [ -x "$HOST_PYTHON" ] || { echo "missing host Python: $HOST_PYTHON" >&2; exit 2; }
 
-if [ ! -f "$HERMES_SOURCE/hermes_cli/main.py" ] || [ ! -f "$WEBUI_SOURCE/api/config.py" ]; then
-  bash "$SCRIPT_DIR/fetch-sources.sh"
-fi
+bash "$SCRIPT_DIR/fetch-sources.sh"
 [ -f "$HERMES_SOURCE/hermes_cli/main.py" ] || { echo "missing Hermes Agent source" >&2; exit 2; }
 [ -f "$WEBUI_SOURCE/api/config.py" ] || { echo "missing Hermes WebUI source" >&2; exit 2; }
 

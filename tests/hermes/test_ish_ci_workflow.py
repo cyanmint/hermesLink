@@ -177,7 +177,7 @@ class IshRuntimeWorkflowTests(unittest.TestCase):
             self.text,
         )
         self.assertIn(
-            "blink/*|scripts/blink/*|ishbridge/ISHNative.xcconfig|ishbridge/*|",
+            "blink/*|scripts/blink/*|modules/blink|ishbridge/ISHNative.xcconfig|ishbridge/*|",
             self.text,
         )
         self.assertGreaterEqual(self.text.count("ishbridge/ISHNative.xcconfig"), 1)
@@ -214,6 +214,7 @@ class IshRuntimeWorkflowTests(unittest.TestCase):
             "hermes/overlay/patches/patch-cpython-ios-system.py": {"python", "native"},
             "scripts/hermes/build/build-native-ios.sh": {"native"},
             "scripts/hermes/build/patch-ish-documents-fs.py": {"ish-meson"},
+            "modules/ish": {"ish-meson"},
             "scripts/hermes/build/prepare-ish-xcode-project.py": {"ish-xcode"},
             "ishbridge/ISHRootfsProfiles.m": {"ish-xcode", "app"},
             "ishbridge/ISHNative.xcconfig": {"ish-xcode", "app"},

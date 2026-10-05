@@ -1,8 +1,26 @@
 # Developing HermesLink
 
-This repository contains component-specific integration code, not the upstream
-Blink, Hermes Agent, Hermes WebUI, CPython, or iSH source trees. Keep project
-customizations in the component directory that owns them:
+This repository contains component-specific integration code and pins upstream
+Blink, Hermes Agent, Hermes WebUI, CPython, iSH, and OpenSSL in `modules/` as
+Git submodules. Clone recursively to check out the pinned sources and their
+dependencies:
+
+```sh
+git clone --recurse-submodules --shallow-submodules https://github.com/cyanmint/hermesLink.git
+```
+
+For an existing checkout, initialize/update all nested modules with:
+
+```sh
+git submodule update --init --recursive --depth 1
+git -C modules/ish submodule update --init --recursive --checkout --depth 1
+```
+
+The explicit iSH command is required because its upstream `.gitmodules`
+disables automatic updates for `deps/linux`. Run it on macOS or Linux: the
+Linux kernel source contains Windows-reserved filenames such as `aux.c`, and
+cannot be checked out on Windows. Keep project customizations in the component
+directory that owns them:
 
 - `blink/overlay/` holds new Blink-side files and resources.
 - `blink/patches/` holds small, per-file Python patch scripts for upstream
@@ -12,9 +30,9 @@ customizations in the component directory that owns them:
 - `scripts/` holds source preparation, build, and packaging scripts.
 - `tests/` holds repository tests. Keep documentation at the repository root.
 
-Do not commit downloaded upstream source, submodules, frameworks, or compiler
-outputs. `.gitignore` excludes the materialized Blink checkout and generated
-build products.
+Do not edit pinned upstream submodules as project source; put changes in the
+overlay or patch directories. Frameworks and compiler outputs remain generated
+build products and are excluded by `.gitignore`.
 
 ## Branch and history
 
@@ -27,19 +45,16 @@ Development after `v18.8.0.522` continues on `default`.
 
 ## Preparing Blink
 
-The Blink preparation script verifies the pinned revision, applies the overlay
-and every Python patch script, and stages the result in the repository root for
-Xcode. The iSH bridge is staged under Blink's expected `ISHBridge/` project
-path; its maintained source remains in this repository's lowercase
-`ishbridge/`.
+The Blink preparation script verifies the pinned submodule revision, copies it
+to a temporary working tree, applies the overlay and every Python patch script,
+and stages the result in the repository root for Xcode. The iSH bridge is
+staged under Blink's expected `ISHBridge/` project path; its maintained source
+remains in this repository's lowercase `ishbridge/`.
 
 On macOS with Git, Xcode, and the upstream Blink dependencies installed:
 
 ```sh
-git clone https://github.com/blinksh/blink.git .blink-upstream
-git -C .blink-upstream checkout "$(tr -d '\r\n' < blink/UPSTREAM_REVISION)"
-git -C .blink-upstream submodule update --init --recursive
-bash scripts/blink/prepare-blink-source.sh .blink-upstream "$PWD"
+bash scripts/blink/prepare-blink-source.sh modules/blink "$PWD"
 bash get_frameworks.sh
 bash get_resources.sh
 cp template_setup.xcconfig developer_setup.xcconfig
@@ -78,15 +93,18 @@ Blink tree are skipped when those inputs are absent.
 
 ## Runtime build inputs
 
-Hermes source pins and CPython configuration are in
-`scripts/hermes/build/fetch-sources.sh` and the build scripts. To fetch the
-pinned iSH checkout and root filesystem:
+Upstream source revisions are pinned by the Git submodule entries in
+`.gitmodules`; build scripts read source trees directly from `modules/`. The
+Theos SDK is still downloaded separately on Linux when no local iOS SDK is
+provided, and the iSH Alpine root filesystem is downloaded and SHA-256 checked.
+To stage the pinned iSH submodule and fetch its root filesystem:
 
 ```sh
 bash scripts/hermes/build/fetch-ish-source.sh
 ```
 
-This writes build-time inputs under `hermes/build/external/ish`. The
+This writes a disposable iSH source copy and the rootfs under
+`hermes/build/external/ish`. The
 `build-ish-static.sh --meson-only` stage cross-compiles iSH's Linux archives;
 the macOS `--xcode-only` stage consumes that output to build the host interop
 libraries. `package-ish-framework.sh` links those archives with `ishbridge/`.

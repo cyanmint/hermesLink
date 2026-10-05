@@ -5,6 +5,7 @@ set -euo pipefail
 
 SCRIPT_DIR=$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)
 ROOT=$(cd "$SCRIPT_DIR/../../../hermes" && pwd)
+REPO_ROOT=$(cd "$SCRIPT_DIR/../../.." && pwd)
 MODE=all
 if [ "${1:-}" = "--rootfs-only" ]; then
   MODE=rootfs-only
@@ -17,27 +18,25 @@ fi
 SOURCE="$DEST/source"
 ROOTFS_PARTIAL="$ROOTFS.partial"
 VERIFY="$SCRIPT_DIR/verify-ish-source.py"
-ISH_COMMIT=83348361fe65311f6e87ad2e1cbb0ac38d123f69
+ISH_MODULE_SOURCE=${ISH_MODULE_SOURCE:-$REPO_ROOT/modules/ish}
 ROOTFS_URL=https://github.com/ish-app/roots/releases/download/g00712ff0a54b2839c5aa1a8ed758003ca65357dc/appstore-apk.tar.gz
 trap 'rm -f "$ROOTFS_PARTIAL"' EXIT
 
 mkdir -p "$DEST"
 if [ "$MODE" = all ]; then
-  if [ ! -d "$SOURCE/.git" ]; then
-    if [ -e "$SOURCE" ]; then
-      echo "refusing to replace non-git iSH source path: $SOURCE" >&2
-      exit 2
-    fi
-    git clone --filter=blob:none --no-checkout https://github.com/ish-app/ish.git "$SOURCE"
+  [ -f "$ISH_MODULE_SOURCE/.git" ] || [ -d "$ISH_MODULE_SOURCE/.git" ] || {
+    echo "missing initialized iSH submodule at $ISH_MODULE_SOURCE; clone with --recurse-submodules" >&2
+    exit 2
+  }
+  python3 "$VERIFY" --source "$ISH_MODULE_SOURCE"
+  if [ -e "$SOURCE" ] && [ ! -f "$SOURCE/.hermeslink-source-revision" ]; then
+    echo "refusing to replace non-generated iSH source path: $SOURCE" >&2
+    exit 2
   fi
-
-  git -C "$SOURCE" fetch --depth=1 origin "$ISH_COMMIT"
-  git -C "$SOURCE" checkout --detach "$ISH_COMMIT"
-  git -C "$SOURCE" submodule sync --recursive
-  git -C "$SOURCE" submodule update --init --recursive
-  # The upstream .gitmodules intentionally sets update=none for its Linux fork.
-  git -C "$SOURCE" submodule update --init --recursive --checkout -- deps/linux
-  python3 "$VERIFY" --source "$SOURCE"
+  rm -rf "$SOURCE"
+  mkdir -p "$SOURCE"
+  rsync -a --exclude='.git' "$ISH_MODULE_SOURCE/" "$SOURCE/"
+  printf '%s\n' "$(git -C "$ISH_MODULE_SOURCE" rev-parse HEAD)" > "$SOURCE/.hermeslink-source-revision"
 fi
 
 if [ ! -f "$ROOTFS" ] || ! python3 "$VERIFY" --rootfs "$ROOTFS"; then
@@ -49,9 +48,9 @@ if [ ! -f "$ROOTFS" ] || ! python3 "$VERIFY" --rootfs "$ROOTFS"; then
 fi
 
 if [ "$MODE" = all ]; then
-  python3 "$VERIFY" --source "$SOURCE" --rootfs "$ROOTFS"
+  python3 "$VERIFY" --source "$ISH_MODULE_SOURCE" --rootfs "$ROOTFS"
 else
   python3 "$VERIFY" --rootfs "$ROOTFS"
 fi
-echo "Pinned iSH source and Alpine rootfs verified in $DEST."
+echo "Pinned iSH submodule source and Alpine rootfs verified in $DEST."
 echo "These are build-time inputs only; HermesLink does not yet embed or launch iSH."

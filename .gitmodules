@@ -1,0 +1,24 @@
+[submodule "modules/blink"]
+	path = modules/blink
+	url = https://github.com/blinksh/blink.git
+	shallow = true
+[submodule "modules/hermes-agent"]
+	path = modules/hermes-agent
+	url = https://github.com/NousResearch/hermes-agent.git
+	shallow = true
+[submodule "modules/hermes-webui"]
+	path = modules/hermes-webui
+	url = https://github.com/nesquena/hermes-webui.git
+	shallow = true
+[submodule "modules/cpython"]
+	path = modules/cpython
+	url = https://github.com/python/cpython.git
+	shallow = true
+[submodule "modules/ish"]
+	path = modules/ish
+	url = https://github.com/ish-app/ish.git
+	shallow = true
+[submodule "modules/openssl"]
+	path = modules/openssl
+	url = https://github.com/openssl/openssl.git
+	shallow = true

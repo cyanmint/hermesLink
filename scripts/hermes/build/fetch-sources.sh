@@ -3,24 +3,30 @@
 # AI-generated content has no copyright holder and is not subject to copyright.
 set -euo pipefail
 
-# Build-time sources. These are deliberately not Git submodules.
 ROOT=$(cd "$(dirname "${BASH_SOURCE[0]}")/../../../hermes" && pwd)
+REPO_ROOT=$(cd "$(dirname "${BASH_SOURCE[0]}")/../../.." && pwd)
 DEST=${1:-"$ROOT/build/external"}
-AGENT_COMMIT=${HERMES_AGENT_COMMIT:-2246c245f51e03eb6a151d19119009156e84659a}
-WEBUI_COMMIT=${HERMES_WEBUI_COMMIT:-e36f77389191fe9d81cd3a7416772e2f7b022e19}
+AGENT_COMMIT=2246c245f51e03eb6a151d19119009156e84659a
+WEBUI_COMMIT=e36f77389191fe9d81cd3a7416772e2f7b022e19
+AGENT_SOURCE=${HERMES_SOURCE:-$REPO_ROOT/modules/hermes-agent}
+WEBUI_SOURCE=${WEBUI_SOURCE:-$REPO_ROOT/modules/hermes-webui}
 
 mkdir -p "$DEST"
-fetch() {
-  local name=$1 url=$2 commit=$3
-  local dir="$DEST/$name"
-  if [ ! -d "$dir/.git" ]; then
-    rm -rf "$dir"
-    git clone --no-checkout "$url" "$dir"
-  fi
-  git -C "$dir" fetch --depth=1 origin "$commit"
-  git -C "$dir" checkout --detach "$commit"
+verify_source() {
+  local name=$1 dir=$2 expected=$3
+  [ -f "$dir/.git" ] || [ -d "$dir/.git" ] || {
+    echo "missing initialized $name submodule at $dir; clone with --recurse-submodules" >&2
+    exit 2
+  }
+  actual=$(git -C "$dir" rev-parse HEAD)
+  [ "$actual" = "$expected" ] || {
+    echo "$name submodule is at $actual; expected pinned revision $expected" >&2
+    exit 2
+  }
 }
 
-fetch hermes-agent https://github.com/NousResearch/hermes-agent.git "$AGENT_COMMIT"
-fetch hermes-webui https://github.com/nesquena/hermes-webui.git "$WEBUI_COMMIT"
+verify_source hermes-agent "$AGENT_SOURCE" "$AGENT_COMMIT"
+verify_source hermes-webui "$WEBUI_SOURCE" "$WEBUI_COMMIT"
+test -f "$AGENT_SOURCE/hermes_cli/main.py" || { echo "missing Hermes Agent source" >&2; exit 2; }
+test -f "$WEBUI_SOURCE/api/config.py" || { echo "missing Hermes WebUI source" >&2; exit 2; }
 printf 'hermes-agent=%s\nhermes-webui=%s\n' "$AGENT_COMMIT" "$WEBUI_COMMIT" > "$DEST/SOURCES"
