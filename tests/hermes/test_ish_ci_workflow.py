@@ -289,6 +289,17 @@ class IshRuntimeWorkflowTests(unittest.TestCase):
         self.assertNotIn("\\ ", publish_command)
         self.assertIn("publish-app", jobs["assemble-ipa"]["needs"])
 
+    def test_linux_app_cross_compile_is_an_explicit_ubuntu_xcbuild_experiment(self) -> None:
+        job = self.workflow["jobs"]["experimental-build-app-linux"]
+        self.assertEqual(job["runs-on"], "ubuntu-latest")
+        self.assertIn("inputs.linux_app_experiment == true", job["if"])
+        steps_text = str(job["steps"])
+        self.assertIn("facebookarchive/xcbuild", steps_text)
+        self.assertIn("Theos iPhoneOS SDK", steps_text)
+        self.assertIn("xcbuild -project Blink.xcodeproj", steps_text)
+        self.assertIn("archive 2>&1 | tee", steps_text)
+        self.assertIn("CODE_SIGNING_ALLOWED=NO", steps_text)
+
     def test_ipa_assembles_runtime_frameworks_and_rootfs_after_app_build(self) -> None:
         steps_text = str(self.workflow["jobs"]["assemble-ipa"]["steps"])
         self.assertIn("ISHLinuxNative.zip", steps_text)

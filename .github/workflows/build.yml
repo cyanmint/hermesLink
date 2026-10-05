@@ -33,6 +33,11 @@ on:
         required: false
         type: boolean
         default: false
+      linux_app_experiment:
+        description: Try building the Blink Xcode project on Linux with xcbuild
+        required: false
+        type: boolean
+        default: false
 
 permissions:
   actions: read
@@ -693,6 +698,110 @@ jobs:
         env:
           GH_TOKEN: ${{ github.token }}
         run: gh release upload "$HERMES_RUNTIME_RELEASE_TAG" "$RUNNER_TEMP/runtime-free-app/HermesLink.app.zip" --clobber
+
+  experimental-build-app-linux:
+    name: Experimental Blink app cross-compile (Linux / xcbuild)
+    if: inputs.linux_app_experiment == true
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+    steps:
+      - name: Check out HermesLink
+        uses: actions/checkout@v7
+
+      - name: Install Linux Xcode-project build dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y clang cmake git libpng-dev libxml2-dev make ninja-build pkg-config rsync unzip zip zlib1g-dev
+
+      - name: Install Swift toolchain
+        uses: swift-actions/setup-swift@v2
+        with:
+          swift-version: '6.1'
+
+      - name: Initialize and stage Blink source
+        run: |
+          set -euo pipefail
+          git submodule update --init --recursive --depth 1 -- modules/blink
+          bash scripts/blink/prepare-blink-source.sh modules/blink "$GITHUB_WORKSPACE"
+
+      - name: Resolve Blink framework package artifacts
+        continue-on-error: true
+        run: |
+          set -o pipefail
+          cd xcfs
+          swift package resolve 2>&1 | tee "$RUNNER_TEMP/swift-package-resolve.log"
+
+      - name: Get Blink resources
+        run: bash get_resources.sh
+
+      - name: Prepare Blink Xcode configuration
+        run: |
+          cp template_setup.xcconfig developer_setup.xcconfig
+          printf '\nISH_NATIVE_AVAILABLE = YES\n' >> developer_setup.xcconfig
+
+      - name: Build xcbuild on Linux
+        run: |
+          set -euo pipefail
+          git clone --no-checkout https://github.com/facebookarchive/xcbuild.git "$RUNNER_TEMP/xcbuild"
+          git -C "$RUNNER_TEMP/xcbuild" checkout dbaee552d2f13640773eb1ad3c79c0d2aca7229c
+          git -C "$RUNNER_TEMP/xcbuild" submodule update --init --recursive
+          make -C "$RUNNER_TEMP/xcbuild" -j"$(nproc)" 2>&1 | tee "$RUNNER_TEMP/xcbuild-build.log"
+          test -x "$RUNNER_TEMP/xcbuild/build/xcbuild"
+          echo "$RUNNER_TEMP/xcbuild/build" >> "$GITHUB_PATH"
+
+      - name: Install Theos iPhoneOS SDK
+        run: |
+          set -euo pipefail
+          git clone --filter=blob:none --sparse --depth=1 https://github.com/theos/sdks.git "$RUNNER_TEMP/theos-sdks"
+          git -C "$RUNNER_TEMP/theos-sdks" sparse-checkout set iPhoneOS16.5.sdk
+          test -d "$RUNNER_TEMP/theos-sdks/iPhoneOS16.5.sdk/usr/include"
+          echo "SDKROOT=$RUNNER_TEMP/theos-sdks/iPhoneOS16.5.sdk" >> "$GITHUB_ENV"
+
+      - name: Install Apple arm64 Mach-O linker
+        uses: mamba-org/setup-micromamba@v3
+        with:
+          environment-name: linux-ios-app-linker
+          create-args: >-
+            cctools_osx-arm64=1030.6.3
+            ld64_osx-arm64=956.6
+
+      - name: Cross-compile Blink Xcode project on Linux
+        env:
+          IPHONEOS_DEPLOYMENT_TARGET: '16.1'
+        run: |
+          set -o pipefail
+          shopt -s nullglob
+          linker_candidates=("$CONDA_PREFIX"/bin/arm64-apple-darwin*-ld)
+          if [ "${#linker_candidates[@]}" -ne 1 ] || [ ! -x "${linker_candidates[0]}" ]; then
+            printf 'expected one executable arm64 cctools ld64, found %s\n' "${#linker_candidates[@]}" >&2
+            printf '  %s\n' "${linker_candidates[@]}" >&2
+            exit 2
+          fi
+          LD64="${linker_candidates[0]}"
+          xcbuild -project Blink.xcodeproj \
+            -scheme Blink \
+            -sdk "$SDKROOT" \
+            -configuration Debug \
+            -archivePath "$RUNNER_TEMP/HermesLink-Linux.xcarchive" \
+            IPHONEOS_DEPLOYMENT_TARGET="$IPHONEOS_DEPLOYMENT_TARGET" \
+            CODE_SIGNING_REQUIRED=NO \
+            CODE_SIGNING_ALLOWED=NO \
+            ONLY_ACTIVE_ARCH=NO \
+            LD="$LD64" \
+            archive 2>&1 | tee "$RUNNER_TEMP/hermeslink-linux-xcbuild.log"
+
+      - name: Upload Linux cross-compile diagnostics
+        if: always()
+        uses: actions/upload-artifact@v7
+        with:
+          name: hermeslink-linux-xcbuild-diagnostics
+          path: |
+            ${{ runner.temp }}/hermeslink-linux-xcbuild.log
+            ${{ runner.temp }}/xcbuild-build.log
+            ${{ runner.temp }}/swift-package-resolve.log
+          if-no-files-found: ignore
+          retention-days: 14
 
   build-ish-simulator-runtime:
     name: Build iSH Simulator runtime
