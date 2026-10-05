@@ -86,6 +86,6 @@ conversation. To verify the skill is available, run `hermes skills list`.
 
 - [DEVELOP.md](DEVELOP.md) explains the repository layout and how developers
   prepare and build HermesLink.
-- [COPYING](COPYING) describes project attribution and links to upstream
+- [COPYING.md](COPYING.md) describes project attribution and links to upstream
   component licenses.
 - [AUTHORS](AUTHORS) records authorship and the AI-generation notice.
