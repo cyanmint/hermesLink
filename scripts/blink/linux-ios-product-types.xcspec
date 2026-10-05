@@ -1,0 +1,87 @@
+(
+  {
+    Type = ProductType;
+    Identifier = com.apple.product-type.bundle;
+    Class = PBXBundleProductType;
+    Name = "Bundle";
+    DefaultBuildProperties = {
+      MACH_O_TYPE = "mh_bundle";
+      WRAPPER_EXTENSION = "bundle";
+      WRAPPER_SUFFIX = ".$(WRAPPER_EXTENSION)";
+      WRAPPER_NAME = "$(WRAPPER_PREFIX)$(PRODUCT_NAME)$(WRAPPER_SUFFIX)";
+      FULL_PRODUCT_NAME = "$(WRAPPER_NAME)";
+      INFOPLIST_PATH = "$(WRAPPER_NAME)/Info.plist";
+    };
+    PackageTypes = ( com.apple.package-type.wrapper );
+    IsWrapper = YES;
+    HasInfoPlist = YES;
+  },
+  {
+    Type = ProductType;
+    Identifier = com.apple.product-type.application;
+    BasedOn = com.apple.product-type.bundle;
+    Class = PBXApplicationProductType;
+    Name = "Application";
+    DefaultBuildProperties = {
+      MACH_O_TYPE = "mh_execute";
+      WRAPPER_EXTENSION = "app";
+      WRAPPER_SUFFIX = ".$(WRAPPER_EXTENSION)";
+      WRAPPER_NAME = "$(WRAPPER_PREFIX)$(PRODUCT_NAME)$(WRAPPER_SUFFIX)";
+      FULL_PRODUCT_NAME = "$(WRAPPER_NAME)";
+      INFOPLIST_PATH = "$(WRAPPER_NAME)/Info.plist";
+      CODE_SIGNING_ALLOWED = NO;
+    };
+    PackageTypes = ( com.apple.package-type.wrapper.application );
+  },
+  {
+    Type = ProductType;
+    Identifier = com.apple.product-type.app-extension;
+    BasedOn = com.apple.product-type.bundle;
+    Class = PBXBundleProductType;
+    Name = "App Extension";
+    DefaultBuildProperties = {
+      MACH_O_TYPE = "mh_bundle";
+      WRAPPER_EXTENSION = "appex";
+      WRAPPER_SUFFIX = ".$(WRAPPER_EXTENSION)";
+      WRAPPER_NAME = "$(WRAPPER_PREFIX)$(PRODUCT_NAME)$(WRAPPER_SUFFIX)";
+      FULL_PRODUCT_NAME = "$(WRAPPER_NAME)";
+      INFOPLIST_PATH = "$(WRAPPER_NAME)/Info.plist";
+      PRODUCT_SPECIFIC_LDFLAGS = "-e _NSExtensionMain";
+    };
+    PackageTypes = ( com.apple.package-type.app-extension );
+  },
+  {
+    Type = PackageType;
+    Identifier = com.apple.package-type.wrapper;
+    Name = "Wrapper";
+    ProductReference = {
+      FileType = wrapper;
+      Name = "$(WRAPPER_NAME)";
+      IsLaunchable = NO;
+    };
+  },
+  {
+    Type = PackageType;
+    Identifier = com.apple.package-type.wrapper.application;
+    BasedOn = com.apple.package-type.wrapper;
+    Name = "Application Wrapper";
+    DefaultBuildSettings = { PRODUCT_BUNDLE_PACKAGE_TYPE = "APPL"; };
+    ProductReference = {
+      FileType = wrapper.application;
+      Name = "$(WRAPPER_NAME)";
+      IsLaunchable = YES;
+    };
+  },
+  {
+    Type = PackageType;
+    Identifier = com.apple.package-type.app-extension;
+    BasedOn = com.apple.package-type.wrapper;
+    Name = "App Extension";
+    DefaultBuildSettings = { PRODUCT_BUNDLE_PACKAGE_TYPE = "XPC!"; };
+    ProductReference = {
+      FileType = wrapper.app-extension;
+      Name = "$(WRAPPER_NAME)";
+      IsLaunchable = NO;
+    };
+  },
+)

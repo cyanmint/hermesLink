@@ -192,9 +192,14 @@ class BlinkSourcePatchTests(unittest.TestCase):
             subprocess.run([sys.executable, str(XCBUILD_PATCH), str(root)], check=True)
             patched = resolver.read_text(encoding="utf-8")
             self.assertIn("file->fileRef() == nullptr", patched)
+            product_types = root / "Specifications/HermesLink-iOS-ProductTypes.xcspec"
+            specifications = product_types.read_text(encoding="utf-8")
+            self.assertIn("com.apple.product-type.application", specifications)
+            self.assertIn("com.apple.product-type.app-extension", specifications)
 
             subprocess.run([sys.executable, str(XCBUILD_PATCH), str(root)], check=True)
             self.assertEqual(resolver.read_text(encoding="utf-8"), patched)
+            self.assertEqual(product_types.read_text(encoding="utf-8"), specifications)
 
     def test_linux_xcbuild_patch_fails_closed_when_upstream_anchor_changes(self) -> None:
         with tempfile.TemporaryDirectory() as temporary:
@@ -355,7 +360,10 @@ class BlinkSourcePatchTests(unittest.TestCase):
         self.assertIn("patch-xcbuild-linux.py", build_tool["run"])
         self.assertIn("make -C", build_tool["run"])
         self.assertNotIn("if [ ! -x", build_tool["run"])
-        self.assertIn("hashFiles('scripts/blink/patch-xcbuild-linux.py')", restore_cache["with"]["key"])
+        self.assertIn(
+            "hashFiles('scripts/blink/patch-xcbuild-linux.py', 'scripts/blink/linux-ios-product-types.xcspec')",
+            restore_cache["with"]["key"],
+        )
         self.assertEqual(restore_cache["with"]["key"], save_cache["with"]["key"])
 
 
