@@ -20,6 +20,7 @@ PIN = ROOT / "blink" / "UPSTREAM_REVISION"
 PATCH_DIR = ROOT / "blink" / "patches"
 OVERLAY = ROOT / "blink" / "overlay"
 PREPARE_SCRIPT = ROOT / "scripts" / "blink" / "prepare-blink-source.sh"
+XCBUILD_PATCH = ROOT / "scripts" / "blink" / "patch-xcbuild-linux.py"
 WORKFLOW = ROOT / ".github" / "workflows" / "build.yml"
 
 
@@ -177,6 +178,39 @@ class BlinkSourcePatchTests(unittest.TestCase):
                 self.assertIn(exclude, self.script)
         self.assertNotIn("--exclude='/Frameworks'", self.script)
 
+    def test_linux_xcbuild_patch_skips_swiftpm_package_product_references(self) -> None:
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary)
+            resolver = root / "Libraries/pbxbuild/Sources/Build/DependencyResolver.cpp"
+            resolver.parent.mkdir(parents=True)
+            resolver.write_text(
+                "        for (pbxproj::PBX::BuildFile::shared_ptr const &file : buildPhase->files()) {\n"
+                "            switch (file->fileRef()->type()) {",
+                encoding="utf-8",
+            )
+
+            subprocess.run([sys.executable, str(XCBUILD_PATCH), str(root)], check=True)
+            patched = resolver.read_text(encoding="utf-8")
+            self.assertIn("file->fileRef() == nullptr", patched)
+
+            subprocess.run([sys.executable, str(XCBUILD_PATCH), str(root)], check=True)
+            self.assertEqual(resolver.read_text(encoding="utf-8"), patched)
+
+    def test_linux_xcbuild_patch_fails_closed_when_upstream_anchor_changes(self) -> None:
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary)
+            resolver = root / "Libraries/pbxbuild/Sources/Build/DependencyResolver.cpp"
+            resolver.parent.mkdir(parents=True)
+            resolver.write_text("upstream changed\n", encoding="utf-8")
+
+            result = subprocess.run(
+                [sys.executable, str(XCBUILD_PATCH), str(root)],
+                capture_output=True,
+                text=True,
+            )
+            self.assertNotEqual(result.returncode, 0)
+            self.assertIn("expected one DependencyResolver patch anchor", result.stderr)
+
     def test_unavailable_icloud_container_does_not_create_a_nil_directory(self) -> None:
         patch = PATCH_DIR / "patch-blinkconfig-blinkpaths-m.py"
         source = (
@@ -308,6 +342,21 @@ class BlinkSourcePatchTests(unittest.TestCase):
     def test_app_path_filter_includes_blink_integration_inputs(self) -> None:
         self.assertIn("blink/*", self.workflow_text)
         self.assertIn("scripts/blink/prepare-blink-source.sh", self.workflow_text)
+
+    def test_linux_xcbuild_patch_runs_before_incremental_toolchain_build(self) -> None:
+        steps = self.workflow["jobs"]["build-app"]["steps"]
+        build_tool = next(step for step in steps if step.get("name") == "Build xcbuild on Linux")
+        restore_cache = next(
+            step for step in steps if step.get("name") == "Restore Linux xcbuild toolchain cache"
+        )
+        save_cache = next(
+            step for step in steps if step.get("name") == "Save Linux xcbuild toolchain cache"
+        )
+        self.assertIn("patch-xcbuild-linux.py", build_tool["run"])
+        self.assertIn("make -C", build_tool["run"])
+        self.assertNotIn("if [ ! -x", build_tool["run"])
+        self.assertIn("hashFiles('scripts/blink/patch-xcbuild-linux.py')", restore_cache["with"]["key"])
+        self.assertEqual(restore_cache["with"]["key"], save_cache["with"]["key"])
 
 
 if __name__ == "__main__":
