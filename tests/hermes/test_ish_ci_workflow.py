@@ -299,6 +299,8 @@ class IshRuntimeWorkflowTests(unittest.TestCase):
         self.assertIn("xcbuild -project Blink.xcodeproj", steps_text)
         self.assertIn("archive 2>&1 | tee", steps_text)
         self.assertIn("CODE_SIGNING_ALLOWED=NO", steps_text)
+        self.assertIn("Permissions.h", steps_text)
+        self.assertIn("#include <cstdint>", steps_text)
 
     def test_ipa_assembles_runtime_frameworks_and_rootfs_after_app_build(self) -> None:
         steps_text = str(self.workflow["jobs"]["assemble-ipa"]["steps"])

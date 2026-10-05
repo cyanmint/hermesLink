@@ -746,6 +746,18 @@ jobs:
           git clone --no-checkout https://github.com/facebookarchive/xcbuild.git "$RUNNER_TEMP/xcbuild"
           git -C "$RUNNER_TEMP/xcbuild" checkout dbaee552d2f13640773eb1ad3c79c0d2aca7229c
           git -C "$RUNNER_TEMP/xcbuild" submodule update --init --recursive
+          python3 - "$RUNNER_TEMP/xcbuild/Libraries/libutil/Headers/libutil/Permissions.h" <<'PY'
+          from pathlib import Path
+          import sys
+
+          header = Path(sys.argv[1])
+          contents = header.read_text(encoding="utf-8")
+          if "#include <cstdint>" not in contents:
+              anchor = "#include <bitset>\n"
+              if contents.count(anchor) != 1:
+                  raise SystemExit(f"unexpected xcbuild Permissions.h layout: {header}")
+              header.write_text(contents.replace(anchor, "#include <cstdint>\n" + anchor, 1), encoding="utf-8")
+          PY
           make -C "$RUNNER_TEMP/xcbuild" -j"$(nproc)" 2>&1 | tee "$RUNNER_TEMP/xcbuild-build.log"
           test -x "$RUNNER_TEMP/xcbuild/build/xcbuild"
           echo "$RUNNER_TEMP/xcbuild/build" >> "$GITHUB_PATH"
