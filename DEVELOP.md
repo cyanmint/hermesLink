@@ -16,6 +16,15 @@ Do not commit downloaded upstream source, submodules, frameworks, or compiler
 outputs. `.gitignore` excludes the materialized Blink checkout and generated
 build products.
 
+## Branch and history
+
+The `default` branch contains HermesLink glue and integration code, the iOS
+bridge, and customization patches; it does not contain the original Blink
+source tree. The original commit history through `v18.8.0.522` (inclusive) is
+no longer part of the `default` branch's ancestry. To inspect that earlier
+history, see the [commit timeline for tag `v18.8.0.522`](https://github.com/cyanmint/hermesLink/commits/v18.8.0.522/).
+Development after `v18.8.0.522` continues on `default`.
+
 ## Preparing Blink
 
 The Blink preparation script verifies the pinned revision, applies the overlay
