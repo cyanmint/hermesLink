@@ -486,7 +486,7 @@ jobs:
       - name: Install Swift toolchain
         uses: swift-actions/setup-swift@v2
         with:
-          swift-version: '6.1'
+          swift-version: '5.8'
 
       - name: Initialize and stage Blink source
         run: |
@@ -594,7 +594,7 @@ jobs:
         uses: actions/cache/restore@v6
         with:
           path: ${{ runner.temp }}/xcbuild
-          key: ${{ runner.os }}-xcbuild-dbaee552d2f13640773eb1ad3c79c0d2aca7229c-${{ hashFiles('scripts/blink/patch-xcbuild-linux.py', 'scripts/blink/linux-ios-product-types.xcspec') }}-swift6.1-clang-flags-v1
+          key: ${{ runner.os }}-xcbuild-dbaee552d2f13640773eb1ad3c79c0d2aca7229c-${{ hashFiles('scripts/blink/patch-xcbuild-linux.py', 'scripts/blink/linux-ios-product-types.xcspec') }}-swift5.8-clang-flags-v1
 
       - name: Build xcbuild on Linux
         id: build_xcbuild
@@ -635,7 +635,7 @@ jobs:
         uses: actions/cache/save@v6
         with:
           path: ${{ runner.temp }}/xcbuild
-          key: ${{ runner.os }}-xcbuild-dbaee552d2f13640773eb1ad3c79c0d2aca7229c-${{ hashFiles('scripts/blink/patch-xcbuild-linux.py', 'scripts/blink/linux-ios-product-types.xcspec') }}-swift6.1-clang-flags-v1
+          key: ${{ runner.os }}-xcbuild-dbaee552d2f13640773eb1ad3c79c0d2aca7229c-${{ hashFiles('scripts/blink/patch-xcbuild-linux.py', 'scripts/blink/linux-ios-product-types.xcspec') }}-swift5.8-clang-flags-v1
 
       - name: Stage Linux Xcode developer directory
         run: |

@@ -115,6 +115,11 @@ class BlinkSourcePatchTests(unittest.TestCase):
             step for step in simulator["steps"]
             if step.get("name") == "Build HermesLink simulator app"
         )
+        swift_toolchain = next(
+            step for step in build_app["steps"]
+            if step.get("name") == "Install Swift toolchain"
+        )
+        self.assertEqual(swift_toolchain["with"]["swift-version"], "5.8")
         self.assertNotIn("CURRENT_PROJECT_VERSION=", app_build["run"])
         self.assertIn("ARCHS=arm64", app_build["run"])
         self.assertIn("VALID_ARCHS=arm64", app_build["run"])
