@@ -765,7 +765,10 @@ jobs:
                       raise SystemExit(f"unexpected xcbuild source layout: {source}")
                   source.write_text(contents.replace(anchor, include + anchor, 1), encoding="utf-8")
           PY
-          CMAKE_FLAGS='-DCMAKE_CXX_FLAGS=-Wno-error=deprecated-declarations' make -C "$RUNNER_TEMP/xcbuild" -j"$(nproc)" 2>&1 | tee "$RUNNER_TEMP/xcbuild-build.log"
+          CC=clang CXX=clang++ \
+            CXXFLAGS='-Wno-error=deprecated-declarations -Wno-error=address-of-packed-member -Wno-error=range-loop-construct -Wno-error=self-assign-field -Wno-error=uninitialized-const-pointer -include cstdint -include cstdlib' \
+            CMAKE_FLAGS='-DCMAKE_POLICY_VERSION_MINIMUM=3.5' \
+            make -C "$RUNNER_TEMP/xcbuild" -j"$(nproc)" 2>&1 | tee "$RUNNER_TEMP/xcbuild-build.log"
           test -x "$RUNNER_TEMP/xcbuild/build/xcbuild"
           echo "$RUNNER_TEMP/xcbuild/build" >> "$GITHUB_PATH"
 
@@ -776,6 +779,36 @@ jobs:
           git -C "$RUNNER_TEMP/theos-sdks" sparse-checkout set iPhoneOS16.5.sdk
           test -d "$RUNNER_TEMP/theos-sdks/iPhoneOS16.5.sdk/usr/include"
           echo "SDKROOT=$RUNNER_TEMP/theos-sdks/iPhoneOS16.5.sdk" >> "$GITHUB_ENV"
+
+      - name: Stage Linux Xcode developer directory
+        run: |
+          set -euo pipefail
+          python3 - "$RUNNER_TEMP/linux-xcode-dev" "$SDKROOT" "$RUNNER_TEMP/xcbuild/Specifications" <<'PY'
+          import plistlib
+          import sys
+          from pathlib import Path
+
+          root, sdk, specifications = map(Path, sys.argv[1:])
+          platform = root / "Platforms/iPhoneOS.platform"
+          (platform / "Developer/SDKs").mkdir(parents=True)
+          (platform / "Developer/Library/Xcode").mkdir(parents=True)
+          (root / "Library/Xcode").mkdir(parents=True)
+          info = {
+              "Identifier": "com.apple.platform.iphoneos",
+              "Name": "iphoneos",
+              "Description": "iOS",
+              "Type": "Platform",
+              "Version": "16.5",
+              "FamilyIdentifier": "iOS",
+              "FamilyName": "iOS",
+              "IsDeploymentPlatform": True,
+          }
+          (platform / "Info.plist").write_bytes(plistlib.dumps(info))
+          (platform / "Developer/SDKs/iPhoneOS16.5.sdk").symlink_to(sdk, target_is_directory=True)
+          (platform / "Developer/Library/Xcode/Specifications").symlink_to(specifications, target_is_directory=True)
+          (root / "Library/Xcode/Specifications").symlink_to(specifications, target_is_directory=True)
+          PY
+          echo "DEVELOPER_DIR=$RUNNER_TEMP/linux-xcode-dev" >> "$GITHUB_ENV"
 
       - name: Install Apple arm64 Mach-O linker
         uses: mamba-org/setup-micromamba@v3
@@ -802,13 +835,12 @@ jobs:
             -scheme Blink \
             -sdk "$SDKROOT" \
             -configuration Debug \
-            -archivePath "$RUNNER_TEMP/HermesLink-Linux.xcarchive" \
             IPHONEOS_DEPLOYMENT_TARGET="$IPHONEOS_DEPLOYMENT_TARGET" \
             CODE_SIGNING_REQUIRED=NO \
             CODE_SIGNING_ALLOWED=NO \
             ONLY_ACTIVE_ARCH=NO \
             LD="$LD64" \
-            archive 2>&1 | tee "$RUNNER_TEMP/hermeslink-linux-xcbuild.log"
+            build 2>&1 | tee "$RUNNER_TEMP/hermeslink-linux-xcbuild.log"
 
       - name: Upload Linux cross-compile diagnostics
         if: always()
