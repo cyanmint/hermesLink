@@ -44,7 +44,7 @@ if [ "$HOST_OS" != Darwin ] && [ ! -d "$SDK_ROOT" ]; then
 fi
 [ -d "$SDK_ROOT/usr/include" ] || { echo "missing iOS SDK: $SDK_ROOT" >&2; exit 3; }
 
-[ -f "$CPYTHON_ROOT/Configure" ] || { echo "missing initialized CPython submodule at $CPYTHON_ROOT; clone with --recurse-submodules" >&2; exit 2; }
+[ -f "$CPYTHON_ROOT/configure" ] || { echo "missing initialized CPython submodule at $CPYTHON_ROOT; clone with --recurse-submodules" >&2; exit 2; }
 
 if [ ! -x "$HOST_PYTHON" ]; then
   HOST_ROOT=$BUILD_ROOT/host-cpython

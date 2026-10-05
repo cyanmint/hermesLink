@@ -63,6 +63,8 @@ class BuildSourceSubmoduleTests(unittest.TestCase):
         for module in ("modules/cpython", "modules/openssl"):
             with self.subTest(module=module):
                 self.assertIn(module, native_build)
+        self.assertIn('"$CPYTHON_ROOT/configure"', native_build)
+        self.assertNotIn('"$CPYTHON_ROOT/Configure"', native_build)
         self.assertNotRegex(zip_build, r"\bgit\s+(?:clone|fetch)\b")
         self.assertNotIn("https://github.com/python/cpython.git", native_build)
         self.assertNotIn("https://github.com/openssl/openssl.git", native_build)
