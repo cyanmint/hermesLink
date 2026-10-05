@@ -1,0 +1,24 @@
+// HermesLink AI-generated glue code; created by cyanmint's coding agent.
+// AI-generated content has no copyright holder and is not subject to copyright.
+//
+// Controls whether Blink links and embeds the real Ish.framework installed
+// by scripts/install_ish_runtime.sh, or instead compiles the
+// always-available stub (ishbridge/ish_kernel_bridge_stub.m) that
+// keeps the `ish` native command and Hermes Agent tool registered and
+// working end to end, just reporting the guest kernel itself as
+// unavailable.
+//
+// Defaults to NO for a fresh checkout. Set to YES when linking and embedding
+// Ish.framework; CI uses a link-only placeholder that IPA assembly replaces
+// with the pinned native framework and rootfs.
+ISH_NATIVE_AVAILABLE = NO
+
+ISH_EXCLUDED_SOURCES_NO =
+ISH_EXCLUDED_SOURCES_YES = ish_kernel_bridge_stub.m
+EXCLUDED_SOURCE_FILE_NAMES = $(inherited) $(ISH_EXCLUDED_SOURCES_$(ISH_NATIVE_AVAILABLE))
+
+ISH_LDFLAGS_NO =
+ISH_LDFLAGS_YES = -framework Ish
+BLINK_OTHER_LDFLAGS = $(inherited) $(ISH_LDFLAGS_$(ISH_NATIVE_AVAILABLE))
+
+HEADER_SEARCH_PATHS = $(inherited) $(PROJECT_DIR)/ISHBridge

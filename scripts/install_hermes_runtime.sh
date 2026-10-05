@@ -1,0 +1,59 @@
+#!/usr/bin/env bash
+# HermesLink AI-generated glue code; created by cyanmint's coding agent.
+# AI-generated content has no copyright holder and is not subject to copyright.
+set -euo pipefail
+
+ROOT=$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)
+BLINK_ROOT=${BLINK_ROOT:-$ROOT}
+INPUT_ROOT=${1:-${NATIVE_IOS_BUILD_ROOT:-$ROOT/hermes}}
+SOURCE_FRAMEWORK=${HERMES_RUNTIME_FRAMEWORK:-$INPUT_ROOT/Frameworks/HermesRuntime.framework}
+SOURCE_RUNTIME=${HERMES_RUNTIME_ARCHIVE:-$INPUT_ROOT/hermesrt.zip}
+DEST_ROOT="$BLINK_ROOT/Resources"
+DEST_FRAMEWORK="$BLINK_ROOT/Frameworks/HermesRuntime.framework"
+DEST_RUNTIME="$DEST_ROOT/hermesrt.zip"
+
+[ -f "$SOURCE_FRAMEWORK/HermesRuntime" ] || { echo "missing Hermes runtime framework: $SOURCE_FRAMEWORK" >&2; exit 2; }
+[ -f "$SOURCE_RUNTIME" ] || { echo "missing Hermes runtime archive: $SOURCE_RUNTIME" >&2; exit 2; }
+command -v unzip >/dev/null 2>&1 || { echo "unzip is required" >&2; exit 2; }
+unzip -t "$SOURCE_RUNTIME" >/dev/null
+
+python3 - "$SOURCE_RUNTIME" <<'PY'
+import sys, zipfile
+with zipfile.ZipFile(sys.argv[1]) as archive:
+    names = archive.namelist()
+    if len(names) != len(set(names)):
+        raise SystemExit("duplicate ZIP paths")
+    if any(info.compress_type != zipfile.ZIP_STORED for info in archive.infolist() if not info.is_dir()):
+        raise SystemExit("runtime ZIP entries must use ZIP_STORED")
+    timestamps = [info for info in archive.infolist() if info.filename == "timestamp.txt"]
+    if len(timestamps) != 1 or timestamps[0].compress_type != zipfile.ZIP_STORED:
+        raise SystemExit("runtime archive must contain one stored timestamp.txt")
+    try:
+        timestamp = archive.read(timestamps[0]).decode("ascii").strip()
+        if not timestamp.isdecimal() or not 0 < int(timestamp) <= 2**63 - 1:
+            raise ValueError
+    except (UnicodeDecodeError, ValueError):
+        raise SystemExit("runtime timestamp.txt must contain a positive Unix timestamp in milliseconds")
+    if any(part == ".git" for name in names for part in name.split("/")):
+        raise SystemExit("runtime archive contains .git")
+    required = {
+        "hermes/hermes_cli/main.py",
+        "hermes-webui/api/config.py",
+        "python/encodings/__init__.py",
+    }
+    missing = sorted(required - set(names))
+    if missing:
+        raise SystemExit("runtime archive missing: " + ", ".join(missing))
+PY
+
+mkdir -p "$DEST_ROOT"
+rm -f "$DEST_ROOT/hermes"
+rm -rf "$DEST_FRAMEWORK.tmp"
+cp -a "$SOURCE_FRAMEWORK" "$DEST_FRAMEWORK.tmp"
+install -m 644 "$SOURCE_RUNTIME" "$DEST_RUNTIME.tmp"
+rm -rf "$DEST_FRAMEWORK"
+mv "$DEST_FRAMEWORK.tmp" "$DEST_FRAMEWORK"
+mv -f "$DEST_RUNTIME.tmp" "$DEST_RUNTIME"
+chmod 755 "$DEST_FRAMEWORK/HermesRuntime"
+printf 'Installed %s (%s bytes)\n' "$DEST_FRAMEWORK" "$(wc -c < "$DEST_FRAMEWORK/HermesRuntime")"
+printf 'Installed %s (%s bytes)\n' "$DEST_RUNTIME" "$(wc -c < "$DEST_RUNTIME")"

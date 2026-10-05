@@ -1,0 +1,324 @@
+/* HermesLink AI-generated glue code; created by cyanmint's coding agent.
+ * AI-generated content has no copyright holder and is not subject to copyright. */
+#include <Python.h>
+#include <stdlib.h>
+#include <string.h>
+#include <unistd.h>
+#include <limits.h>
+#include <dlfcn.h>
+
+static void report_runtime_message(const char *message) {
+    typedef void (*append_log_fn)(const char *);
+    typedef int (*output_fd_fn)(int);
+    append_log_fn append_log = (append_log_fn)dlsym(RTLD_DEFAULT, "HermesLinkAppendLog");
+    output_fd_fn output_fd = (output_fd_fn)dlsym(RTLD_DEFAULT, "HermesLinkOutputFD");
+    if (append_log != NULL) {
+        append_log(message);
+    }
+    int fd = output_fd == NULL ? STDERR_FILENO : output_fd(1);
+    if (fd >= 0) {
+        dprintf(fd, "%s\n", message);
+    }
+}
+
+static char **build_argv(int argc, char **argv) {
+    char **result = calloc((size_t)argc + 1, sizeof(*result));
+    if (result == NULL) {
+        return NULL;
+    }
+    for (int i = 0; i < argc; ++i) {
+        result[i] = argv[i];
+    }
+    return result;
+}
+
+static int report_python_error(const char *stage) {
+    char line[1024];
+    snprintf(line, sizeof(line), "hermes: %s failed (error=%d)", stage,
+             PyErr_Occurred() != NULL);
+    report_runtime_message(line);
+    if (PyErr_Occurred()) {
+        PyObject *type = NULL;
+        PyObject *value = NULL;
+        PyObject *traceback = NULL;
+        PyErr_Fetch(&type, &value, &traceback);
+        PyErr_NormalizeException(&type, &value, &traceback);
+        PyObject *text = value == NULL ? NULL : PyObject_Str(value);
+        const char *message = text == NULL ? "<unprintable>" : PyUnicode_AsUTF8(text);
+        snprintf(line, sizeof(line), "hermes: python error: %s",
+                 message == NULL ? "<non-utf8>" : message);
+        report_runtime_message(line);
+        Py_XDECREF(text);
+        Py_XDECREF(type);
+        Py_XDECREF(value);
+        Py_XDECREF(traceback);
+        PyErr_Clear();
+    }
+    return 1;
+}
+
+static int handle_system_exit(void) {
+    if (!PyErr_ExceptionMatches(PyExc_SystemExit)) return -1;
+    PyObject *type = NULL, *value = NULL, *traceback = NULL;
+    PyErr_Fetch(&type, &value, &traceback);
+    int result = (value != NULL && PyLong_Check(value)) ? (int)PyLong_AsLong(value) : 0;
+    Py_XDECREF(type);
+    Py_XDECREF(value);
+    Py_XDECREF(traceback);
+    return result;
+}
+
+static void flush_python_stdio(void) {
+    PyRun_SimpleString("import sys; sys.stdout.flush(); sys.stderr.flush()\n");
+    fflush(stdout);
+    fflush(stderr);
+}
+
+static int configure_python_stdio(void) {
+    typedef int (*output_fd_fn)(int);
+    typedef int (*input_fd_fn)(void);
+    output_fd_fn output_fd = (output_fd_fn)dlsym(RTLD_DEFAULT, "HermesLinkOutputFD");
+    input_fd_fn input_fd = (input_fd_fn)dlsym(RTLD_DEFAULT, "HermesLinkInputFD");
+    int stdin_fd = input_fd == NULL ? STDIN_FILENO : input_fd();
+    if (stdin_fd < 0) stdin_fd = STDIN_FILENO;
+    int stdout_fd = output_fd == NULL ? STDOUT_FILENO : output_fd(0);
+    int stderr_fd = output_fd == NULL ? STDERR_FILENO : output_fd(1);
+    char script[768];
+    snprintf(script, sizeof(script),
+        "import io, os, sys\n"
+        "sys.stdin = io.TextIOWrapper(os.fdopen(os.dup(%d), 'rb'), encoding='utf-8', errors='replace', line_buffering=True)\n"
+        "sys.stdout = io.TextIOWrapper(os.fdopen(os.dup(%d), 'wb'), encoding='utf-8', errors='backslashreplace', line_buffering=True)\n"
+        "sys.stderr = io.TextIOWrapper(os.fdopen(os.dup(%d), 'wb'), encoding='utf-8', errors='backslashreplace', line_buffering=True)\n",
+        stdin_fd, stdout_fd, stderr_fd);
+    int result = PyRun_SimpleString(script);
+    if (result != 0) {
+        PyErr_Clear();
+        return -1;
+    }
+    return 0;
+}
+
+int hermes_register_native_modules(void);
+
+__attribute__((visibility("default")))
+int hermes_runtime_main(int argc, char **argv) {
+    setenv("HERMES_IOS_TERMINAL", "1", 1);
+    const char *runtime_root = getenv("HERMES_RUNTIME_ROOT");
+    char runtime_path[PATH_MAX];
+    if (runtime_root == NULL || runtime_root[0] == '\0') runtime_root = ".";
+    if (snprintf(runtime_path, sizeof(runtime_path), "%s/hermesrt.zip", runtime_root)
+            >= (int)sizeof(runtime_path)) {
+        report_runtime_message("hermes: runtime path is too long");
+        return 70;
+    }
+    for (int i = 1; i + 1 < argc; ++i) {
+        if (strcmp(argv[i], "--host") == 0) {
+            setenv("HERMES_WEBUI_HOST", argv[i + 1], 1);
+        } else if (strcmp(argv[i], "--port") == 0) {
+            setenv("HERMES_WEBUI_PORT", argv[i + 1], 1);
+        }
+    }
+    if (getenv("HERMES_PYTHON_MODE") == NULL && argc == 2 &&
+            (strcmp(argv[1], "--version") == 0 || strcmp(argv[1], "-V") == 0)) {
+        static const char version[] = "Hermes Agent v0.21.2\n";
+        (void)write(STDOUT_FILENO, version, sizeof(version) - 1);
+        return 0;
+    }
+    char **python_argv = build_argv(argc, argv);
+    if (python_argv == NULL) {
+        report_runtime_message("hermes: unable to allocate argument vector");
+        return 70;
+    }
+
+    hermes_register_native_modules();
+    PyConfig config;
+    PyConfig_InitIsolatedConfig(&config);
+    config.parse_argv = 0;
+
+    PyStatus status = PyConfig_SetBytesArgv(&config, argc, python_argv);
+    if (PyStatus_Exception(status)) {
+        PyConfig_Clear(&config);
+        free(python_argv);
+        Py_ExitStatusException(status);
+    }
+    status = PyConfig_SetString(&config, &config.program_name, L"./hermes");
+    if (PyStatus_Exception(status)) {
+        PyConfig_Clear(&config);
+        free(python_argv);
+        Py_ExitStatusException(status);
+    }
+    wchar_t *runtime_zip = Py_DecodeLocale(runtime_path, NULL);
+    if (runtime_zip == NULL) {
+        report_runtime_message("hermes: unable to decode runtime path");
+        PyConfig_Clear(&config);
+        free(python_argv);
+        return 70;
+    }
+    status = PyWideStringList_Append(&config.module_search_paths, runtime_zip);
+    PyMem_RawFree(runtime_zip);
+    if (PyStatus_Exception(status)) {
+        PyConfig_Clear(&config);
+        free(python_argv);
+        Py_ExitStatusException(status);
+    }
+    const char *runtime_suffixes[] = {
+        "/python", "/hermes", "/hermes-webui", "/python/site-packages"
+    };
+    for (size_t i = 0; i < sizeof(runtime_suffixes) / sizeof(runtime_suffixes[0]); ++i) {
+        char path[PATH_MAX];
+        if (snprintf(path, sizeof(path), "%s%s", runtime_path,
+                     runtime_suffixes[i]) >= (int)sizeof(path)) {
+            report_runtime_message("hermes: runtime path is too long");
+            PyConfig_Clear(&config);
+            free(python_argv);
+            return 70;
+        }
+        wchar_t *wide_path = Py_DecodeLocale(path, NULL);
+        if (wide_path == NULL) {
+            report_runtime_message("hermes: unable to decode runtime path");
+            PyConfig_Clear(&config);
+            free(python_argv);
+            return 70;
+        }
+        status = PyWideStringList_Append(&config.module_search_paths, wide_path);
+        PyMem_RawFree(wide_path);
+        if (PyStatus_Exception(status)) {
+            PyConfig_Clear(&config);
+            free(python_argv);
+            Py_ExitStatusException(status);
+        }
+    }
+    config.module_search_paths_set = 1;
+
+    status = Py_InitializeFromConfig(&config);
+    if (PyStatus_Exception(status)) {
+        PyConfig_Clear(&config);
+        free(python_argv);
+        Py_ExitStatusException(status);
+    }
+
+    wchar_t **wide_argv = PyMem_RawCalloc((size_t)argc + 1, sizeof(*wide_argv));
+    if (wide_argv == NULL) {
+        Py_FinalizeEx();
+        PyConfig_Clear(&config);
+        free(python_argv);
+        return 70;
+    }
+    for (int i = 0; i < argc; ++i) {
+        wide_argv[i] = Py_DecodeLocale(argv[i], NULL);
+    }
+    PySys_SetArgvEx(argc, wide_argv, 0);
+    for (int i = 0; i < argc; ++i) PyMem_RawFree(wide_argv[i]);
+    PyMem_RawFree(wide_argv);
+
+    fflush(stderr);
+
+    PyObject *bootstrap = PyImport_ImportModule("sitecustomize");
+    if (bootstrap == NULL) {
+        int result = report_python_error("import sitecustomize");
+        Py_FinalizeEx();
+        PyConfig_Clear(&config);
+        free(python_argv);
+        return result;
+    }
+    Py_DECREF(bootstrap);
+
+    if (configure_python_stdio() != 0) {
+        int result = report_python_error("configure Python stdio");
+        Py_FinalizeEx();
+        PyConfig_Clear(&config);
+        free(python_argv);
+        return result;
+    }
+
+    if (getenv("HERMES_PYTHON_MODE") != NULL) {
+        int result = 0;
+        if (argc > 1 && strcmp(argv[1], "-c") == 0 && argc > 2) {
+            result = PyRun_SimpleString(argv[2]);
+        } else if (argc > 1 && argv[1][0] != '-') {
+            FILE *script = fopen(argv[1], "r");
+            if (script == NULL) {
+                report_runtime_message("python: unable to open script");
+                result = 2;
+            } else {
+                result = PyRun_SimpleFileExFlags(script, argv[1], 1, NULL);
+            }
+        } else {
+            result = PyRun_SimpleString(
+                "import code; code.interact(local=dict(globals(), **locals()))");
+        }
+        if (result != 0 && PyErr_Occurred()) {
+            report_python_error("run python");
+        }
+        flush_python_stdio();
+        Py_FinalizeEx();
+        PyConfig_Clear(&config);
+        free(python_argv);
+        return result;
+    }
+
+    const char *entry_module = (argc > 1 && strcmp(argv[1], "webui") == 0)
+        ? "server" : (argc > 1 && strcmp(argv[1], "upgrade") == 0)
+            ? "hermes_cli.upgrade" : "hermes_cli.main";
+    if (argc > 1 && (strcmp(argv[1], "webui") == 0 || strcmp(argv[1], "upgrade") == 0)) {
+        /* The WebUI server owns its host/port overrides; remove the command
+         * token so its normal argv handling sees the same arguments as when
+         * launched directly. */
+        PyRun_SimpleString(
+            "import sys\n"
+            "sys.argv = [sys.argv[0]] + sys.argv[2:]\n");
+    }
+    PyObject *module = PyImport_ImportModule(entry_module);
+    if (module == NULL) {
+        int system_exit = handle_system_exit();
+        if (system_exit >= 0) {
+            flush_python_stdio();
+            Py_FinalizeEx();
+            PyConfig_Clear(&config);
+            free(python_argv);
+            return system_exit;
+        }
+        int result = report_python_error(entry_module == NULL ? "import entry module" : "import entry module");
+        Py_FinalizeEx();
+        PyConfig_Clear(&config);
+        free(python_argv);
+        return result;
+    }
+    PyObject *entrypoint = PyObject_GetAttrString(module, "main");
+    Py_DECREF(module);
+    if (entrypoint == NULL || !PyCallable_Check(entrypoint)) {
+        Py_XDECREF(entrypoint);
+        int result = report_python_error("find entrypoint main");
+        Py_FinalizeEx();
+        PyConfig_Clear(&config);
+        free(python_argv);
+        return result;
+    }
+    PyObject *return_value = PyObject_CallNoArgs(entrypoint);
+    Py_DECREF(entrypoint);
+    if (return_value == NULL) {
+        int system_exit = handle_system_exit();
+        if (system_exit >= 0) {
+            flush_python_stdio();
+            Py_FinalizeEx();
+            PyConfig_Clear(&config);
+            free(python_argv);
+            return system_exit;
+        }
+        int result = report_python_error("run entrypoint main");
+        Py_FinalizeEx();
+        PyConfig_Clear(&config);
+        free(python_argv);
+        return result;
+    }
+    int result = 0;
+    if (PyLong_Check(return_value)) {
+        result = (int)PyLong_AsLong(return_value);
+    }
+    Py_DECREF(return_value);
+    flush_python_stdio();
+    Py_FinalizeEx();
+    PyConfig_Clear(&config);
+    free(python_argv);
+    return result;
+}
