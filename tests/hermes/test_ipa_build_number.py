@@ -69,14 +69,13 @@ class IpaBuildNumberTests(unittest.TestCase):
         assembly = jobs["assemble-ipa"]
 
         for job, step_name in (
-            (app_build, "Build unsigned device archive"),
+            (app_build, "Cross-compile Blink Xcode project on Linux"),
             (simulator, "Build HermesLink simulator app"),
         ):
             step = next(step for step in job["steps"] if step["name"] == step_name)
             self.assertNotIn("CURRENT_PROJECT_VERSION=", step["run"])
 
-        cache = next(step for step in app_build["steps"] if step["name"] == "Cache unsigned app archive")
-        self.assertNotIn("${{ github.run_number }}", cache["with"]["key"])
+        self.assertNotIn("${{ github.run_number }}", str(app_build["steps"]))
 
         assembly_steps = assembly["steps"]
         set_version = next(

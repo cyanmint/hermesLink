@@ -23,18 +23,13 @@ on:
         options: [auto, true, false]
         default: auto
       app:
-        description: Build HermesLink.app without runtime assets (macOS)
+        description: Cross-compile HermesLink.app without runtime assets (Linux)
         required: true
         type: choice
         options: [auto, true, false]
         default: auto
       run_tests:
         description: Run simulator tests; Copilot E2E runs after IPA upload
-        required: false
-        type: boolean
-        default: false
-      linux_app_experiment:
-        description: Try building the Blink Xcode project on Linux with xcbuild
         required: false
         type: boolean
         default: false
@@ -473,235 +468,9 @@ jobs:
         run: gh release upload "$HERMES_RUNTIME_RELEASE_TAG" ISHLinuxNative.zip --clobber
 
   build-app:
-    name: Compile HermesLink app without runtime assets (macOS)
+    name: Cross-compile HermesLink app without runtime assets (Linux)
     needs: [decide, prepare-release]
     if: needs.decide.outputs.run_app == 'true'
-    runs-on: macos-latest
-    permissions:
-      contents: read
-    steps:
-      - name: Check out HermesLink
-        uses: actions/checkout@v7
-
-      - name: Initialize pinned Blink source tree
-        run: git submodule update --init --recursive --depth 1 -- modules/blink
-
-      - name: Apply Blink integration and stage app sources
-        run: bash scripts/blink/prepare-blink-source.sh modules/blink "$GITHUB_WORKSPACE"
-
-      - name: Install uv
-        uses: astral-sh/setup-uv@v10.2.0
-        with:
-          enable-cache: false
-
-      - name: Prepare runtime framework link placeholders
-        run: |
-          set -euo pipefail
-          mkdir -p Frameworks/HermesRuntime.framework Frameworks/Ish.framework/Headers Resources
-          cat > "$RUNNER_TEMP/hermes_runtime_stub.c" <<'EOF'
-          int hermes_runtime_main(int argc, char **argv) {
-            (void)argc;
-            (void)argv;
-            return 70;
-          }
-          EOF
-          xcrun --sdk iphoneos clang \
-            -target arm64-apple-ios16.1 \
-            -isysroot "$(xcrun --sdk iphoneos --show-sdk-path)" \
-            -dynamiclib "$RUNNER_TEMP/hermes_runtime_stub.c" \
-            -install_name '@rpath/HermesRuntime.framework/HermesRuntime' \
-            -o Frameworks/HermesRuntime.framework/HermesRuntime
-          cat > Frameworks/HermesRuntime.framework/Info.plist <<'EOF'
-          <?xml version="1.0" encoding="UTF-8"?>
-          <!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
-          <plist version="1.0"><dict>
-            <key>CFBundleExecutable</key><string>HermesRuntime</string>
-            <key>CFBundleIdentifier</key><string>com.cyan.hermes-runtime-link-stub</string>
-            <key>CFBundlePackageType</key><string>FMWK</string>
-          </dict></plist>
-          EOF
-          xcrun --sdk iphoneos clang \
-            -target arm64-apple-ios16.1 \
-            -isysroot "$(xcrun --sdk iphoneos --show-sdk-path)" \
-            -D_DARWIN_C_SOURCE=1 \
-            -I ISHBridge \
-            -dynamiclib ISHBridge/ish_kernel_bridge_stub.m \
-            ISHBridge/ish_rootfs.c ISHBridge/ish_path_safety.c \
-            ISHBridge/ish_exit_protocol.c \
-            -lsqlite3 -lz \
-            -install_name '@rpath/Ish.framework/Ish' \
-            -o Frameworks/Ish.framework/Ish
-          cp ISHBridge/ish_kernel_bridge.h Frameworks/Ish.framework/Headers/
-          cat > Frameworks/Ish.framework/Info.plist <<'EOF'
-          <?xml version="1.0" encoding="UTF-8"?>
-          <!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
-          <plist version="1.0"><dict>
-            <key>CFBundleExecutable</key><string>Ish</string>
-            <key>CFBundleIdentifier</key><string>com.cyan.ish-link-stub</string>
-            <key>CFBundlePackageType</key><string>FMWK</string>
-          </dict></plist>
-          EOF
-          printf 'runtime omitted from app component\n' > "$RUNNER_TEMP/runtime-stub.txt"
-          (cd "$RUNNER_TEMP" && zip -q "$GITHUB_WORKSPACE/Resources/hermesrt.zip" runtime-stub.txt)
-          tar -czf Resources/ish-rootfs.tar.gz --files-from /dev/null
-
-      - name: Set runtime-free app cache key
-        id: runtime_hash
-        run: echo 'sha256=runtime-link-stubs' >> "$GITHUB_OUTPUT"
-
-      - name: Cache unsigned app archive
-        id: app_build_cache
-        uses: actions/cache@v6
-        with:
-          path: |
-            ${{ runner.temp }}/HermesLink.xcarchive
-            ${{ runner.temp }}/hermeslink-archive.log
-          key: ${{ runner.os }}-hermes-app-${{ github.sha }}-${{ steps.runtime_hash.outputs.sha256 }}-${{ hashFiles('blink/**') }}-${{ hashFiles('scripts/hermes/build/**') }}-${{ hashFiles('ishbridge/**') }}-${{ hashFiles('scripts/install_hermes_runtime.sh') }}
-
-      - name: Cache framework builds
-        id: cache
-        uses: actions/cache@v6
-        with:
-          path: |
-            xcfs/.build
-            Frameworks/ios_system/xcfs/.build
-          key: ${{ runner.os }}-${{ hashFiles('blink/UPSTREAM_REVISION') }}
-
-      - name: Get frameworks
-        if: steps.cache.outputs.cache-hit != 'true'
-        run: bash get_frameworks.sh
-
-      - name: Get resources
-        if: steps.cache.outputs.cache-hit != 'true'
-        run: bash get_resources.sh
-
-      - name: Prepare Xcode configuration
-        run: |
-          cp template_setup.xcconfig developer_setup.xcconfig
-          printf '\nISH_NATIVE_AVAILABLE = YES\n' >> developer_setup.xcconfig
-
-      - name: Build unsigned device archive
-        if: steps.app_build_cache.outputs.cache-hit != 'true'
-        run: |
-          set -o pipefail
-          xcodebuild archive \
-            -project Blink.xcodeproj \
-            -scheme Blink \
-            -sdk iphoneos \
-            -configuration Debug \
-            -archivePath "$RUNNER_TEMP/HermesLink.xcarchive" \
-            IPHONEOS_DEPLOYMENT_TARGET='16.1' \
-            CODE_SIGN_IDENTITY='' \
-            CODE_SIGNING_REQUIRED=NO \
-            CODE_SIGNING_ALLOWED=NO \
-            ONLY_ACTIVE_ARCH=NO | tee "$RUNNER_TEMP/hermeslink-archive.log" | xcpretty
-
-      - name: Show raw Xcode linker diagnostics
-        if: failure()
-        run: |
-          python3 - "$RUNNER_TEMP/hermeslink-archive.log" <<'PY'
-          from pathlib import Path
-          import sys
-
-          log = Path(sys.argv[1])
-          if not log.is_file():
-              print(f"Xcode archive log was not created: {log}")
-              raise SystemExit(0)
-          lines = log.read_text(encoding="utf-8", errors="replace").splitlines()
-          markers = (
-              "Undefined symbols for architecture",
-              "symbol(s) not found for architecture",
-              "ld: error:",
-              "clang: error:",
-          )
-          selected = set()
-          for index, line in enumerate(lines):
-              if any(marker in line for marker in markers):
-                  selected.update(range(max(0, index - 8), min(len(lines), index + 32)))
-          if not selected:
-              print("No raw linker error markers found; final Xcode output follows:")
-              selected.update(range(max(0, len(lines) - 100), len(lines)))
-          for index in sorted(selected):
-              print(lines[index])
-          PY
-
-      - name: Validate cached unsigned device archive
-        if: steps.app_build_cache.outputs.cache-hit == 'true'
-        run: |
-          set -euo pipefail
-          test -d "$RUNNER_TEMP/HermesLink.xcarchive/Products/Applications"
-          test -n "$(find "$RUNNER_TEMP/HermesLink.xcarchive/Products/Applications" -maxdepth 1 -type d -name '*.app' -print -quit)"
-
-      - name: Prepare app bundle for Linux packaging
-        run: |
-          set -euo pipefail
-          app="$(find "$RUNNER_TEMP/HermesLink.xcarchive/Products/Applications" -maxdepth 1 -type d -name '*.app' -print -quit)"
-          test -n "$app"
-          test -f "$app/Info.plist"
-          test -x "$app/HermesLink"
-          mkdir -p "$RUNNER_TEMP/app-transfer"
-          tar -czf "$RUNNER_TEMP/app-transfer/HermesLink.app.tar.gz" \
-            -C "$(dirname "$app")" "$(basename "$app")"
-
-      - name: Upload app bundle for Linux packaging
-        uses: actions/upload-artifact@v7
-        with:
-          name: hermeslink-app-bundle
-          path: ${{ runner.temp }}/app-transfer/HermesLink.app.tar.gz
-          if-no-files-found: error
-          retention-days: 1
-
-  publish-app:
-    name: Package and publish HermesLink app (Linux)
-    needs: [decide, build-app]
-    if: needs.decide.outputs.run_app == 'true' && needs.build-app.result == 'success'
-    runs-on: ubuntu-latest
-    permissions:
-      contents: write
-    steps:
-      - name: Check out HermesLink
-        uses: actions/checkout@v7
-
-      - name: Download app bundle from macOS compiler
-        uses: actions/download-artifact@v7
-        with:
-          name: hermeslink-app-bundle
-          path: ${{ runner.temp }}/app-transfer
-
-      - name: Remove link-only runtime placeholders and package app
-        run: |
-          set -euo pipefail
-          mkdir -p "$RUNNER_TEMP/app-work" "$RUNNER_TEMP/runtime-free-app"
-          tar -xzf "$RUNNER_TEMP/app-transfer/HermesLink.app.tar.gz" -C "$RUNNER_TEMP/app-work"
-          app="$(find "$RUNNER_TEMP/app-work" -mindepth 1 -maxdepth 1 -type d -name '*.app' -print -quit)"
-          test -n "$app"
-          test -f "$app/Info.plist"
-          test -x "$app/HermesLink"
-          rm -rf "$app/Frameworks/HermesRuntime.framework" "$app/Frameworks/Ish.framework" \
-            "$app/hermesrt.zip" "$app/ish-rootfs.tar.gz"
-          test ! -e "$app/Frameworks/HermesRuntime.framework"
-          test ! -e "$app/Frameworks/Ish.framework"
-          test ! -e "$app/hermesrt.zip"
-          test ! -e "$app/ish-rootfs.tar.gz"
-          (
-            cd "$(dirname "$app")"
-            zip -q -r -X "$RUNNER_TEMP/runtime-free-app/HermesLink.app.zip" "$(basename "$app")"
-          )
-          unzip -tq "$RUNNER_TEMP/runtime-free-app/HermesLink.app.zip"
-          if unzip -Z1 "$RUNNER_TEMP/runtime-free-app/HermesLink.app.zip" |
-            grep -E 'HermesRuntime\.framework|Ish\.framework|hermesrt\.zip|ish-rootfs\.tar\.gz'; then
-            echo "app component unexpectedly contains runtime assets" >&2
-            exit 1
-          fi
-
-      - name: Publish runtime-free app archive
-        env:
-          GH_TOKEN: ${{ github.token }}
-        run: gh release upload "$HERMES_RUNTIME_RELEASE_TAG" "$RUNNER_TEMP/runtime-free-app/HermesLink.app.zip" --clobber
-
-  experimental-build-app-linux:
-    name: Experimental Blink app cross-compile (Linux / xcbuild)
-    if: inputs.linux_app_experiment == true
     runs-on: ubuntu-latest
     permissions:
       contents: read
@@ -737,15 +506,103 @@ jobs:
       - name: Get Blink resources
         run: bash get_resources.sh
 
-      - name: Prepare Blink Xcode configuration
+      - name: Install Theos iPhoneOS SDK
+        run: |
+          set -euo pipefail
+          git clone --filter=blob:none --sparse --depth=1 https://github.com/theos/sdks.git "$RUNNER_TEMP/theos-sdks"
+          git -C "$RUNNER_TEMP/theos-sdks" sparse-checkout set iPhoneOS16.5.sdk
+          test -d "$RUNNER_TEMP/theos-sdks/iPhoneOS16.5.sdk/usr/include"
+          echo "SDKROOT=$RUNNER_TEMP/theos-sdks/iPhoneOS16.5.sdk" >> "$GITHUB_ENV"
+
+      - name: Install Apple arm64 Mach-O linker
+        uses: mamba-org/setup-micromamba@v3
+        with:
+          environment-name: linux-ios-app-linker
+          create-args: >-
+            cctools_osx-arm64=1030.6.3
+            ld64_osx-arm64=956.6
+
+      - name: Prepare runtime framework link placeholders
+        shell: micromamba-shell {0}
+        env:
+          IPHONEOS_DEPLOYMENT_TARGET: '16.1'
+        run: |
+          set -euo pipefail
+          shopt -s nullglob
+          linker_candidates=("$CONDA_PREFIX"/bin/arm64-apple-darwin*-ld)
+          if [ "${#linker_candidates[@]}" -ne 1 ] || [ ! -x "${linker_candidates[0]}" ]; then
+            printf 'expected one executable arm64 cctools ld64, found %s\n' "${#linker_candidates[@]}" >&2
+            exit 2
+          fi
+          LD64="${linker_candidates[0]}"
+          mkdir -p Frameworks/HermesRuntime.framework Frameworks/Ish.framework/Headers Resources
+          cat > "$RUNNER_TEMP/hermes_runtime_stub.c" <<'EOF'
+          int hermes_runtime_main(int argc, char **argv) {
+            (void)argc;
+            (void)argv;
+            return 70;
+          }
+          EOF
+          clang -target arm64-apple-ios16.1 -isysroot "$SDKROOT" \
+            -c "$RUNNER_TEMP/hermes_runtime_stub.c" -o "$RUNNER_TEMP/hermes_runtime_stub.o"
+          "$LD64" -arch arm64 -platform_version ios 16.1 16.5 -syslibroot "$SDKROOT" \
+            -dylib -install_name '@rpath/HermesRuntime.framework/HermesRuntime' \
+            -o Frameworks/HermesRuntime.framework/HermesRuntime "$RUNNER_TEMP/hermes_runtime_stub.o"
+          cat > Frameworks/HermesRuntime.framework/Info.plist <<'EOF'
+          <?xml version="1.0" encoding="UTF-8"?>
+          <!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+          <plist version="1.0"><dict>
+            <key>CFBundleExecutable</key><string>HermesRuntime</string>
+            <key>CFBundleIdentifier</key><string>com.cyan.hermes-runtime-link-stub</string>
+            <key>CFBundlePackageType</key><string>FMWK</string>
+          </dict></plist>
+          EOF
+          clang -target arm64-apple-ios16.1 -isysroot "$SDKROOT" -D_DARWIN_C_SOURCE=1 \
+            -I ISHBridge -c ISHBridge/ish_kernel_bridge_stub.m -o "$RUNNER_TEMP/ish_kernel_bridge_stub.o"
+          clang -target arm64-apple-ios16.1 -isysroot "$SDKROOT" -D_DARWIN_C_SOURCE=1 \
+            -I ISHBridge -c ISHBridge/ish_rootfs.c -o "$RUNNER_TEMP/ish_rootfs.o"
+          clang -target arm64-apple-ios16.1 -isysroot "$SDKROOT" -D_DARWIN_C_SOURCE=1 \
+            -I ISHBridge -c ISHBridge/ish_path_safety.c -o "$RUNNER_TEMP/ish_path_safety.o"
+          clang -target arm64-apple-ios16.1 -isysroot "$SDKROOT" -D_DARWIN_C_SOURCE=1 \
+            -I ISHBridge -c ISHBridge/ish_exit_protocol.c -o "$RUNNER_TEMP/ish_exit_protocol.o"
+          "$LD64" -arch arm64 -platform_version ios 16.1 16.5 -syslibroot "$SDKROOT" \
+            -L "$SDKROOT/usr/lib" -dylib -install_name '@rpath/Ish.framework/Ish' \
+            -o Frameworks/Ish.framework/Ish "$RUNNER_TEMP/ish_kernel_bridge_stub.o" \
+            "$RUNNER_TEMP/ish_rootfs.o" "$RUNNER_TEMP/ish_path_safety.o" \
+            "$RUNNER_TEMP/ish_exit_protocol.o" -lsqlite3 -lz -lSystem
+          cp ISHBridge/ish_kernel_bridge.h Frameworks/Ish.framework/Headers/
+          cat > Frameworks/Ish.framework/Info.plist <<'EOF'
+          <?xml version="1.0" encoding="UTF-8"?>
+          <!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+          <plist version="1.0"><dict>
+            <key>CFBundleExecutable</key><string>Ish</string>
+            <key>CFBundleIdentifier</key><string>com.cyan.ish-link-stub</string>
+            <key>CFBundlePackageType</key><string>FMWK</string>
+          </dict></plist>
+          EOF
+          printf 'runtime omitted from app component\n' > "$RUNNER_TEMP/runtime-stub.txt"
+          (cd "$RUNNER_TEMP" && zip -q "$GITHUB_WORKSPACE/Resources/hermesrt.zip" runtime-stub.txt)
+          tar -czf Resources/ish-rootfs.tar.gz --files-from /dev/null
+
+      - name: Prepare Xcode configuration
         run: |
           cp template_setup.xcconfig developer_setup.xcconfig
           printf '\nISH_NATIVE_AVAILABLE = YES\n' >> developer_setup.xcconfig
 
+      - name: Restore Linux xcbuild toolchain cache
+        id: xcbuild_cache
+        uses: actions/cache/restore@v6
+        with:
+          path: ${{ runner.temp }}/xcbuild
+          key: ${{ runner.os }}-xcbuild-dbaee552d2f13640773eb1ad3c79c0d2aca7229c-swift6.1-clang-flags-v1
+
       - name: Build xcbuild on Linux
+        id: build_xcbuild
         run: |
           set -euo pipefail
-          git clone --no-checkout https://github.com/facebookarchive/xcbuild.git "$RUNNER_TEMP/xcbuild"
+          if [ ! -d "$RUNNER_TEMP/xcbuild/.git" ]; then
+            git clone --no-checkout https://github.com/facebookarchive/xcbuild.git "$RUNNER_TEMP/xcbuild"
+          fi
           git -C "$RUNNER_TEMP/xcbuild" checkout dbaee552d2f13640773eb1ad3c79c0d2aca7229c
           git -C "$RUNNER_TEMP/xcbuild" submodule update --init --recursive
           python3 - "$RUNNER_TEMP/xcbuild" <<'PY'
@@ -765,20 +622,21 @@ jobs:
                       raise SystemExit(f"unexpected xcbuild source layout: {source}")
                   source.write_text(contents.replace(anchor, include + anchor, 1), encoding="utf-8")
           PY
-          CC=clang CXX=clang++ \
-            CXXFLAGS='-Wno-error=deprecated-declarations -Wno-error=address-of-packed-member -Wno-error=range-loop-construct -Wno-error=self-assign-field -include cstdint -include cstdlib' \
-            CMAKE_FLAGS='-DCMAKE_POLICY_VERSION_MINIMUM=3.5' \
-            make -C "$RUNNER_TEMP/xcbuild" -j"$(nproc)" 2>&1 | tee "$RUNNER_TEMP/xcbuild-build.log"
+          if [ ! -x "$RUNNER_TEMP/xcbuild/build/xcbuild" ]; then
+            CC=clang CXX=clang++ \
+              CXXFLAGS='-Wno-error=deprecated-declarations -Wno-error=address-of-packed-member -Wno-error=range-loop-construct -Wno-error=self-assign-field -include cstdint -include cstdlib' \
+              CMAKE_FLAGS='-DCMAKE_POLICY_VERSION_MINIMUM=3.5' \
+              make -C "$RUNNER_TEMP/xcbuild" -j"$(nproc)" 2>&1 | tee "$RUNNER_TEMP/xcbuild-build.log"
+          fi
           test -x "$RUNNER_TEMP/xcbuild/build/xcbuild"
           echo "$RUNNER_TEMP/xcbuild/build" >> "$GITHUB_PATH"
 
-      - name: Install Theos iPhoneOS SDK
-        run: |
-          set -euo pipefail
-          git clone --filter=blob:none --sparse --depth=1 https://github.com/theos/sdks.git "$RUNNER_TEMP/theos-sdks"
-          git -C "$RUNNER_TEMP/theos-sdks" sparse-checkout set iPhoneOS16.5.sdk
-          test -d "$RUNNER_TEMP/theos-sdks/iPhoneOS16.5.sdk/usr/include"
-          echo "SDKROOT=$RUNNER_TEMP/theos-sdks/iPhoneOS16.5.sdk" >> "$GITHUB_ENV"
+      - name: Save Linux xcbuild toolchain cache
+        if: always() && steps.build_xcbuild.outcome == 'success' && steps.xcbuild_cache.outputs.cache-hit != 'true'
+        uses: actions/cache/save@v6
+        with:
+          path: ${{ runner.temp }}/xcbuild
+          key: ${{ runner.os }}-xcbuild-dbaee552d2f13640773eb1ad3c79c0d2aca7229c-swift6.1-clang-flags-v1
 
       - name: Stage Linux Xcode developer directory
         run: |
@@ -810,15 +668,8 @@ jobs:
           PY
           echo "DEVELOPER_DIR=$RUNNER_TEMP/linux-xcode-dev" >> "$GITHUB_ENV"
 
-      - name: Install Apple arm64 Mach-O linker
-        uses: mamba-org/setup-micromamba@v3
-        with:
-          environment-name: linux-ios-app-linker
-          create-args: >-
-            cctools_osx-arm64=1030.6.3
-            ld64_osx-arm64=956.6
-
       - name: Cross-compile Blink Xcode project on Linux
+        shell: micromamba-shell {0}
         env:
           IPHONEOS_DEPLOYMENT_TARGET: '16.1'
         run: |
@@ -836,11 +687,31 @@ jobs:
             -sdk "$SDKROOT" \
             -configuration Debug \
             IPHONEOS_DEPLOYMENT_TARGET="$IPHONEOS_DEPLOYMENT_TARGET" \
+            CONFIGURATION_BUILD_DIR="$RUNNER_TEMP/build-products" \
             CODE_SIGNING_REQUIRED=NO \
             CODE_SIGNING_ALLOWED=NO \
             ONLY_ACTIVE_ARCH=NO \
             LD="$LD64" \
             build 2>&1 | tee "$RUNNER_TEMP/hermeslink-linux-xcbuild.log"
+
+      - name: Package Linux-built app bundle
+        run: |
+          set -euo pipefail
+          app="$(find "$RUNNER_TEMP/build-products" -mindepth 1 -maxdepth 2 -type d -name '*.app' -print -quit)"
+          test -n "$app"
+          test -f "$app/Info.plist"
+          test -x "$app/HermesLink"
+          mkdir -p "$RUNNER_TEMP/app-transfer"
+          tar -czf "$RUNNER_TEMP/app-transfer/HermesLink.app.tar.gz" \
+            -C "$(dirname "$app")" "$(basename "$app")"
+
+      - name: Upload Linux-built app bundle
+        uses: actions/upload-artifact@v7
+        with:
+          name: hermeslink-app-bundle
+          path: ${{ runner.temp }}/app-transfer/HermesLink.app.tar.gz
+          if-no-files-found: error
+          retention-days: 1
 
       - name: Upload Linux cross-compile diagnostics
         if: always()
@@ -853,6 +724,54 @@ jobs:
             ${{ runner.temp }}/swift-package-resolve.log
           if-no-files-found: ignore
           retention-days: 14
+
+  publish-app:
+    name: Package and publish HermesLink app (Linux)
+    needs: [decide, build-app]
+    if: needs.decide.outputs.run_app == 'true' && needs.build-app.result == 'success'
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - name: Check out HermesLink
+        uses: actions/checkout@v7
+
+      - name: Download app bundle from Linux compiler
+        uses: actions/download-artifact@v7
+        with:
+          name: hermeslink-app-bundle
+          path: ${{ runner.temp }}/app-transfer
+
+      - name: Remove link-only runtime placeholders and package app
+        run: |
+          set -euo pipefail
+          mkdir -p "$RUNNER_TEMP/app-work" "$RUNNER_TEMP/runtime-free-app"
+          tar -xzf "$RUNNER_TEMP/app-transfer/HermesLink.app.tar.gz" -C "$RUNNER_TEMP/app-work"
+          app="$(find "$RUNNER_TEMP/app-work" -mindepth 1 -maxdepth 1 -type d -name '*.app' -print -quit)"
+          test -n "$app"
+          test -f "$app/Info.plist"
+          test -x "$app/HermesLink"
+          rm -rf "$app/Frameworks/HermesRuntime.framework" "$app/Frameworks/Ish.framework" \
+            "$app/hermesrt.zip" "$app/ish-rootfs.tar.gz"
+          test ! -e "$app/Frameworks/HermesRuntime.framework"
+          test ! -e "$app/Frameworks/Ish.framework"
+          test ! -e "$app/hermesrt.zip"
+          test ! -e "$app/ish-rootfs.tar.gz"
+          (
+            cd "$(dirname "$app")"
+            zip -q -r -X "$RUNNER_TEMP/runtime-free-app/HermesLink.app.zip" "$(basename "$app")"
+          )
+          unzip -tq "$RUNNER_TEMP/runtime-free-app/HermesLink.app.zip"
+          if unzip -Z1 "$RUNNER_TEMP/runtime-free-app/HermesLink.app.zip" |
+            grep -E 'HermesRuntime\.framework|Ish\.framework|hermesrt\.zip|ish-rootfs\.tar\.gz'; then
+            echo "app component unexpectedly contains runtime assets" >&2
+            exit 1
+          fi
+
+      - name: Publish runtime-free app archive
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: gh release upload "$HERMES_RUNTIME_RELEASE_TAG" "$RUNNER_TEMP/runtime-free-app/HermesLink.app.zip" --clobber
 
   build-ish-simulator-runtime:
     name: Build iSH Simulator runtime

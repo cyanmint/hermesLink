@@ -28,18 +28,14 @@ class IshRuntimeWorkflowTests(unittest.TestCase):
         self.assertIn("build-ish-simulator-runtime", self.workflow["jobs"])
         self.assertIn("build-ish-meson", self.workflow["jobs"])
 
-    def test_app_build_failures_emit_raw_xcode_linker_diagnostics(self) -> None:
+    def test_linux_app_build_failures_upload_raw_xcbuild_diagnostics(self) -> None:
         app_steps = self.workflow["jobs"]["build-app"]["steps"]
         diagnostic_step = next(
-            step for step in app_steps if step["name"] == "Show raw Xcode linker diagnostics"
+            step for step in app_steps if step["name"] == "Upload Linux cross-compile diagnostics"
         )
-        self.assertEqual(diagnostic_step["if"], "failure()")
-        for marker in (
-            "Undefined symbols for architecture",
-            "symbol(s) not found for architecture",
-            "ld: error:",
-        ):
-            self.assertIn(marker, diagnostic_step["run"])
+        self.assertEqual(diagnostic_step["if"], "always()")
+        self.assertIn("hermeslink-linux-xcbuild.log", diagnostic_step["with"]["path"])
+        self.assertIn("xcbuild-build.log", diagnostic_step["with"]["path"])
 
     def test_decide_job_exposes_a_run_ish_runtime_output(self) -> None:
         outputs = self.workflow["jobs"]["decide"]["outputs"]
@@ -266,18 +262,25 @@ class IshRuntimeWorkflowTests(unittest.TestCase):
         self.assertIn('test ! -e "$app/Frameworks/Ish.framework"', publish_steps)
         self.assertIn('test ! -e "$app/ish-rootfs.tar.gz"', publish_steps)
 
-    def test_runtime_free_app_packaging_and_release_upload_run_on_linux(self) -> None:
+    def test_runtime_free_app_cross_compilation_and_release_upload_run_on_linux(self) -> None:
         jobs = self.workflow["jobs"]
         build_app = jobs["build-app"]
-        self.assertEqual(build_app["runs-on"], "macos-latest")
+        self.assertEqual(build_app["runs-on"], "ubuntu-latest")
         build_steps = str(build_app["steps"])
         self.assertIn("HermesLink.app.tar.gz", build_steps)
         self.assertIn("actions/upload-artifact@v7", build_steps)
+        self.assertIn("xcbuild -project Blink.xcodeproj", build_steps)
+        self.assertNotIn("xcodebuild archive", build_steps)
+        self.assertEqual(
+            next(step for step in build_app["steps"] if step["name"] == "Prepare runtime framework link placeholders")["shell"],
+            "micromamba-shell {0}",
+        )
 
         publish_app = jobs["publish-app"]
         self.assertEqual(publish_app["runs-on"], "ubuntu-latest")
         self.assertIn("build-app", publish_app["needs"])
         publish_steps = str(publish_app["steps"])
+        self.assertIn("Download app bundle from Linux compiler", publish_steps)
         self.assertIn("actions/download-artifact@v7", publish_steps)
         self.assertIn("zip -q -r -X", publish_steps)
         self.assertIn("gh release upload", publish_steps)
@@ -289,14 +292,19 @@ class IshRuntimeWorkflowTests(unittest.TestCase):
         self.assertNotIn("\\ ", publish_command)
         self.assertIn("publish-app", jobs["assemble-ipa"]["needs"])
 
-    def test_linux_app_cross_compile_is_an_explicit_ubuntu_xcbuild_experiment(self) -> None:
-        job = self.workflow["jobs"]["experimental-build-app-linux"]
+    def test_linux_app_cross_compile_replaces_the_macos_app_build(self) -> None:
+        job = self.workflow["jobs"]["build-app"]
         self.assertEqual(job["runs-on"], "ubuntu-latest")
-        self.assertIn("inputs.linux_app_experiment == true", job["if"])
+        self.assertNotIn("experimental-build-app-linux", self.workflow["jobs"])
+        self.assertNotIn("linux_app_experiment", self.text)
         steps_text = str(job["steps"])
         self.assertIn("facebookarchive/xcbuild", steps_text)
         self.assertIn("Theos iPhoneOS SDK", steps_text)
         self.assertIn("xcbuild -project Blink.xcodeproj", steps_text)
+        self.assertEqual(
+            next(step for step in job["steps"] if step["name"] == "Cross-compile Blink Xcode project on Linux")["shell"],
+            "micromamba-shell {0}",
+        )
         self.assertIn("Stage Linux Xcode developer directory", steps_text)
         self.assertIn("DEVELOPER_DIR=", steps_text)
         self.assertIn("build 2>&1 | tee", steps_text)
@@ -314,6 +322,13 @@ class IshRuntimeWorkflowTests(unittest.TestCase):
         self.assertIn("-Wno-error=self-assign-field", steps_text)
         self.assertNotIn("-Wno-error=uninitialized-const-pointer", steps_text)
         self.assertIn("SWIFTPM_MAX_CONCURRENT_OPERATIONS", steps_text)
+        cache_restore = next(step for step in job["steps"] if step["name"] == "Restore Linux xcbuild toolchain cache")
+        self.assertEqual(cache_restore["uses"], "actions/cache/restore@v6")
+        self.assertIn("xcbuild-dbaee552", cache_restore["with"]["key"])
+        cache_save = next(step for step in job["steps"] if step["name"] == "Save Linux xcbuild toolchain cache")
+        self.assertEqual(cache_save["uses"], "actions/cache/save@v6")
+        self.assertIn("always()", cache_save["if"])
+        self.assertIn("steps.build_xcbuild.outcome == 'success'", cache_save["if"])
 
     def test_ipa_assembles_runtime_frameworks_and_rootfs_after_app_build(self) -> None:
         steps_text = str(self.workflow["jobs"]["assemble-ipa"]["steps"])

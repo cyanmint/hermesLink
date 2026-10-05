@@ -106,21 +106,17 @@ class BlinkSourcePatchTests(unittest.TestCase):
     def test_workflow_assigns_build_number_only_during_ipa_assembly(self) -> None:
         build_app = self.workflow["jobs"]["build-app"]
         simulator = self.workflow["jobs"]["simulator-e2e"]
-        archive = next(
+        app_build = next(
             step for step in build_app["steps"]
-            if step.get("name") == "Build unsigned device archive"
+            if step.get("name") == "Cross-compile Blink Xcode project on Linux"
         )
         simulator_build = next(
             step for step in simulator["steps"]
             if step.get("name") == "Build HermesLink simulator app"
         )
-        self.assertNotIn("CURRENT_PROJECT_VERSION=", archive["run"])
+        self.assertNotIn("CURRENT_PROJECT_VERSION=", app_build["run"])
         self.assertNotIn("CURRENT_PROJECT_VERSION=", simulator_build["run"])
-        app_cache = next(
-            step for step in build_app["steps"]
-            if step.get("name") == "Cache unsigned app archive"
-        )
-        self.assertNotIn("${{ github.run_number }}", app_cache["with"]["key"])
+        self.assertNotIn("${{ github.run_number }}", str(build_app["steps"]))
         assembly_steps = self.workflow["jobs"]["assemble-ipa"]["steps"]
         set_version = next(step for step in assembly_steps if step.get("name") == "Set IPA build number")
         self.assertEqual(set_version["env"]["HERMESLINK_BUILD_NUMBER"], "${{ github.run_number }}")
@@ -280,26 +276,37 @@ class BlinkSourcePatchTests(unittest.TestCase):
         )
 
     def test_app_and_e2e_jobs_initialize_and_patch_pinned_blink_first(self) -> None:
-        for job_name, build_step in (
-            ("build-app", "Build unsigned device archive"),
-            ("simulator-e2e", "Build HermesLink simulator app"),
-        ):
-            with self.subTest(job=job_name):
-                steps = self.workflow["jobs"][job_name]["steps"]
-                source_init = next(
-                    step for step in steps
-                    if step.get("name") == "Initialize pinned Blink source tree"
-                )
-                prepare = next(step for step in steps if step.get("name") == "Apply Blink integration and stage app sources")
-                build = next(step for step in steps if step.get("name") == build_step)
-                self.assertIn("--recursive", source_init["run"])
-                self.assertIn("modules/blink", source_init["run"])
-                self.assertLess(steps.index(source_init), steps.index(prepare))
-                self.assertLess(steps.index(prepare), steps.index(build))
+        app_steps = self.workflow["jobs"]["build-app"]["steps"]
+        app_stage = next(step for step in app_steps if step.get("name") == "Initialize and stage Blink source")
+        app_build = next(
+            step for step in app_steps
+            if step.get("name") == "Cross-compile Blink Xcode project on Linux"
+        )
+        self.assertIn("--recursive", app_stage["run"])
+        self.assertIn("modules/blink", app_stage["run"])
+        self.assertIn("prepare-blink-source.sh", app_stage["run"])
+        self.assertLess(app_steps.index(app_stage), app_steps.index(app_build))
 
-    def test_app_cache_and_path_filter_include_blink_integration_inputs(self) -> None:
+        simulator_steps = self.workflow["jobs"]["simulator-e2e"]["steps"]
+        source_init = next(
+            step for step in simulator_steps
+            if step.get("name") == "Initialize pinned Blink source tree"
+        )
+        prepare = next(
+            step for step in simulator_steps
+            if step.get("name") == "Apply Blink integration and stage app sources"
+        )
+        simulator_build = next(
+            step for step in simulator_steps
+            if step.get("name") == "Build HermesLink simulator app"
+        )
+        self.assertIn("--recursive", source_init["run"])
+        self.assertIn("modules/blink", source_init["run"])
+        self.assertLess(simulator_steps.index(source_init), simulator_steps.index(prepare))
+        self.assertLess(simulator_steps.index(prepare), simulator_steps.index(simulator_build))
+
+    def test_app_path_filter_includes_blink_integration_inputs(self) -> None:
         self.assertIn("blink/*", self.workflow_text)
-        self.assertIn("blink/**", self.workflow_text)
         self.assertIn("scripts/blink/prepare-blink-source.sh", self.workflow_text)
 
 
