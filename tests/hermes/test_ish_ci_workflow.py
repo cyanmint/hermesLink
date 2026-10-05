@@ -258,6 +258,7 @@ class IshRuntimeWorkflowTests(unittest.TestCase):
         self.assertIn("ish_rootfs.c", build_steps)
         self.assertIn("-D_DARWIN_C_SOURCE=1", build_steps)
         self.assertIn("@rpath/Ish.framework/Ish", build_steps)
+        self.assertGreaterEqual(build_steps.count("-lSystem"), 2)
         self.assertIn('test ! -e "$app/Frameworks/HermesRuntime.framework"', publish_steps)
         self.assertIn('test ! -e "$app/Frameworks/Ish.framework"', publish_steps)
         self.assertIn('test ! -e "$app/ish-rootfs.tar.gz"', publish_steps)

@@ -547,7 +547,7 @@ jobs:
             -c "$RUNNER_TEMP/hermes_runtime_stub.c" -o "$RUNNER_TEMP/hermes_runtime_stub.o"
           "$LD64" -arch arm64 -platform_version ios 16.1 16.5 -syslibroot "$SDKROOT" \
             -dylib -install_name '@rpath/HermesRuntime.framework/HermesRuntime' \
-            -o Frameworks/HermesRuntime.framework/HermesRuntime "$RUNNER_TEMP/hermes_runtime_stub.o"
+            -o Frameworks/HermesRuntime.framework/HermesRuntime "$RUNNER_TEMP/hermes_runtime_stub.o" -lSystem
           cat > Frameworks/HermesRuntime.framework/Info.plist <<'EOF'
           <?xml version="1.0" encoding="UTF-8"?>
           <!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
