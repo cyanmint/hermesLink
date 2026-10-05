@@ -301,6 +301,7 @@ class IshRuntimeWorkflowTests(unittest.TestCase):
         self.assertIn("CODE_SIGNING_ALLOWED=NO", steps_text)
         self.assertIn("Permissions.h", steps_text)
         self.assertIn("#include <cstdint>", steps_text)
+        self.assertIn("SWIFTPM_MAX_CONCURRENT_OPERATIONS", steps_text)
 
     def test_ipa_assembles_runtime_frameworks_and_rootfs_after_app_build(self) -> None:
         steps_text = str(self.workflow["jobs"]["assemble-ipa"]["steps"])

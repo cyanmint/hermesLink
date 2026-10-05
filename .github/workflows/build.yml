@@ -727,6 +727,8 @@ jobs:
 
       - name: Resolve Blink framework package artifacts
         continue-on-error: true
+        env:
+          SWIFTPM_MAX_CONCURRENT_OPERATIONS: '1'
         run: |
           set -o pipefail
           cd xcfs
