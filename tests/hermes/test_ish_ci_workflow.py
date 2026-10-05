@@ -282,6 +282,11 @@ class IshRuntimeWorkflowTests(unittest.TestCase):
         self.assertIn("zip -q -r -X", publish_steps)
         self.assertIn("gh release upload", publish_steps)
         self.assertIn("HermesLink.app.zip", publish_steps)
+        publish_command = next(
+            step["run"] for step in publish_app["steps"]
+            if step.get("name") == "Publish runtime-free app archive"
+        )
+        self.assertNotIn("\\ ", publish_command)
         self.assertIn("publish-app", jobs["assemble-ipa"]["needs"])
 
     def test_ipa_assembles_runtime_frameworks_and_rootfs_after_app_build(self) -> None:

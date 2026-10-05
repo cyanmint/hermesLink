@@ -692,8 +692,7 @@ jobs:
       - name: Publish runtime-free app archive
         env:
           GH_TOKEN: ${{ github.token }}
-        run: gh release upload "$HERMES_RUNTIME_RELEASE_TAG" \
-          "$RUNNER_TEMP/runtime-free-app/HermesLink.app.zip" --clobber
+        run: gh release upload "$HERMES_RUNTIME_RELEASE_TAG" "$RUNNER_TEMP/runtime-free-app/HermesLink.app.zip" --clobber
 
   build-ish-simulator-runtime:
     name: Build iSH Simulator runtime
