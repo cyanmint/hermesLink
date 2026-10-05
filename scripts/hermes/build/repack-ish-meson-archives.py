@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 # HermesLink AI-generated glue code; created by cyanmint's coding agent.
 # AI-generated content has no copyright holder and is not subject to copyright.
-"""Repackage Linux-generated iSH archives in Apple's static-library format."""
+"""Repackage Linux-generated iSH archives in Darwin static-library format."""
 
 from __future__ import annotations
 
@@ -21,7 +21,13 @@ ARCHIVES = (
 )
 
 
-def repack_archive(archive: Path, llvm_ar: str, libtool: str) -> None:
+def repack_archive(
+    archive: Path,
+    llvm_ar: str,
+    libtool: str | None = None,
+    *,
+    darwin_format: bool = False,
+) -> None:
     members = subprocess.run(
         [llvm_ar, "t", str(archive)],
         check=True,
@@ -52,20 +58,44 @@ def repack_archive(archive: Path, llvm_ar: str, libtool: str) -> None:
             objects.append(unique_object)
 
         repacked = temp_path / archive.name
-        subprocess.run(
-            [libtool, "-static", "-o", str(repacked), *(str(path) for path in objects)],
-            check=True,
-            capture_output=True,
-            text=True,
-        )
+        if darwin_format:
+            command = [llvm_ar, "--format=darwin", "rcs", str(repacked)]
+            command.extend(str(path) for path in objects)
+        else:
+            if libtool is None:
+                raise ValueError("Apple libtool is required to create this archive")
+            command = [libtool, "-static", "-o", str(repacked)]
+            command.extend(str(path) for path in objects)
+        subprocess.run(command, check=True, capture_output=True, text=True)
         if not repacked.is_file() or repacked.stat().st_size == 0:
-            raise ValueError(f"Apple libtool did not produce a valid archive: {archive}")
+            raise ValueError(f"archive repacker did not produce a valid archive: {archive}")
         os.replace(repacked, archive)
 
 
 def main() -> int:
+    if len(sys.argv) == 3 and sys.argv[1] == "--darwin-format":
+        archive_dir = Path(sys.argv[2])
+        llvm_ar = shutil.which("llvm-ar")
+        if not llvm_ar:
+            print("repack-ish-meson-archives.py: requires llvm-ar", file=sys.stderr)
+            return 2
+        try:
+            archives = sorted(archive_dir.glob("*.a"))
+            if not archives:
+                raise ValueError(f"no static archives found in {archive_dir}")
+            for archive in archives:
+                repack_archive(archive, llvm_ar, darwin_format=True)
+                print(f"Repacked {archive} using Darwin archive format")
+        except (OSError, subprocess.CalledProcessError, ValueError) as exc:
+            print(f"repack-ish-meson-archives.py: {exc}", file=sys.stderr)
+            return 1
+        return 0
+
     if len(sys.argv) != 2:
-        print(f"usage: {Path(sys.argv[0]).name} MESON_BUILD_DIR", file=sys.stderr)
+        print(
+            f"usage: {Path(sys.argv[0]).name} MESON_BUILD_DIR | --darwin-format ARCHIVE_DIR",
+            file=sys.stderr,
+        )
         return 2
 
     build_dir = Path(sys.argv[1])

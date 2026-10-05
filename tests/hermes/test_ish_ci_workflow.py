@@ -103,6 +103,8 @@ class IshRuntimeWorkflowTests(unittest.TestCase):
         self.assertEqual(package_step["shell"], "micromamba-shell {0}")
         self.assertIn("arm64-apple-darwin*-ld", package_step["run"])
         self.assertIn("LD64=", package_step["run"])
+        package_script = (ROOT / "scripts/hermes/build/package-ish-framework.sh").read_text()
+        self.assertIn("--darwin-format", package_script)
 
         verify_step = next(step for step in steps if step["name"] == "Verify Linux-linked iSH framework")
         self.assertIn("llvm-nm --undefined-only", verify_step["run"])

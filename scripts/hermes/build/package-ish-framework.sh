@@ -72,6 +72,22 @@ for input in \
   "$LIB_DIR/LinuxInterop.h"; do
   [ -s "$input" ] || { echo "missing iSH framework input: $input" >&2; exit 2; }
 done
+LINK_LIB_DIR=$LIB_DIR
+if [ "$HOST_OS" = Linux ]; then
+  LINK_LIB_DIR="$BUILD_DIR/ld64-archives"
+  mkdir -p "$LINK_LIB_DIR"
+  for archive in \
+    liblinux.a \
+    libiSHLinux.a \
+    libiSHLinuxUser.a \
+    libdocumentsfs_module.a \
+    libfakefs.a \
+    libish_emu.a; do
+    cp "$LIB_DIR/$archive" "$LINK_LIB_DIR/$archive"
+  done
+  python3 "$ROOT/scripts/hermes/build/repack-ish-meson-archives.py" \
+    --darwin-format "$LINK_LIB_DIR"
+fi
 mkdir -p "$FRAMEWORK/Headers" "$FRAMEWORK/Modules"
 COMMON_FLAGS=(
   -target "$TARGET"
@@ -97,12 +113,12 @@ done
   "$BUILD_DIR/ish_rootfs.o" \
   "$BUILD_DIR/ish_path_safety.o" \
   "$BUILD_DIR/ish_exit_protocol.o" \
-  -Wl,-force_load,"$LIB_DIR/liblinux.a" \
-  -Wl,-force_load,"$LIB_DIR/libiSHLinux.a" \
-  -Wl,-force_load,"$LIB_DIR/libdocumentsfs_module.a" \
-  -Wl,-force_load,"$LIB_DIR/libfakefs.a" \
-  "$LIB_DIR/libiSHLinuxUser.a" \
-  "$LIB_DIR/libish_emu.a" \
+  -Wl,-force_load,"$LINK_LIB_DIR/liblinux.a" \
+  -Wl,-force_load,"$LINK_LIB_DIR/libiSHLinux.a" \
+  -Wl,-force_load,"$LINK_LIB_DIR/libdocumentsfs_module.a" \
+  -Wl,-force_load,"$LINK_LIB_DIR/libfakefs.a" \
+  "$LINK_LIB_DIR/libiSHLinuxUser.a" \
+  "$LINK_LIB_DIR/libish_emu.a" \
   -framework Foundation -framework SystemConfiguration -lresolv -lsqlite3 -lz \
   -Wl,-install_name,@rpath/Ish.framework/Ish \
   -Wl,-exported_symbol,_ish_configure \

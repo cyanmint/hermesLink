@@ -244,13 +244,13 @@ class PackageIshFrameworkTests(unittest.TestCase):
         self.assertIn("_ish_rootfs_prepare_resolv_conf", source)
         self.assertIn("_ish_rootfs_write_documents_mount_script", source)
         self.assertIn("-framework SystemConfiguration", source)
-        self.assertIn('-Wl,-force_load,"$LIB_DIR/libfakefs.a"', source)
+        self.assertIn('-Wl,-force_load,"$LINK_LIB_DIR/libfakefs.a"', source)
         self.assertIn(
-            '-Wl,-force_load,"$LIB_DIR/libdocumentsfs_module.a"', source
+            '-Wl,-force_load,"$LINK_LIB_DIR/libdocumentsfs_module.a"', source
         )
         self.assertLess(
-            source.index('-Wl,-force_load,"$LIB_DIR/libdocumentsfs_module.a"'),
-            source.index('-Wl,-force_load,"$LIB_DIR/libfakefs.a"'),
+            source.index('-Wl,-force_load,"$LINK_LIB_DIR/libdocumentsfs_module.a"'),
+            source.index('-Wl,-force_load,"$LINK_LIB_DIR/libfakefs.a"'),
         )
         self.assertIn("-lresolv", source)
         self.assertNotIn("kernel/errno.h", source)
@@ -262,6 +262,8 @@ class PackageIshFrameworkTests(unittest.TestCase):
         self.assertIn('CLANG=$CC', source)
         self.assertIn('LINKER_FLAGS=(--ld-path="$LD64")', source)
         self.assertIn('LD64=${LD64:-}', source)
+        self.assertIn('LINK_LIB_DIR="$BUILD_DIR/ld64-archives"', source)
+        self.assertIn('--darwin-format "$LINK_LIB_DIR"', source)
         self.assertIn('xcrun --sdk "$SDK_NAME" --find clang', source)
 
     def test_script_verifies_pinned_source_before_building(self) -> None:
@@ -414,6 +416,48 @@ class RepackIshMesonArchivesTests(unittest.TestCase):
                     (build_dir / archive).read_bytes(),
                     b"duplicate.o-1|duplicate.o-2|unique.o-1",
                 )
+
+    def test_repackages_framework_archives_in_darwin_format_for_ld64(self) -> None:
+        with tempfile.TemporaryDirectory() as temp_dir:
+            root = Path(temp_dir)
+            archives = root / "archives"
+            archives.mkdir()
+            for name in ("liblinux.a", "libiSHLinux.a", "libiSHLinuxUser.a"):
+                (archives / name).write_bytes(b"GNU archive")
+
+            fake_bin = root / "bin"
+            fake_bin.mkdir()
+            llvm_ar = fake_bin / "llvm-ar"
+            llvm_ar.write_text(
+                "#!/usr/bin/env python3\n"
+                "import sys\n"
+                "from pathlib import Path\n"
+                "if sys.argv[1] == 't':\n"
+                "    print('duplicate.o\\nduplicate.o\\nunique.o')\n"
+                "elif sys.argv[1] == 'xN':\n"
+                "    count, archive, member = sys.argv[2:5]\n"
+                "    Path(member).write_bytes(f'{member}-{count}'.encode())\n"
+                "elif sys.argv[1:3] == ['--format=darwin', 'rcs']:\n"
+                "    output = Path(sys.argv[3])\n"
+                "    objects = [Path(arg).read_bytes() for arg in sys.argv[4:]]\n"
+                "    output.write_bytes(b'DARWIN\\n' + b'|'.join(objects))\n"
+                "else:\n"
+                "    raise SystemExit(f'unexpected llvm-ar arguments: {sys.argv[1:]}')\n",
+                encoding="utf-8",
+            )
+            llvm_ar.chmod(0o755)
+
+            result = subprocess.run(
+                ["python3", str(REPACK_MESON_ARCHIVES), "--darwin-format", str(archives)],
+                capture_output=True,
+                text=True,
+                env={"PATH": f"{fake_bin}:{os.environ['PATH']}"},
+            )
+
+            self.assertEqual(result.returncode, 0, result.stderr)
+            for name in ("liblinux.a", "libiSHLinux.a", "libiSHLinuxUser.a"):
+                with self.subTest(archive=name):
+                    self.assertTrue((archives / name).read_bytes().startswith(b"DARWIN\n"))
 
 
 class InstallIshRuntimeScriptTests(unittest.TestCase):
