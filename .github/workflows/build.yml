@@ -540,6 +540,7 @@ jobs:
           git clone --filter=blob:none --sparse --depth=1 https://github.com/theos/sdks.git "$RUNNER_TEMP/theos-sdks"
           git -C "$RUNNER_TEMP/theos-sdks" sparse-checkout set iPhoneOS16.5.sdk
           test -d "$RUNNER_TEMP/theos-sdks/iPhoneOS16.5.sdk/usr/include"
+          install -D scripts/blink/linux-xpc-compat.h "$RUNNER_TEMP/theos-sdks/iPhoneOS16.5.sdk/usr/include/xpc/xpc.h"
           echo "SDKROOT=$RUNNER_TEMP/theos-sdks/iPhoneOS16.5.sdk" >> "$GITHUB_ENV"
 
       - name: Install Apple arm64 Mach-O linker

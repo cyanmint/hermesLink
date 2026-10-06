@@ -120,12 +120,17 @@ class BlinkSourcePatchTests(unittest.TestCase):
             step for step in build_app["steps"]
             if step.get("name") == "Install Swift 5.8 toolchain"
         )
+        sdk_install = next(
+            step for step in build_app["steps"]
+            if step.get("name") == "Install Theos iPhoneOS SDK"
+        )
         self.assertIn("ubuntu22.04", swift_install["run"])
         self.assertIn("version=5.8", swift_install["run"])
         self.assertIn("cp scripts/blink/swift-release-key-swift-5.x.asc", swift_install["run"])
         self.assertIn("gpg --verify", swift_install["run"])
         self.assertIn("A62AE125BBBFBB96A6E042EC925CC1CCED3D1561", swift_install["run"])
         self.assertIn("swiftc\" --version", swift_install["run"])
+        self.assertIn("linux-xpc-compat.h", sdk_install["run"])
         package_resolve = next(
             step for step in build_app["steps"]
             if step.get("name") == "Resolve Blink framework package artifacts"
