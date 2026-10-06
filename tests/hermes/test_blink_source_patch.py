@@ -107,6 +107,7 @@ class BlinkSourcePatchTests(unittest.TestCase):
     def test_workflow_assigns_build_number_only_during_ipa_assembly(self) -> None:
         build_app = self.workflow["jobs"]["build-app"]
         simulator = self.workflow["jobs"]["simulator-e2e"]
+        self.assertEqual(build_app["runs-on"], "ubuntu-latest")
         app_build = next(
             step for step in build_app["steps"]
             if step.get("name") == "Cross-compile Blink Xcode project on Linux"
@@ -115,11 +116,15 @@ class BlinkSourcePatchTests(unittest.TestCase):
             step for step in simulator["steps"]
             if step.get("name") == "Build HermesLink simulator app"
         )
-        swift_toolchain = next(
+        swift_install = next(
             step for step in build_app["steps"]
-            if step.get("name") == "Install Swift toolchain"
+            if step.get("name") == "Install Swift 5.8 toolchain"
         )
-        self.assertEqual(swift_toolchain["with"]["swift-version"], "5.8")
+        self.assertIn("ubuntu22.04", swift_install["run"])
+        self.assertIn("version=5.8", swift_install["run"])
+        self.assertIn("gpg --verify", swift_install["run"])
+        self.assertIn("A62AE125BBBFBB96A6E042EC925CC1CCED3D1561", swift_install["run"])
+        self.assertIn("swiftc\" --version", swift_install["run"])
         self.assertNotIn("CURRENT_PROJECT_VERSION=", app_build["run"])
         self.assertIn("ARCHS=arm64", app_build["run"])
         self.assertIn("VALID_ARCHS=arm64", app_build["run"])
