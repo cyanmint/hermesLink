@@ -491,7 +491,7 @@ jobs:
           base="https://download.swift.org/swift-${version}-release/ubuntu2204/swift-${version}-RELEASE"
           curl --fail --location --retry 5 "$base/swift-${version}-RELEASE-ubuntu22.04.tar.gz" -o "$archive"
           curl --fail --location --retry 5 "$base/swift-${version}-RELEASE-ubuntu22.04.tar.gz.sig" -o "$archive.sig"
-          curl --fail --location --retry 5 https://swift.org/keys/release-key-swift-5.x.asc -o "$RUNNER_TEMP/swift-release-key.asc"
+          cp scripts/blink/swift-release-key-swift-5.x.asc "$RUNNER_TEMP/swift-release-key.asc"
           python3 - "$RUNNER_TEMP/swift-release-key.asc" <<'PY'
           import subprocess
           import sys
