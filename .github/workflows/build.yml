@@ -708,6 +708,11 @@ jobs:
             exit 2
           fi
           LD64="${linker_candidates[0]}"
+          swift_dispatch_modulemap="$RUNNER_TEMP/swift-5.8/usr/lib/swift/dispatch/module.modulemap"
+          if [ -f "$swift_dispatch_modulemap" ]; then
+            mv "$swift_dispatch_modulemap" "$swift_dispatch_modulemap.linux-disabled"
+            trap 'mv "$swift_dispatch_modulemap.linux-disabled" "$swift_dispatch_modulemap"' EXIT
+          fi
           xcbuild -project Blink.xcodeproj \
             -scheme Blink \
             -sdk "$SDKROOT" \

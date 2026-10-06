@@ -128,6 +128,8 @@ class BlinkSourcePatchTests(unittest.TestCase):
         self.assertNotIn("CURRENT_PROJECT_VERSION=", app_build["run"])
         self.assertIn("ARCHS=arm64", app_build["run"])
         self.assertIn("VALID_ARCHS=arm64", app_build["run"])
+        self.assertIn("swift-5.8/usr/lib/swift/dispatch/module.modulemap", app_build["run"])
+        self.assertIn(".linux-disabled", app_build["run"])
         self.assertNotIn("CURRENT_PROJECT_VERSION=", simulator_build["run"])
         self.assertNotIn("${{ github.run_number }}", str(build_app["steps"]))
         assembly_steps = self.workflow["jobs"]["assemble-ipa"]["steps"]
