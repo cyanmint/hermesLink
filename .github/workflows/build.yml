@@ -523,6 +523,7 @@ jobs:
 
       - name: Resolve Blink framework package artifacts
         continue-on-error: true
+        timeout-minutes: 3
         env:
           SWIFTPM_MAX_CONCURRENT_OPERATIONS: '1'
         run: |

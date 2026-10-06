@@ -126,6 +126,11 @@ class BlinkSourcePatchTests(unittest.TestCase):
         self.assertIn("gpg --verify", swift_install["run"])
         self.assertIn("A62AE125BBBFBB96A6E042EC925CC1CCED3D1561", swift_install["run"])
         self.assertIn("swiftc\" --version", swift_install["run"])
+        package_resolve = next(
+            step for step in build_app["steps"]
+            if step.get("name") == "Resolve Blink framework package artifacts"
+        )
+        self.assertEqual(package_resolve["timeout-minutes"], 3)
         self.assertNotIn("CURRENT_PROJECT_VERSION=", app_build["run"])
         self.assertIn("ARCHS=arm64", app_build["run"])
         self.assertIn("VALID_ARCHS=arm64", app_build["run"])
