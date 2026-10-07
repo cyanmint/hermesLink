@@ -75,18 +75,19 @@ WASI runs with a virtual copy of the current Documents workspace, and changed
 files are written back there. Interactive terminal input, sockets, and process
 spawning are not available to WASI modules.
 
-`Documents/bin` is added to `PATH`. `clang`, the WASI SDK, and other
-[a-Shell-commands](https://github.com/holzschu/a-Shell-commands) tools are not
-bundled; install them yourself into `Documents/bin`. Review upstream package
-licenses before installing commands. The native Python runtime is available as
-both `python` and `python3`. Use `export NAME=value` to export shell variables;
-running `sh` starts a nested shell that exits with `exit`.
+`Documents/bin` is added to `PATH`. `pkg install llvm-22` downloads the upstream
+LLVM/clang C SDK into `Documents/Library`, matching a-Shell's setup. This SDK
+does not include the clang compiler executable. The `clang` command displays
+a-Shell's C SDK hint and can run a user-provided `clang.wasm` from
+`Documents/bin`. Review upstream package licenses before installing commands.
+The native Python runtime is available as both `python` and `python3`. Use
+`export NAME=value` to export shell variables; running `sh` starts a nested
+shell that exits with `exit`.
 
 User-provided `Documents/bin/<name>.wasm` modules are registered as shell
-commands named `<name>`; for example, `clang.wasm` is invoked as `clang`.
-The pinned a-Shell-commands release does not provide a `clang.wasm` asset, so
-`pkg` cannot install a clang compiler; its LLVM archives contain support files,
-not the clang executable.
+commands named `<name>`; for example, `clang.wasm` is invoked as `clang`. The
+pinned a-Shell-commands release does not provide a `clang.wasm` asset, so `pkg`
+installs the C SDK separately and does not claim to install a clang compiler.
 
 The Agent's `ish` tool runs foreground commands only, with a default timeout of
 180 seconds and a maximum of 600 seconds. It cannot provide an interactive

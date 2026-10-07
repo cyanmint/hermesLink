@@ -14,6 +14,7 @@ class WasmCommandIntegrationTests(unittest.TestCase):
 
         self.assertEqual(commands["wasm"], ["MAIN", "wasm_main", "", "no"])
         self.assertEqual(commands["pkg"], ["MAIN", "pkg_main", "", "no"])
+        self.assertEqual(commands["clang"], ["MAIN", "clang_main", "", "no"])
         self.assertEqual(commands["python3"], ["MAIN", "python_main", "", "no"])
         self.assertEqual(commands["python"], commands["python3"])
         self.assertEqual(commands["export"], ["shell.framework/shell", "export_main", "", "no"])
@@ -60,6 +61,12 @@ class WasmCommandIntegrationTests(unittest.TestCase):
     def test_user_installed_clang_wasm_is_registered_as_a_shell_command(self):
         command = (ROOT / "blink/overlay/Blink/Commands/wasm.m").read_text(encoding="utf-8")
 
+        self.assertIn("int clang_main(int argc, char **argv)", command)
+        self.assertIn("pkg install llvm-22", command)
+        self.assertIn('stringByAppendingPathComponent:@"clang.wasm"', command)
+        self.assertIn("static int HermesInstallLLVM22(void)", command)
+        self.assertIn("llvm-22.tar.gz", command)
+        self.assertIn('fputs("  llvm-22 (LLVM/clang C SDK)\\n", thread_stdout);', command)
         self.assertIn('[filename.pathExtension isEqualToString:@"wasm"]', command)
         self.assertIn('stringByDeletingPathExtension', command)
         self.assertIn('commands[name] = @[@"MAIN", @"wasm_main", @"", @"no"]', command)

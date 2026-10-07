@@ -23,6 +23,11 @@ static NSArray<NSString *> *HermesWasmCommandCatalog(void) {
   ];
 }
 
+static NSString *HermesShellQuote(NSString *value) {
+  return [NSString stringWithFormat:@"'%@'",
+    [value stringByReplacingOccurrencesOfString:@"'" withString:@"'\\''"]];
+}
+
 static NSString *HermesDocumentsPath(void) {
   return NSSearchPathForDirectoriesInDomains(NSDocumentDirectory, NSUserDomainMask, YES).firstObject;
 }
@@ -482,12 +487,123 @@ int wasm_main(int argc, char **argv) {
 }
 
 __attribute__((visibility("default")))
+int clang_main(int argc, char **argv) {
+  NSString *clangModule = [[HermesDocumentsPath() stringByAppendingPathComponent:@"bin"]
+    stringByAppendingPathComponent:@"clang.wasm"];
+  if ([[NSFileManager defaultManager] fileExistsAtPath:clangModule]) {
+    return wasm_main(argc, argv);
+  }
+
+  NSString *sdkHeader = [[HermesDocumentsPath()
+    stringByAppendingPathComponent:@"Library/usr/lib/clang/22/include"]
+    stringByAppendingPathComponent:@"float.h"];
+  if (![[NSFileManager defaultManager] fileExistsAtPath:sdkHeader]) {
+    fprintf(thread_stderr,
+      "In order to use clang, you need to install or update the C SDK with 'pkg install llvm-22'.\n");
+    return 0;
+  }
+
+  fputs("clang: the C SDK is installed, but HermesLink does not bundle a clang compiler. "
+        "Install clang.wasm in Documents/bin to run it.\n", thread_stderr);
+  return 127;
+}
+
+static int HermesInstallLLVM22(void) {
+  NSFileManager *fileManager = [NSFileManager defaultManager];
+  NSString *documents = HermesDocumentsPath();
+  NSString *temporaryDirectory = [NSTemporaryDirectory()
+    stringByAppendingPathComponent:[NSString stringWithFormat:@"hermeslink-llvm-%@",
+      NSUUID.UUID.UUIDString]];
+  NSError *error = nil;
+  if (![fileManager createDirectoryAtPath:temporaryDirectory
+      withIntermediateDirectories:YES attributes:nil error:&error]) {
+    fprintf(thread_stderr, "pkg: %s\n", error.localizedDescription.UTF8String);
+    return 1;
+  }
+
+  NSString *archivePath = [temporaryDirectory stringByAppendingPathComponent:@"llvm-22.tar.gz"];
+  NSURL *url = [NSURL URLWithString:
+    @"https://github.com/holzschu/a-Shell-commands/releases/download/0.1/llvm-22.tar.gz"];
+  fprintf(thread_stdout, "Downloading the LLVM/clang C SDK (this may take a while)...\n");
+
+  dispatch_semaphore_t semaphore = dispatch_semaphore_create(0);
+  __block NSURL *downloadedFile = nil;
+  __block NSHTTPURLResponse *response = nil;
+  __block NSError *requestError = nil;
+  NSURLSessionConfiguration *configuration = [NSURLSessionConfiguration ephemeralSessionConfiguration];
+  configuration.timeoutIntervalForRequest = 120;
+  configuration.timeoutIntervalForResource = 600;
+  NSURLSession *session = [NSURLSession sessionWithConfiguration:configuration];
+  [[session downloadTaskWithURL:url completionHandler:^(NSURL *location,
+      NSURLResponse *received, NSError *receivedError) {
+    response = (NSHTTPURLResponse *)received;
+    requestError = receivedError;
+    if (location != nil && receivedError == nil) {
+      downloadedFile = [temporaryDirectory stringByAppendingPathComponent:@"download.tmp"];
+      [[NSFileManager defaultManager] moveItemAtURL:location
+          toURL:[NSURL fileURLWithPath:downloadedFile.path] error:&requestError];
+    }
+    dispatch_semaphore_signal(semaphore);
+  }] resume];
+
+  if (dispatch_semaphore_wait(semaphore,
+      dispatch_time(DISPATCH_TIME_NOW, 600LL * NSEC_PER_SEC)) != 0) {
+    [session invalidateAndCancel];
+    [fileManager removeItemAtPath:temporaryDirectory error:nil];
+    fputs("pkg: LLVM/clang SDK download timed out\n", thread_stderr);
+    return 1;
+  }
+  [session finishTasksAndInvalidate];
+  NSString *host = response.URL.host.lowercaseString;
+  NSSet *allowedHosts = [NSSet setWithArray:@[
+    @"github.com", @"release-assets.githubusercontent.com", @"objects.githubusercontent.com"
+  ]];
+  NSDictionary *archiveAttributes = downloadedFile == nil ? nil :
+    [fileManager attributesOfItemAtPath:downloadedFile.path error:nil];
+  unsigned long long archiveSize = [archiveAttributes[NSFileSize] unsignedLongLongValue];
+  if (requestError != nil || response.statusCode != 200 || archiveSize == 0 ||
+      archiveSize > 1024ULL * 1024 * 1024 ||
+      ![response.URL.scheme.lowercaseString isEqualToString:@"https"] ||
+      ![allowedHosts containsObject:host]) {
+    [fileManager removeItemAtPath:temporaryDirectory error:nil];
+    fprintf(thread_stderr, "pkg: failed to download LLVM/clang SDK%s%s\n",
+      requestError == nil ? "" : ": ",
+      requestError.localizedDescription.UTF8String ?: "");
+    return 1;
+  }
+  if (![fileManager moveItemAtPath:downloadedFile.path toPath:archivePath error:&error]) {
+    [fileManager removeItemAtPath:temporaryDirectory error:nil];
+    fprintf(thread_stderr, "pkg: %s\n", error.localizedDescription.UTF8String);
+    return 1;
+  }
+
+  NSString *libraryPath = [documents stringByAppendingPathComponent:@"Library"];
+  if (![fileManager createDirectoryAtPath:libraryPath
+      withIntermediateDirectories:YES attributes:nil error:&error]) {
+    [fileManager removeItemAtPath:temporaryDirectory error:nil];
+    fprintf(thread_stderr, "pkg: %s\n", error.localizedDescription.UTF8String);
+    return 1;
+  }
+  NSString *extractCommand = [NSString stringWithFormat:@"tar -xzf %@ -C %@",
+    HermesShellQuote(archivePath), HermesShellQuote(libraryPath)];
+  int status = ios_system(extractCommand.UTF8String);
+  [fileManager removeItemAtPath:temporaryDirectory error:nil];
+  if (status != 0) {
+    fprintf(thread_stderr, "pkg: unable to extract the LLVM/clang SDK (tar exited %d)\n", status);
+    return 1;
+  }
+  fprintf(thread_stdout, "Installed LLVM/clang C SDK to %s\n", libraryPath.UTF8String);
+  return 0;
+}
+
+__attribute__((visibility("default")))
 int pkg_main(int argc, char **argv) {
   if (argc == 2 && strcmp(argv[1], "list") == 0) {
-    fputs("Available WASI packages:\n", thread_stdout);
+    fputs("Available packages:\n", thread_stdout);
     for (NSString *name in HermesWasmCommandCatalog()) {
       fprintf(thread_stdout, "  %s\n", name.UTF8String);
     }
+    fputs("  llvm-22 (LLVM/clang C SDK)\n", thread_stdout);
     return 0;
   }
   if (argc != 3 || strcmp(argv[1], "install") != 0) {
@@ -495,6 +611,7 @@ int pkg_main(int argc, char **argv) {
     return 2;
   }
   NSString *name = HermesArgument(argv[2]);
+  if ([name isEqualToString:@"llvm-22"]) return HermesInstallLLVM22();
   if (!HermesSafeCommandName(name) ||
       ![[NSSet setWithArray:HermesWasmCommandCatalog()] containsObject:name]) {
     fprintf(thread_stderr, "pkg: unsupported package: %s (use `pkg list`)\n", name.UTF8String);

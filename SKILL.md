@@ -15,7 +15,7 @@ Linux or macOS shell.
 
 ## Commands available in `terminal`
 
-The app currently registers only these command names:
+The Blink command registry provides these app commands:
 
 | Command | Purpose |
 | --- | --- |
@@ -24,6 +24,7 @@ The app currently registers only these command names:
 | `build` | Invoke Blink's build command. |
 | `clear` | Clear terminal output. |
 | `code` | Open Blink's code interface. |
+| `clang` | Run a user-provided `Documents/bin/clang.wasm`, or print C SDK setup guidance. |
 | `config` | View or change Blink configuration. |
 | `device-info` | Show device information. |
 | `facecam` | Use Blink's face-camera command. |
@@ -37,7 +38,9 @@ The app currently registers only these command names:
 | `mosh1` | Mosh protocol helper. |
 | `open` | Open a file using Blink's file-opening support. |
 | `openurl` | Open a URL. |
+| `pkg` | List or install supported WASI packages and the LLVM/clang C SDK. |
 | `python` | Run the embedded Python runtime. |
+| `python3` | Alias for the embedded Python runtime. |
 | `say` | Speak text using Blink's speech command. |
 | `scp` | Secure-copy file-transfer command. |
 | `sftp` | Secure file-transfer command. |
@@ -48,14 +51,29 @@ The app currently registers only these command names:
 | `ssh-add` | Add SSH identities to the agent. |
 | `ssh-agent` | Start or manage the SSH agent. |
 | `udptunnel` | Run Blink's UDP tunnel command. |
+| `wasm` | Run a WebAssembly module with WASI. |
 | `whatsnew` | Show Blink's release notes. |
 | `xcall` | Invoke Blink's native-call bridge. |
+| `export`, `setenv`, `unsetenv`, `printenv` | Set, remove, or inspect environment variables. |
 
-These names are the app's registered terminal commands—not a general Unix
-command set. Other commands and executables are unavailable in `terminal`.
-In particular, do not assume Linux tools such as `ls`, `cat`, `find`, `grep`,
-`cp`, `uname`, or `apk` exist there. Run Linux commands with `ish` instead.
-Shell operators do not make an unavailable executable available.
+The app also bundles these `ios_system` commands:
+
+`alias`, `awk`, `bc`, `cat`, `cd`, `chflag`, `chflags`, `chgrp`, `chksum`,
+`chown`, `cksum`, `chmod`, `compress`, `cp`, `curl`, `date`, `dc`, `df`, `diff`,
+`dig`, `du`, `echo`, `ed`, `egrep`, `env`, `fgrep`, `find`, `grep`, `groups`,
+`gunzip`, `gzip`, `head`, `host`, `id`, `ifconfig`, `link`, `ln`, `ls`, `md5`,
+`mkdir`, `mv`, `nc`, `nslookup`, `pbcopy`, `pbpaste`, `ping`, `pwd`, `readlink`,
+`rlogin`, `rm`, `rmdir`, `sort`, `stat`, `sum`, `tail`, `tar`, `tee`, `telnet`,
+`touch`, `tr`, `unalias`, `unlink`, `uniq`, `uncompress`, `uptime`, `wc`,
+`whoami`, `whois`, `xargs`, and `wol`. Some are also listed above as app
+commands because Blink provides or overrides their entry points. Shell
+operations also include pipes and input/output redirection.
+
+This is the bundled host command inventory, not a general Linux environment.
+`apk` is not a bundled host command; use `ish` for Alpine/Linux tools. Installing
+a `.wasm` file in `Documents/bin` registers the filename
+(without `.wasm`) as a host command on the next app launch. `pkg list` shows the
+available prebuilt WASI packages.
 
 Use `terminal` for supported, foreground host operations and files in the
 current workspace. The Hermes Agent terminal tool does not support background
