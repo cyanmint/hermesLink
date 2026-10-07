@@ -25,6 +25,8 @@ REPLACEMENTS = (
             '\t\tD2ED4A6E239BB12E000DC67F /* KeyCaptureView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = KeyCaptureView.swift; sourceTree = "<group>"; };\n'
             '\t\tD2F30EAC205009CD008C5F35 /* base64js.min.js */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.javascript; path = base64js.min.js; sourceTree = "<group>"; };\n'
             '\t\tF10000020000000000000001 /* hermes.m */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.objc; path = hermes.m; sourceTree = "<group>"; };\n'
+            '\t\tF2A5A0030000000000000001 /* wasm.m */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.objc; path = wasm.m; sourceTree = "<group>"; };\n'
+            '\t\tF2A5A0040000000000000001 /* WasmRuntime */ = {isa = PBXFileReference; lastKnownFileType = folder; path = WasmRuntime; sourceTree = "<group>"; };\n'
             '\t\tF10000090000000000000001 /* HermesRuntime.framework */ = {isa = PBXFileReference; lastKnownFileType = wrapper.framework; path = HermesRuntime.framework; sourceTree = "<group>"; };\n'
             '\t\tF10000060000000000000001 /* hermesrt.zip */ = {isa = PBXFileReference; lastKnownFileType = archive.zip; path = hermesrt.zip; sourceTree = "<group>"; };\n'
             '\t\tF1A1CE550000000000000001 /* ish.m */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.objc; path = ish.m; sourceTree = "<group>"; };\n'

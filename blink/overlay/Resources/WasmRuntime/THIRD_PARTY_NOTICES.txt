@@ -1,0 +1,9 @@
+The bundled browser runtime is from a-Shell commit
+fb5c04f40140b30b9815545cc8ebf84c3e03a7e2:
+
+- @wasmer/wasi 0.10.2, MIT License, Copyright 2017 Syrus.
+- @wasmer/wasmfs 0.10.2, MIT License, Copyright 2017 Syrus.
+
+Both generated browser bundles also retain their Apache License 2.0 notices for
+the Microsoft-authored code included in those bundles. The corresponding Apache
+License 2.0 text is available at https://www.apache.org/licenses/LICENSE-2.0.

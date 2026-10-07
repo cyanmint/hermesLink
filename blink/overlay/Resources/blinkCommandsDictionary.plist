@@ -58,6 +58,20 @@
 		<string></string>
 		<string>no</string>
 	</array>
+	<key>wasm</key>
+	<array>
+		<string>MAIN</string>
+		<string>wasm_main</string>
+		<string></string>
+		<string>no</string>
+	</array>
+	<key>pkg</key>
+	<array>
+		<string>MAIN</string>
+		<string>pkg_main</string>
+		<string></string>
+		<string>no</string>
+	</array>
 	<key>ish</key>
 	<array>
 		<string>MAIN</string>
@@ -76,6 +90,41 @@
 	<array>
 		<string>MAIN</string>
 		<string>python_main</string>
+		<string></string>
+		<string>no</string>
+	</array>
+	<key>python3</key>
+	<array>
+		<string>MAIN</string>
+		<string>python_main</string>
+		<string></string>
+		<string>no</string>
+	</array>
+	<key>export</key>
+	<array>
+		<string>shell.framework/shell</string>
+		<string>export_main</string>
+		<string></string>
+		<string>no</string>
+	</array>
+	<key>setenv</key>
+	<array>
+		<string>shell.framework/shell</string>
+		<string>setenv_main</string>
+		<string></string>
+		<string>no</string>
+	</array>
+	<key>unsetenv</key>
+	<array>
+		<string>shell.framework/shell</string>
+		<string>unsetenv_main</string>
+		<string></string>
+		<string>no</string>
+	</array>
+	<key>printenv</key>
+	<array>
+		<string>shell.framework/shell</string>
+		<string>printenv_main</string>
 		<string></string>
 		<string>no</string>
 	</array>

@@ -25,6 +25,8 @@ REPLACEMENTS = (
             '\t\tD2ED4A6F239BB12E000DC67F /* KeyCaptureView.swift in Sources */ = {isa = PBXBuildFile; fileRef = D2ED4A6E239BB12E000DC67F /* KeyCaptureView.swift */; };\n'
             '\t\tD2F30EAD205009CD008C5F35 /* base64js.min.js in Resources */ = {isa = PBXBuildFile; fileRef = D2F30EAC205009CD008C5F35 /* base64js.min.js */; };\n'
             '\t\tF10000010000000000000001 /* hermes.m in Sources */ = {isa = PBXBuildFile; fileRef = F10000020000000000000001 /* hermes.m */; };\n'
+            '\t\tF2A5A0010000000000000001 /* wasm.m in Sources */ = {isa = PBXBuildFile; fileRef = F2A5A0030000000000000001 /* wasm.m */; };\n'
+            '\t\tF2A5A0020000000000000001 /* WasmRuntime in Resources */ = {isa = PBXBuildFile; fileRef = F2A5A0040000000000000001 /* WasmRuntime */; };\n'
             '\t\tF10000070000000000000001 /* HermesRuntime.framework in Frameworks */ = {isa = PBXBuildFile; fileRef = F10000090000000000000001 /* HermesRuntime.framework */; };\n'
             '\t\tF10000080000000000000001 /* HermesRuntime.framework in Embed Frameworks */ = {isa = PBXBuildFile; fileRef = F10000090000000000000001 /* HermesRuntime.framework */; settings = {ATTRIBUTES = (CodeSignOnCopy, RemoveHeadersOnCopy, ); }; };\n'
             '\t\tF10000050000000000000001 /* hermesrt.zip in Resources */ = {isa = PBXBuildFile; fileRef = F10000060000000000000001 /* hermesrt.zip */; };\n'

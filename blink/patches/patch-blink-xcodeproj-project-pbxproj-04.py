@@ -25,6 +25,7 @@ REPLACEMENTS = (
             '\t\t\t\tD2F330D320A6F1DF0074ADD7 /* clear.m */,\n'
             '\t\t\t\tD2F330CB20A6D98C0074ADD7 /* config.m */,\n'
             '\t\t\t\tF10000020000000000000001 /* hermes.m */,\n'
+            '\t\t\t\tF2A5A0030000000000000001 /* wasm.m */,\n'
             '\t\t\t\tF1A1CE550000000000000001 /* ish.m */,\n'
             '\t\t\t\tF1A1CE5A0000000000000001 /* ishfs.m */,\n'
             '\t\t\t\tD264D2B528F84724002B1B14 /* whatsnew.m */,\n'

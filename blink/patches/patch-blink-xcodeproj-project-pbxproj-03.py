@@ -25,6 +25,7 @@ REPLACEMENTS = (
             '\t\t\t\tC944375F1D831CD30096F84E /* Themes */,\n'
             '\t\t\t\t0732F04A1D062B9A00AB5438 /* locales.bundle */,\n'
             '\t\t\t\tF10000060000000000000001 /* hermesrt.zip */,\n'
+            '\t\t\t\tF2A5A0040000000000000001 /* WasmRuntime */,\n'
             '\t\t\t\t314E2F04FE0F5B60CB0D4E61 /* ish-rootfs.tar.gz */,\n'
             '\t\t\t);\n'
             '\t\t\tpath = Resources;\n'

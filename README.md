@@ -67,6 +67,21 @@ When needed, run this inside iSH:
 The helper mounts Documents at `/mnt/documents`. The host-backed mount has
 limited filesystem semantics; it is not a general Linux filesystem.
 
+The host shell includes a WebKit-based WASI runtime. Use `wasm file.wasm` to
+run a WebAssembly module and `pkg list` to see the available downloads.
+`pkg install <name>` installs a curated module from a-Shell-commands into
+`Documents/bin`; installed command names are added to the shell at app startup.
+WASI runs with a virtual copy of the current Documents workspace, and changed
+files are written back there. Interactive terminal input, sockets, and process
+spawning are not available to WASI modules.
+
+`Documents/bin` is added to `PATH`. `clang`, the WASI SDK, and other
+[a-Shell-commands](https://github.com/holzschu/a-Shell-commands) tools are not
+bundled; install them yourself into `Documents/bin`. Review upstream package
+licenses before installing commands. The native Python runtime is available as
+both `python` and `python3`. Use `export NAME=value` to export shell variables;
+running `sh` starts a nested shell that exits with `exit`.
+
 The Agent's `ish` tool runs foreground commands only, with a default timeout of
 180 seconds and a maximum of 600 seconds. It cannot provide an interactive
 terminal session or leave a command running in the background.
