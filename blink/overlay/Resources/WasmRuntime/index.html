@@ -60,7 +60,7 @@ window.runWasm = async function (input) {
   let stderr = "";
   let files = { directories: [], files: [], size: 0 };
   try {
-    const wasmFs = new WasmFs();
+    const wasmFs = new WasmFs.WasmFs();
     const fs = wasmFs.fs;
     ensureDirectory(fs, input.cwd);
     for (const directory of input.directories) {
@@ -73,7 +73,7 @@ window.runWasm = async function (input) {
     }
     if (input.stdin) fs.writeFileSync("/dev/stdin", base64ToBytes(input.stdin));
 
-    const wasi = new WASI({
+    const wasi = new WASI.WASI({
       args: input.args,
       env: input.env,
       preopens: { ".": input.cwd, "/": "/" },

@@ -25,6 +25,12 @@ class WasmCommandIntegrationTests(unittest.TestCase):
     def test_runtime_uses_webkit_wasi_and_keeps_installed_programs_in_documents_bin(self):
         command = (ROOT / "blink/overlay/Blink/Commands/wasm.m").read_text(encoding="utf-8")
         page = (ROOT / "blink/overlay/Resources/WasmRuntime/index.html").read_text(encoding="utf-8")
+        wasi_bundle = (ROOT / "blink/overlay/Resources/WasmRuntime/wasmer-wasi.js").read_text(
+            encoding="utf-8"
+        )
+        wasmfs_bundle = (ROOT / "blink/overlay/Resources/WasmRuntime/wasmer-wasmfs.js").read_text(
+            encoding="utf-8"
+        )
 
         for token in (
             "WKWebView",
@@ -37,9 +43,27 @@ class WasmCommandIntegrationTests(unittest.TestCase):
         ):
             with self.subTest(token=token):
                 self.assertIn(token, command)
-        for token in ("new WASI(", "new WasmFs()", "WebAssembly.Module", "preopens:", "hermesWasm"):
+        for token in (
+            "new WASI.WASI(",
+            "new WasmFs.WasmFs()",
+            "WebAssembly.Module",
+            "preopens:",
+            "hermesWasm",
+        ):
             with self.subTest(token=token):
                 self.assertIn(token, page)
+        self.assertTrue(wasi_bundle.startswith("/*"))
+        self.assertTrue(wasmfs_bundle.startswith("/*"))
+        self.assertIn("Y.WASI=ec", wasi_bundle)
+        self.assertIn("Ya.WasmFs=Xc", wasmfs_bundle)
+
+    def test_user_installed_clang_wasm_is_registered_as_a_shell_command(self):
+        command = (ROOT / "blink/overlay/Blink/Commands/wasm.m").read_text(encoding="utf-8")
+
+        self.assertIn('[filename.pathExtension isEqualToString:@"wasm"]', command)
+        self.assertIn('stringByDeletingPathExtension', command)
+        self.assertIn('commands[name] = @[@"MAIN", @"wasm_main", @"", @"no"]', command)
+        self.assertIn('stringByAppendingPathExtension:@"wasm"', command)
 
     def test_blink_patch_registers_user_bin_after_profile_environment_setup(self):
         patch = (ROOT / "blink/patches/patch-blink-appdelegate-m.py").read_text(encoding="utf-8")
