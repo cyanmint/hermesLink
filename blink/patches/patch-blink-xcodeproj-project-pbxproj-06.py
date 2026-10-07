@@ -53,24 +53,26 @@ REPLACEMENTS = (
         ),
     ),
     (
-        4506,
+        0,
         (
+            '\t\t\t\tPRODUCT_BUNDLE_IDENTIFIER = "$(BUNDLE_ID).BlinkFileProviderTests";\n'
+            '\t\t\t\tPRODUCT_NAME = "$(TARGET_NAME)";\n'
+            '\t\t\t\tSWIFT_ACTIVE_COMPILATION_CONDITIONS = "DEBUG $(inherited)";\n'
+            '\t\t\t\tSWIFT_EMIT_LOC_STRINGS = NO;\n'
             '\t\t\t\tSWIFT_OPTIMIZATION_LEVEL = "-Onone";\n'
             '\t\t\t\tSWIFT_VERSION = 5.0;\n'
             '\t\t\t\tTARGETED_DEVICE_FAMILY = "1,2";\n'
             '\t\t\t\tTEST_HOST = "$(BUILT_PRODUCTS_DIR)/Blink.app/$(BUNDLE_EXECUTABLE_FOLDER_PATH)/Blink";\n'
-            '\t\t\t};\n'
-            '\t\t\tname = Debug;\n'
-            '\t\t};\n'
         ),
         (
+            '\t\t\t\tPRODUCT_BUNDLE_IDENTIFIER = "$(BUNDLE_ID).BlinkFileProviderTests";\n'
+            '\t\t\t\tPRODUCT_NAME = "$(TARGET_NAME)";\n'
+            '\t\t\t\tSWIFT_ACTIVE_COMPILATION_CONDITIONS = "DEBUG $(inherited)";\n'
+            '\t\t\t\tSWIFT_EMIT_LOC_STRINGS = NO;\n'
             '\t\t\t\tSWIFT_OPTIMIZATION_LEVEL = "-Onone";\n'
             '\t\t\t\tSWIFT_VERSION = 5.0;\n'
             '\t\t\t\tTARGETED_DEVICE_FAMILY = "1,2";\n'
             '\t\t\t\tTEST_HOST = "$(BUILT_PRODUCTS_DIR)/HermesLink.app/$(BUNDLE_EXECUTABLE_FOLDER_PATH)/HermesLink";\n'
-            '\t\t\t};\n'
-            '\t\t\tname = Debug;\n'
-            '\t\t};\n'
         ),
     ),
 )

@@ -181,6 +181,50 @@ class BlinkSourcePatchTests(unittest.TestCase):
                 self.assertIn(exclude, self.script)
         self.assertNotIn("--exclude='/Frameworks'", self.script)
 
+    def test_blink_files_test_host_patch_targets_its_unique_build_settings(self) -> None:
+        patch_path = PATCH_DIR / "patch-blink-xcodeproj-project-pbxproj-06.py"
+        tree = ast.parse(patch_path.read_text(encoding="utf-8"))
+        replacements = next(
+            node.value
+            for node in tree.body
+            if isinstance(node, ast.Assign)
+            and any(
+                isinstance(target, ast.Name) and target.id == "REPLACEMENTS"
+                for target in node.targets
+            )
+        )
+        replacement = ast.literal_eval(replacements)[2]
+        source = (
+            'TEST_HOST = "$(BUILT_PRODUCTS_DIR)/Blink.app/$(BUNDLE_EXECUTABLE_FOLDER_PATH)/Blink";\n'
+            + replacement[1]
+            + 'TEST_HOST = "$(BUILT_PRODUCTS_DIR)/Blink.app/$(BUNDLE_EXECUTABLE_FOLDER_PATH)/Blink";\n'
+        )
+        sys.path.insert(0, PATCH_DIR.as_posix())
+        try:
+            from _patch_utils import apply_file
+        finally:
+            sys.path.pop(0)
+
+        with tempfile.TemporaryDirectory() as temporary_directory:
+            project = Path(temporary_directory) / "Blink.xcodeproj"
+            project.mkdir()
+            (project / "project.pbxproj").write_text(source, encoding="utf-8")
+            apply_file(
+                Path(temporary_directory),
+                "Blink.xcodeproj/project.pbxproj",
+                (replacement,),
+                "test-blink-files-test-host",
+            )
+            patched_source = (project / "project.pbxproj").read_text(encoding="utf-8")
+
+        self.assertEqual(patched_source.count(replacement[2]), 1)
+        self.assertEqual(
+            patched_source.count(
+                'TEST_HOST = "$(BUILT_PRODUCTS_DIR)/Blink.app/$(BUNDLE_EXECUTABLE_FOLDER_PATH)/Blink";'
+            ),
+            2,
+        )
+
     def test_unavailable_icloud_container_does_not_create_a_nil_directory(self) -> None:
         patch = PATCH_DIR / "patch-blinkconfig-blinkpaths-m.py"
         source = (

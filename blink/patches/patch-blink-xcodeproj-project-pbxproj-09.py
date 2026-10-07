@@ -32,8 +32,22 @@ REPLACEMENTS = (
         ),
     ),
     (
-        5414,
+        0,
         (
+            '\t\t\t\tENABLE_TESTABILITY = YES;\n'
+            '\t\t\t\tGCC_PREPROCESSOR_DEFINITIONS = (\n'
+            '\t\t\t\t\t"DEBUG=1",\n'
+            '\t\t\t\t\t"$(inherited)",\n'
+            '\t\t\t\t);\n'
+            '\t\t\t\tINFOPLIST_FILE = Blink/Info.plist;\n'
+            '\t\t\t\tINFOPLIST_KEY_CFBundleDisplayName = HermesLink;\n'
+            '\t\t\t\tINFOPLIST_KEY_LSApplicationCategoryType = "public.app-category.developer-tools";\n'
+            '\t\t\t\tIPHONEOS_DEPLOYMENT_TARGET = 17.6;\n'
+            '\t\t\t\tLD_RUNPATH_SEARCH_PATHS = (\n'
+            '\t\t\t\t\t"$(inherited)",\n'
+            '\t\t\t\t\t"@executable_path/Frameworks",\n'
+            '\t\t\t\t);\n'
+            '\t\t\t\tLIBRARY_SEARCH_PATHS = (\n'
             '\t\t\t\t\t"$(inherited)",\n'
             '\t\t\t\t\t"$(PROJECT_DIR)/Frameworks",\n'
             '\t\t\t\t);\n'
@@ -42,6 +56,20 @@ REPLACEMENTS = (
             '\t\t\t\tOTHER_CFLAGS = "$(BLINK_OTHER_CFLAGS)";\n'
         ),
         (
+            '\t\t\t\tENABLE_TESTABILITY = YES;\n'
+            '\t\t\t\tGCC_PREPROCESSOR_DEFINITIONS = (\n'
+            '\t\t\t\t\t"DEBUG=1",\n'
+            '\t\t\t\t\t"$(inherited)",\n'
+            '\t\t\t\t);\n'
+            '\t\t\t\tINFOPLIST_FILE = Blink/Info.plist;\n'
+            '\t\t\t\tINFOPLIST_KEY_CFBundleDisplayName = HermesLink;\n'
+            '\t\t\t\tINFOPLIST_KEY_LSApplicationCategoryType = "public.app-category.developer-tools";\n'
+            '\t\t\t\tIPHONEOS_DEPLOYMENT_TARGET = 17.6;\n'
+            '\t\t\t\tLD_RUNPATH_SEARCH_PATHS = (\n'
+            '\t\t\t\t\t"$(inherited)",\n'
+            '\t\t\t\t\t"@executable_path/Frameworks",\n'
+            '\t\t\t\t);\n'
+            '\t\t\t\tLIBRARY_SEARCH_PATHS = (\n'
             '\t\t\t\t\t"$(inherited)",\n'
             '\t\t\t\t\t"$(PROJECT_DIR)/Frameworks",\n'
             '\t\t\t\t);\n'

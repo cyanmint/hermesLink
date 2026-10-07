@@ -11,8 +11,10 @@ PATCH_NAME = 'patch-blink-xcodeproj-project-pbxproj-07'
 TARGET = 'Blink.xcodeproj/project.pbxproj'
 REPLACEMENTS = (
     (
-        4540,
+        0,
         (
+            '\t\t\t\tPRODUCT_BUNDLE_IDENTIFIER = "$(BUNDLE_ID).BlinkFileProviderTests";\n'
+            '\t\t\t\tPRODUCT_NAME = "$(TARGET_NAME)";\n'
             '\t\t\t\tSWIFT_EMIT_LOC_STRINGS = NO;\n'
             '\t\t\t\tSWIFT_VERSION = 5.0;\n'
             '\t\t\t\tTARGETED_DEVICE_FAMILY = "1,2";\n'
@@ -22,6 +24,8 @@ REPLACEMENTS = (
             '\t\t};\n'
         ),
         (
+            '\t\t\t\tPRODUCT_BUNDLE_IDENTIFIER = "$(BUNDLE_ID).BlinkFileProviderTests";\n'
+            '\t\t\t\tPRODUCT_NAME = "$(TARGET_NAME)";\n'
             '\t\t\t\tSWIFT_EMIT_LOC_STRINGS = NO;\n'
             '\t\t\t\tSWIFT_VERSION = 5.0;\n'
             '\t\t\t\tTARGETED_DEVICE_FAMILY = "1,2";\n'
@@ -32,8 +36,12 @@ REPLACEMENTS = (
         ),
     ),
     (
-        5165,
+        0,
         (
+            '\t\t\t\tPRODUCT_BUNDLE_IDENTIFIER = "$(BUNDLE_ID).BlinkSnippetsTests";\n'
+            '\t\t\t\tPRODUCT_NAME = "$(TARGET_NAME)";\n'
+            '\t\t\t\tSWIFT_ACTIVE_COMPILATION_CONDITIONS = DEBUG;\n'
+            '\t\t\t\tSWIFT_EMIT_LOC_STRINGS = NO;\n'
             '\t\t\t\tSWIFT_OPTIMIZATION_LEVEL = "-Onone";\n'
             '\t\t\t\tSWIFT_VERSION = 5.0;\n'
             '\t\t\t\tTARGETED_DEVICE_FAMILY = "1,2";\n'
@@ -43,6 +51,10 @@ REPLACEMENTS = (
             '\t\t};\n'
         ),
         (
+            '\t\t\t\tPRODUCT_BUNDLE_IDENTIFIER = "$(BUNDLE_ID).BlinkSnippetsTests";\n'
+            '\t\t\t\tPRODUCT_NAME = "$(TARGET_NAME)";\n'
+            '\t\t\t\tSWIFT_ACTIVE_COMPILATION_CONDITIONS = DEBUG;\n'
+            '\t\t\t\tSWIFT_EMIT_LOC_STRINGS = NO;\n'
             '\t\t\t\tSWIFT_OPTIMIZATION_LEVEL = "-Onone";\n'
             '\t\t\t\tSWIFT_VERSION = 5.0;\n'
             '\t\t\t\tTARGETED_DEVICE_FAMILY = "1,2";\n'
@@ -53,8 +65,10 @@ REPLACEMENTS = (
         ),
     ),
     (
-        5196,
+        0,
         (
+            '\t\t\t\tPRODUCT_BUNDLE_IDENTIFIER = "$(BUNDLE_ID).BlinkSnippetsTests";\n'
+            '\t\t\t\tPRODUCT_NAME = "$(TARGET_NAME)";\n'
             '\t\t\t\tSWIFT_EMIT_LOC_STRINGS = NO;\n'
             '\t\t\t\tSWIFT_VERSION = 5.0;\n'
             '\t\t\t\tTARGETED_DEVICE_FAMILY = "1,2";\n'
@@ -64,6 +78,8 @@ REPLACEMENTS = (
             '\t\t};\n'
         ),
         (
+            '\t\t\t\tPRODUCT_BUNDLE_IDENTIFIER = "$(BUNDLE_ID).BlinkSnippetsTests";\n'
+            '\t\t\t\tPRODUCT_NAME = "$(TARGET_NAME)";\n'
             '\t\t\t\tSWIFT_EMIT_LOC_STRINGS = NO;\n'
             '\t\t\t\tSWIFT_VERSION = 5.0;\n'
             '\t\t\t\tTARGETED_DEVICE_FAMILY = "1,2";\n'
