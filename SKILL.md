@@ -58,16 +58,16 @@ The Blink command registry provides these app commands:
 
 The app also bundles these `ios_system` commands:
 
-`alias`, `awk`, `bc`, `cat`, `cd`, `chflag`, `chflags`, `chgrp`, `chksum`,
-`chown`, `cksum`, `chmod`, `compress`, `cp`, `curl`, `date`, `dc`, `df`, `diff`,
-`dig`, `du`, `echo`, `ed`, `egrep`, `env`, `fgrep`, `find`, `grep`, `groups`,
-`gunzip`, `gzip`, `head`, `host`, `id`, `ifconfig`, `link`, `ln`, `ls`, `md5`,
-`mkdir`, `mv`, `nc`, `nslookup`, `pbcopy`, `pbpaste`, `ping`, `pwd`, `readlink`,
-`rlogin`, `rm`, `rmdir`, `sort`, `stat`, `sum`, `tail`, `tar`, `tee`, `telnet`,
-`touch`, `tr`, `unalias`, `unlink`, `uniq`, `uncompress`, `uptime`, `wc`,
-`whoami`, `whois`, `xargs`, and `wol`. Some are also listed above as app
-commands because Blink provides or overrides their entry points. Shell
-operations also include pipes and input/output redirection.
+`alias`, `awk`, `bc`, `cat`, `cd`, `chflags`, `cksum`, `chmod`, `compress`,
+`cp`, `curl`, `date`, `dc`, `diff`, `dig`, `du`, `echo`, `ed`, `egrep`, `env`,
+`fgrep`, `find`, `grep`, `gunzip`, `gzip`, `head`, `host`, `ifconfig`, `link`,
+`ln`, `ls`, `md5`, `mkdir`, `mv`, `nc`, `nslookup`, `pbcopy`, `pbpaste`, `ping`,
+`pwd`, `readlink`, `rlogin`, `rm`, `rmdir`, `sort`, `stat`, `sum`, `tail`,
+`tar`, `tee`, `telnet`, `touch`, `tr`, `unalias`, `uname`, `unlink`, `uniq`,
+`uncompress`, `uptime`, `wc`, `whoami`, `whois`, `xargs`, and `wol`. Commands
+provided or overridden by Blink (such as `open`, `sh`, and the SSH commands)
+are listed above. Shell operations also include pipes and input/output
+redirection.
 
 This is the bundled host command inventory, not a general Linux environment.
 `apk` is not a bundled host command; use `ish` for Alpine/Linux tools. Installing

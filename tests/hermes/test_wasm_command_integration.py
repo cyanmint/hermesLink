@@ -23,6 +23,29 @@ class WasmCommandIntegrationTests(unittest.TestCase):
         self.assertEqual(commands["printenv"][1], "printenv_main")
         self.assertEqual(commands["sh"], ["SELF", "sh_main", "c:h:", "file"])
 
+    def test_skill_documents_every_registered_host_command_and_common_ios_utilities(self):
+        commands = plistlib.loads(
+            (ROOT / "blink/overlay/Resources/blinkCommandsDictionary.plist").read_bytes()
+        )
+        skill = (ROOT / "SKILL.md").read_text(encoding="utf-8")
+
+        for name in commands:
+            with self.subTest(command=name):
+                self.assertIn(f"`{name}`", skill)
+        ios_system_commands = (
+            "alias", "awk", "bc", "cat", "cd", "chflags", "cksum", "chmod", "compress",
+            "cp", "curl", "date", "dc", "diff", "dig", "du", "echo", "ed", "egrep",
+            "env", "fgrep", "find", "grep", "gunzip", "gzip", "head", "host", "ifconfig",
+            "link", "ln", "ls", "md5", "mkdir", "mv", "nc", "nslookup", "pbcopy",
+            "pbpaste", "ping", "pwd", "readlink", "rlogin", "rm", "rmdir", "sort",
+            "stat", "sum", "tail", "tar", "tee", "telnet", "touch", "tr", "unalias",
+            "uname", "unlink", "uniq", "uncompress", "uptime", "wc", "whoami", "whois",
+            "xargs", "wol",
+        )
+        for name in ios_system_commands:
+            with self.subTest(command=name):
+                self.assertIn(f"`{name}`", skill)
+
     def test_runtime_uses_webkit_wasi_and_keeps_installed_programs_in_documents_bin(self):
         command = (ROOT / "blink/overlay/Blink/Commands/wasm.m").read_text(encoding="utf-8")
         page = (ROOT / "blink/overlay/Resources/WasmRuntime/index.html").read_text(encoding="utf-8")
@@ -66,6 +89,7 @@ class WasmCommandIntegrationTests(unittest.TestCase):
         self.assertIn('stringByAppendingPathComponent:@"clang.wasm"', command)
         self.assertIn("static int HermesInstallLLVM22(void)", command)
         self.assertIn("llvm-22.tar.gz", command)
+        self.assertIn("CC_SHA256", command)
         self.assertIn('fputs("  llvm-22 (LLVM/clang C SDK)\\n", thread_stdout);', command)
         self.assertIn('[filename.pathExtension isEqualToString:@"wasm"]', command)
         self.assertIn('stringByDeletingPathExtension', command)

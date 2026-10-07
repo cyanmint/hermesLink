@@ -3,6 +3,7 @@
 #import <Foundation/Foundation.h>
 #import <UIKit/UIKit.h>
 #import <WebKit/WebKit.h>
+#import <CommonCrypto/CommonDigest.h>
 #include <limits.h>
 #include <stdio.h>
 #include <stdlib.h>
@@ -539,9 +540,10 @@ static int HermesInstallLLVM22(void) {
     response = (NSHTTPURLResponse *)received;
     requestError = receivedError;
     if (location != nil && receivedError == nil) {
-      downloadedFile = [temporaryDirectory stringByAppendingPathComponent:@"download.tmp"];
+      downloadedFile = [NSURL fileURLWithPath:
+        [temporaryDirectory stringByAppendingPathComponent:@"download.tmp"]];
       [[NSFileManager defaultManager] moveItemAtURL:location
-          toURL:[NSURL fileURLWithPath:downloadedFile.path] error:&requestError];
+          toURL:downloadedFile error:&requestError];
     }
     dispatch_semaphore_signal(semaphore);
   }] resume];
@@ -562,13 +564,26 @@ static int HermesInstallLLVM22(void) {
     [fileManager attributesOfItemAtPath:downloadedFile.path error:nil];
   unsigned long long archiveSize = [archiveAttributes[NSFileSize] unsignedLongLongValue];
   if (requestError != nil || response.statusCode != 200 || archiveSize == 0 ||
-      archiveSize > 1024ULL * 1024 * 1024 ||
+      archiveSize > 64ULL * 1024 * 1024 ||
       ![response.URL.scheme.lowercaseString isEqualToString:@"https"] ||
       ![allowedHosts containsObject:host]) {
     [fileManager removeItemAtPath:temporaryDirectory error:nil];
     fprintf(thread_stderr, "pkg: failed to download LLVM/clang SDK%s%s\n",
       requestError == nil ? "" : ": ",
       requestError.localizedDescription.UTF8String ?: "");
+    return 1;
+  }
+  NSData *archiveData = [NSData dataWithContentsOfFile:downloadedFile.path];
+  unsigned char digest[CC_SHA256_DIGEST_LENGTH];
+  CC_SHA256(archiveData.bytes, (CC_LONG)archiveData.length, digest);
+  NSMutableString *checksum = [NSMutableString stringWithCapacity:CC_SHA256_DIGEST_LENGTH * 2];
+  for (NSUInteger index = 0; index < CC_SHA256_DIGEST_LENGTH; index++) {
+    [checksum appendFormat:@"%02x", digest[index]];
+  }
+  if (![checksum isEqualToString:@"a9143caaccccf30b205959bcc6f264f9d2f22572919278400406e500224db7"]) {
+    [fileManager removeItemAtPath:temporaryDirectory error:nil];
+    fputs("pkg: downloaded LLVM/clang SDK checksum does not match the pinned release\n",
+          thread_stderr);
     return 1;
   }
   if (![fileManager moveItemAtPath:downloadedFile.path toPath:archivePath error:&error]) {

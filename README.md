@@ -75,10 +75,10 @@ WASI runs with a virtual copy of the current Documents workspace, and changed
 files are written back there. Interactive terminal input, sockets, and process
 spawning are not available to WASI modules.
 
-`Documents/bin` is added to `PATH`. `pkg install llvm-22` downloads the upstream
-LLVM/clang C SDK into `Documents/Library`, matching a-Shell's setup. This SDK
-does not include the clang compiler executable. The `clang` command displays
-a-Shell's C SDK hint and can run a user-provided `clang.wasm` from
+`Documents/bin` is added to `PATH`. Run `pkg install llvm-22` to download the
+upstream LLVM/clang C SDK into `Documents/Library`, matching a-Shell's setup.
+This SDK does not include the clang compiler executable. The `clang` command
+displays a-Shell's C SDK hint and can run a user-provided `clang.wasm` from
 `Documents/bin`. Review upstream package licenses before installing commands.
 The native Python runtime is available as both `python` and `python3`. Use
 `export NAME=value` to export shell variables; running `sh` starts a nested
