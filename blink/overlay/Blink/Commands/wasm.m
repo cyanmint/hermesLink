@@ -453,7 +453,7 @@ int wasm_main(int argc, char **argv) {
       environment[key] = value;
     }];
   NSMutableDictionary *payload = [@{
-    @"module": module.base64EncodedStringWithOptions:0,
+    @"module": [module base64EncodedStringWithOptions:0],
     @"args": arguments,
     @"cwd": currentDirectory,
     @"env": environment,
