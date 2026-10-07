@@ -82,6 +82,12 @@ licenses before installing commands. The native Python runtime is available as
 both `python` and `python3`. Use `export NAME=value` to export shell variables;
 running `sh` starts a nested shell that exits with `exit`.
 
+User-provided `Documents/bin/<name>.wasm` modules are registered as shell
+commands named `<name>`; for example, `clang.wasm` is invoked as `clang`.
+The pinned a-Shell-commands release does not provide a `clang.wasm` asset, so
+`pkg` cannot install a clang compiler; its LLVM archives contain support files,
+not the clang executable.
+
 The Agent's `ish` tool runs foreground commands only, with a default timeout of
 180 seconds and a maximum of 600 seconds. It cannot provide an interactive
 terminal session or leave a command running in the background.
