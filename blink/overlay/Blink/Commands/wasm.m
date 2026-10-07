@@ -165,7 +165,7 @@ static NSDictionary *HermesWasmFileTree(NSString *root, NSString *excludedPath,
     }
     NSData *data = [NSData dataWithContentsOfURL:url options:0 error:error];
     if (data == nil) return nil;
-    [files addObject:@{@"path": relativePath, @"data": data.base64EncodedStringWithOptions:0}];
+    [files addObject:@{@"path": relativePath, @"data": [data base64EncodedStringWithOptions:0]}];
   }
   return @{@"directories": directories, @"files": files};
 }
@@ -459,7 +459,7 @@ int wasm_main(int argc, char **argv) {
     @"env": environment,
     @"directories": tree[@"directories"],
     @"files": tree[@"files"],
-    @"stdin": stdinData.base64EncodedStringWithOptions:0,
+    @"stdin": [stdinData base64EncodedStringWithOptions:0],
   } mutableCopy];
   NSDictionary *result = [[HermesWasmRunner sharedRunner] run:payload error:&error];
   if (result == nil) {
