@@ -71,9 +71,14 @@ The host shell includes a WebKit-based WASI runtime. Use `wasm file.wasm` to
 run a WebAssembly module and `pkg list` to see the available downloads.
 `pkg install <name>` installs a curated module from a-Shell-commands into
 `Documents/bin`; installed command names are added to the shell at app startup.
-WASI runs with a virtual copy of the current Documents workspace, and changed
-files are written back there. Interactive terminal input, sockets, and process
-spawning are not available to WASI modules.
+WASI uses an in-memory filesystem and preopens the current working-directory
+path as `.` plus `/`, following a-Shell's Wasmer setup. It does not recursively
+copy the host directory into WebKit or copy WASI file changes back to the host,
+so large host folders do not stall module startup. WASI modules can use their
+virtual filesystem, but it is not a live view of host files. The working
+directory and module may be anywhere the app can read, including outside
+`Documents`. Interactive terminal input, sockets, and process spawning are not
+available to WASI modules.
 
 `Documents/bin` is added to `PATH`. Run `pkg install llvm-22` to download the
 upstream LLVM/clang C SDK into `Documents/Library`, matching a-Shell's setup.

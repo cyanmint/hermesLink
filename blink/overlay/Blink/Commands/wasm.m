@@ -37,13 +37,6 @@ static NSString *HermesArgument(const char *argument) {
   return argument == NULL ? @"" : [NSString stringWithUTF8String:argument];
 }
 
-static BOOL HermesPathIsInside(NSString *path, NSString *root) {
-  NSString *resolvedPath = [path stringByResolvingSymlinksInPath].stringByStandardizingPath;
-  NSString *resolvedRoot = [root stringByResolvingSymlinksInPath].stringByStandardizingPath;
-  return [resolvedPath isEqualToString:resolvedRoot] ||
-         [resolvedPath hasPrefix:[resolvedRoot stringByAppendingString:@"/"]];
-}
-
 static BOOL HermesSafeCommandName(NSString *name) {
   if (name.length == 0 || name.length > 80) return NO;
   NSCharacterSet *allowed = [NSCharacterSet characterSetWithCharactersInString:
@@ -120,125 +113,20 @@ static NSString *HermesWasmFilePath(NSString *argument, NSString *currentDirecto
       [candidates addObject:[candidate stringByAppendingPathExtension:@"wasm"]];
     }
   }
-  NSString *documents = HermesDocumentsPath();
   for (NSString *candidate in candidates) {
     NSString *resolved = candidate.stringByStandardizingPath;
-    if ([fileManager fileExistsAtPath:resolved] && HermesPathIsInside(resolved, documents)) {
+    NSDictionary *attributes = [fileManager attributesOfItemAtPath:resolved error:nil];
+    if ([attributes[NSFileType] isEqualToString:NSFileTypeRegular] &&
+        [fileManager isReadableFileAtPath:resolved]) {
       return resolved;
     }
   }
   return nil;
 }
 
-static NSDictionary *HermesWasmFileTree(NSString *root, NSString *excludedPath,
-                                        NSError **error) {
-  NSFileManager *fileManager = [NSFileManager defaultManager];
-  NSMutableArray *directories = [NSMutableArray array];
-  NSMutableArray *files = [NSMutableArray array];
-  unsigned long long totalBytes = 0;
-  NSDirectoryEnumerator *enumerator = [fileManager enumeratorAtURL:
-    [NSURL fileURLWithPath:root isDirectory:YES]
-    includingPropertiesForKeys:@[NSURLIsDirectoryKey, NSURLIsRegularFileKey, NSURLIsSymbolicLinkKey,
-                                 NSURLFileSizeKey]
-    options:0 errorHandler:^BOOL(NSURL *url, NSError *enumerationError) {
-      if (error) *error = enumerationError;
-      return NO;
-    }];
-  for (NSURL *url in enumerator) {
-    NSDictionary *values = [url resourceValuesForKeys:
-      @[@"NSURLIsDirectoryKey", @"NSURLIsRegularFileKey", @"NSURLIsSymbolicLinkKey",
-        @"NSURLFileSizeKey"] error:error];
-    if (values == nil) return nil;
-    if ([values[NSURLIsSymbolicLinkKey] boolValue]) {
-      [enumerator skipDescendants];
-      continue;
-    }
-    NSString *path = url.path.stringByStandardizingPath;
-    if ([path isEqualToString:excludedPath]) continue;
-    NSString *relativePath = [path substringFromIndex:root.length + 1];
-    if ([values[NSURLIsDirectoryKey] boolValue]) {
-      [directories addObject:relativePath];
-      continue;
-    }
-    if (![values[NSURLIsRegularFileKey] boolValue]) continue;
-    unsigned long long size = [values[NSURLFileSizeKey] unsignedLongLongValue];
-    totalBytes += size;
-    if (totalBytes > 16 * 1024 * 1024) {
-      if (error) *error = [NSError errorWithDomain:@"HermesLinkWasm"
-        code:1 userInfo:@{NSLocalizedDescriptionKey:
-          @"The current directory exceeds the 16 MiB WASM filesystem transfer limit."}];
-      return nil;
-    }
-    NSData *data = [NSData dataWithContentsOfURL:url options:0 error:error];
-    if (data == nil) return nil;
-    [files addObject:@{@"path": relativePath, @"data": [data base64EncodedStringWithOptions:0]}];
-  }
-  return @{@"directories": directories, @"files": files};
-}
-
 static NSData *HermesDecodeBase64(id value) {
   if (![value isKindOfClass:[NSString class]]) return nil;
   return [[NSData alloc] initWithBase64EncodedString:value options:0];
-}
-
-static BOOL HermesSafeRelativePath(NSString *path) {
-  if (![path isKindOfClass:[NSString class]] || path.length == 0 ||
-      path.isAbsolutePath || [path containsString:@"\\"] || [path containsString:@"\0"]) {
-    return NO;
-  }
-  for (NSString *part in path.pathComponents) {
-    if ([part isEqualToString:@".."] || [part isEqualToString:@"."]) return NO;
-  }
-  return YES;
-}
-
-static BOOL HermesPrepareDirectoryPath(NSString *relativePath, NSString *root) {
-  if (relativePath.length == 0) return YES;
-  if (!HermesSafeRelativePath(relativePath)) return NO;
-  NSFileManager *fileManager = [NSFileManager defaultManager];
-  NSString *cursor = root;
-  for (NSString *component in relativePath.pathComponents) {
-    cursor = [cursor stringByAppendingPathComponent:component];
-    NSDictionary *attributes = [fileManager attributesOfItemAtPath:cursor error:nil];
-    if (attributes != nil) {
-      if (![attributes[NSFileType] isEqualToString:NSFileTypeDirectory]) return NO;
-      continue;
-    }
-    if (![fileManager createDirectoryAtPath:cursor withIntermediateDirectories:NO
-                                  attributes:nil error:nil]) return NO;
-  }
-  return YES;
-}
-
-static BOOL HermesApplyWasmFiles(NSDictionary *result, NSDictionary *initialTree,
-                                 NSString *workingDirectory) {
-  NSFileManager *fileManager = [NSFileManager defaultManager];
-  NSMutableSet<NSString *> *written = [NSMutableSet set];
-  for (id relativePath in result[@"directories"] ?: @[]) {
-    if (!HermesSafeRelativePath(relativePath) ||
-        !HermesPrepareDirectoryPath(relativePath, workingDirectory)) return NO;
-  }
-  for (id entry in result[@"files"] ?: @[]) {
-    if (![entry isKindOfClass:[NSDictionary class]]) return NO;
-    NSString *relativePath = entry[@"path"];
-    NSData *data = HermesDecodeBase64(entry[@"data"]);
-    if (data == nil || !HermesSafeRelativePath(relativePath)) return NO;
-    NSString *parent = relativePath.stringByDeletingLastPathComponent;
-    if ([parent isEqualToString:@"."]) parent = @"";
-    if (!HermesPrepareDirectoryPath(parent, workingDirectory)) return NO;
-    NSString *destination = [workingDirectory stringByAppendingPathComponent:relativePath];
-    if (!HermesPathIsInside(destination, workingDirectory) ||
-        ![data writeToFile:destination options:NSDataWritingAtomic error:nil]) return NO;
-    [written addObject:relativePath];
-  }
-  for (NSDictionary *entry in initialTree[@"files"] ?: @[]) {
-    NSString *relativePath = entry[@"path"];
-    if (![written containsObject:relativePath]) {
-      NSString *path = [workingDirectory stringByAppendingPathComponent:relativePath];
-      if (HermesPathIsInside(path, workingDirectory)) [fileManager removeItemAtPath:path error:nil];
-    }
-  }
-  return YES;
 }
 
 @interface HermesWasmRunner : NSObject <WKScriptMessageHandler, WKNavigationDelegate>
@@ -415,9 +303,12 @@ int wasm_main(int argc, char **argv) {
     [[HermesArgument(argv[0]) lastPathComponent] isEqualToString:@"wasm"];
   NSString *currentDirectory = [NSFileManager.defaultManager currentDirectoryPath]
     .stringByStandardizingPath;
-  NSString *documents = HermesDocumentsPath();
-  if (!HermesPathIsInside(currentDirectory, documents)) {
-    fprintf(thread_stderr, "wasm: working directory must be inside Documents\n");
+  NSFileManager *fileManager = NSFileManager.defaultManager;
+  NSDictionary *directoryAttributes = [fileManager attributesOfItemAtPath:currentDirectory
+                                                                      error:nil];
+  if (![directoryAttributes[NSFileType] isEqualToString:NSFileTypeDirectory] ||
+      ![fileManager isReadableFileAtPath:currentDirectory]) {
+    fprintf(thread_stderr, "wasm: current working directory is unavailable\n");
     return 126;
   }
   NSString *moduleArgument = wasmSubcommand
@@ -429,7 +320,7 @@ int wasm_main(int argc, char **argv) {
   }
   NSString *modulePath = HermesWasmFilePath(moduleArgument, currentDirectory, resolveFromPath);
   if (modulePath == nil) {
-    fprintf(thread_stderr, "wasm: module not found in Documents: %s\n",
+    fprintf(thread_stderr, "wasm: module not found or unreadable: %s\n",
             moduleArgument.UTF8String);
     return 127;
   }
@@ -441,9 +332,8 @@ int wasm_main(int argc, char **argv) {
   }
 
   NSError *error = nil;
-  NSDictionary *tree = HermesWasmFileTree(currentDirectory, modulePath, &error);
   NSData *stdinData = HermesReadWasmInput(thread_stdin, &error);
-  if (tree == nil || stdinData == nil) {
+  if (stdinData == nil) {
     fprintf(thread_stderr, "wasm: %s\n", error.localizedDescription.UTF8String ?: "input error");
     return 1;
   }
@@ -463,8 +353,6 @@ int wasm_main(int argc, char **argv) {
     @"args": arguments,
     @"cwd": currentDirectory,
     @"env": environment,
-    @"directories": tree[@"directories"],
-    @"files": tree[@"files"],
     @"stdin": [stdinData base64EncodedStringWithOptions:0],
   } mutableCopy];
   NSDictionary *result = [[HermesWasmRunner sharedRunner] run:payload error:&error];
@@ -478,10 +366,6 @@ int wasm_main(int argc, char **argv) {
   if (stderrData.length > 0) fwrite(stderrData.bytes, 1, stderrData.length, thread_stderr);
   NSString *wasmError = result[@"error"];
   if (wasmError.length > 0) fprintf(thread_stderr, "wasm: %s\n", wasmError.UTF8String);
-  if (!HermesApplyWasmFiles(result, tree, currentDirectory)) {
-    fprintf(thread_stderr, "wasm: unable to safely write WASI filesystem changes\n");
-    return 1;
-  }
   fflush(thread_stdout);
   fflush(thread_stderr);
   return [result[@"status"] intValue];

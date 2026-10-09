@@ -81,6 +81,24 @@ class WasmCommandIntegrationTests(unittest.TestCase):
         self.assertIn("Y.WASI=ec", wasi_bundle)
         self.assertIn("Ya.WasmFs=Xc", wasmfs_bundle)
 
+    def test_wasm_uses_a_shell_style_preopens_without_copying_host_directory_trees(self):
+        command = (ROOT / "blink/overlay/Blink/Commands/wasm.m").read_text(encoding="utf-8")
+        page = (ROOT / "blink/overlay/Resources/WasmRuntime/index.html").read_text(encoding="utf-8")
+        readme = (ROOT / "README.md").read_text(encoding="utf-8")
+
+        self.assertIn("current working directory is unavailable", command)
+        self.assertIn('"cwd": currentDirectory', command)
+        self.assertNotIn("HermesWasmFileTree", command)
+        self.assertNotIn("HermesApplyWasmFiles", command)
+        self.assertNotIn("working directory must be inside Documents", command)
+        self.assertNotIn('HermesPathIsInside(resolved, documents)', command)
+        self.assertIn("ensureDirectory(fs, input.cwd);", page)
+        self.assertIn('preopens: { ".": input.cwd, "/": "/" }', page)
+        self.assertNotIn("collectFiles", page)
+        self.assertNotIn("input.directories", page)
+        self.assertNotIn("input.files", page)
+        self.assertIn("does not recursively", readme)
+
     def test_user_installed_clang_wasm_is_registered_as_a_shell_command(self):
         command = (ROOT / "blink/overlay/Blink/Commands/wasm.m").read_text(encoding="utf-8")
 

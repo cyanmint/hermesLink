@@ -32,45 +32,15 @@ function ensureDirectory(fs, path) {
   }
 }
 
-function collectFiles(fs, directory, prefix, result) {
-  for (const name of fs.readdirSync(directory)) {
-    if (directory === "/" && name === "dev") continue;
-    const path = directory === "/" ? `/${name}` : `${directory}/${name}`;
-    const relative = prefix ? `${prefix}/${name}` : name;
-    const stat = fs.lstatSync(path);
-    if (stat.isSymbolicLink()) continue;
-    if (stat.isDirectory()) {
-      result.directories.push(relative);
-      collectFiles(fs, path, relative, result);
-    } else if (stat.isFile()) {
-      const content = fs.readFileSync(path);
-      result.files.push({ path: relative, data: bytesToBase64(content) });
-      result.size += content.length;
-      if (result.size > 32 * 1024 * 1024) {
-        throw new Error("WASM output files exceed the 32 MiB transfer limit");
-      }
-    }
-  }
-}
-
 window.runWasm = async function (input) {
   let status = 0;
   let errorText = "";
   let stdout = "";
   let stderr = "";
-  let files = { directories: [], files: [], size: 0 };
   try {
     const wasmFs = new WasmFs.WasmFs();
     const fs = wasmFs.fs;
     ensureDirectory(fs, input.cwd);
-    for (const directory of input.directories) {
-      ensureDirectory(fs, `${input.cwd}/${directory}`);
-    }
-    for (const file of input.files) {
-      const path = `${input.cwd}/${file.path}`;
-      ensureDirectory(fs, path.slice(0, path.lastIndexOf("/")));
-      fs.writeFileSync(path, base64ToBytes(file.data));
-    }
     if (input.stdin) fs.writeFileSync("/dev/stdin", base64ToBytes(input.stdin));
 
     const wasi = new WASI.WASI({
@@ -89,7 +59,6 @@ window.runWasm = async function (input) {
     }
     stdout = bytesToBase64(fs.readFileSync("/dev/stdout"));
     stderr = bytesToBase64(fs.readFileSync("/dev/stderr"));
-    collectFiles(fs, input.cwd, "", files);
   } catch (error) {
     status = Number.isInteger(error.code) ? error.code : 1;
     errorText = String(error.message || error);
@@ -100,8 +69,6 @@ window.runWasm = async function (input) {
     error: errorText,
     stdout,
     stderr,
-    directories: files.directories,
-    files: files.files,
   });
 };
 
