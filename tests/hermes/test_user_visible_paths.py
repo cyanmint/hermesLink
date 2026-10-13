@@ -25,6 +25,9 @@ class UserVisiblePathTests(unittest.TestCase):
         mcp_session = (ROOT / "Sessions" / "MCPSession.m").read_text(encoding="utf-8")
         blink_paths = (ROOT / "BlinkConfig" / "BlinkPaths.m").read_text(encoding="utf-8")
 
+        self.assertIn('setenv("HOME", documentsPath.UTF8String, 1);', app_delegate)
+        self.assertIn('setenv("SSH_HOME", documentsPath.UTF8String, 1);', app_delegate)
+        self.assertIn('setenv("CURL_HOME", documentsPath.UTF8String, 1);', app_delegate)
         self.assertIn('NSString *hermesHomePath = [BlinkPaths hermesHomePath];', app_delegate)
         self.assertIn('setenv("HERMES_HOME", hermesHomePath.UTF8String, 1);', app_delegate)
         self.assertIn('setenv("HERMES_RUNTIME_ROOT", hermesHomePath.UTF8String, 1);', app_delegate)
@@ -32,6 +35,9 @@ class UserVisiblePathTests(unittest.TestCase):
         self.assertIn('setenv("TERMINAL_CWD", documentsPath.UTF8String, 1);', app_delegate)
         self.assertIn('chdir(documentsPath.UTF8String);', app_delegate)
         self.assertIn('NSString *documentsPath = [BlinkPaths documentsPath];', mcp_session)
+        self.assertIn('setenv("HOME", documentsPath.UTF8String, 1);', mcp_session)
+        self.assertIn('setenv("SSH_HOME", documentsPath.UTF8String, 1);', mcp_session)
+        self.assertIn('setenv("CURL_HOME", documentsPath.UTF8String, 1);', mcp_session)
         self.assertIn('[[NSFileManager defaultManager] createDirectoryAtPath:documentsPath', mcp_session)
         self.assertIn('NSString *hermesHomePath = [BlinkPaths hermesHomePath];', mcp_session)
         self.assertIn('setenv("HERMES_HOME", hermesHomePath.UTF8String, 1);', mcp_session)
@@ -41,6 +47,20 @@ class UserVisiblePathTests(unittest.TestCase):
         self.assertIn('chdir(documentsPath.UTF8String);', mcp_session)
         self.assertNotIn('stringByAppendingPathComponent:@"Documents"', mcp_session)
         self.assertIn('[[self documentsPath] stringByAppendingPathComponent:@"HermesHome"]', blink_paths)
+
+    def test_blink_patches_default_home_and_ssh_curl_homes_to_documents(self):
+        app_delegate_patch = (ROOT / "blink/patches/patch-blink-appdelegate-m.py").read_text(
+            encoding="utf-8"
+        )
+        mcp_session_patch = (ROOT / "blink/patches/patch-sessions-mcpsession-m.py").read_text(
+            encoding="utf-8"
+        )
+
+        for patch in (app_delegate_patch, mcp_session_patch):
+            with self.subTest(patch=patch[:40]):
+                self.assertIn('setenv("HOME", documentsPath.UTF8String, 1);', patch)
+                self.assertIn('setenv("SSH_HOME", documentsPath.UTF8String, 1);', patch)
+                self.assertIn('setenv("CURL_HOME", documentsPath.UTF8String, 1);', patch)
 
     @unittest.skipUnless(
         BLINK_SOURCE_AVAILABLE,
