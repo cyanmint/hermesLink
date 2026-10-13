@@ -88,6 +88,17 @@ class BlinkSourcePatchTests(unittest.TestCase):
                 )
                 self.assertIn('chdir(documentsPath.UTF8String);', patched_source)
                 self.assertNotIn('stringByAppendingPathComponent:@"workspace"', patched_source)
+                self.assertIn('setenv("HOME", documentsPath.UTF8String, 1);', patched_source)
+                self.assertIn('setenv("SSH_HOME", documentsPath.UTF8String, 1);', patched_source)
+                self.assertIn('setenv("CURL_HOME", documentsPath.UTF8String, 1);', patched_source)
+                if patch_name == "patch-blink-appdelegate-m.py":
+                    self.assertLess(
+                        patched_source.index("[AppDelegate _loadProfileVars];"),
+                        patched_source.index('setenv("HOME", documentsPath.UTF8String, 1);'),
+                    )
+                else:
+                    self.assertIn("ios_setMiniRoot(documentsPath);", patched_source)
+                    self.assertNotIn("ios_setMiniRoot(homePath);", patched_source)
 
     def test_app_version_is_bumped_and_build_number_defaults_to_zero(self) -> None:
         version_patches = "\n".join(

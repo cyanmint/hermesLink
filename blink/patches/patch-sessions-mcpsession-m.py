@@ -42,17 +42,13 @@ REPLACEMENTS = (
         ),
         (
             '\n'
-            '    NSString *homePath = [BlinkPaths homePath];\n'
-            '    ios_setMiniRoot(homePath);\n'
-            '    // Use the real shared Documents directory, not homePath/Documents: the\n'
-            '    // latter is a symlink created asynchronously and can become a private\n'
-            '    // shadow folder if a session starts before that link is installed.\n'
             '    NSString *documentsPath = [BlinkPaths documentsPath];\n'
             '    NSString *hermesHomePath = [BlinkPaths hermesHomePath];\n'
             '    [[NSFileManager defaultManager] createDirectoryAtPath:documentsPath\n'
             '                               withIntermediateDirectories:YES\n'
             '                                                attributes:nil\n'
             '                                                 error:nil];\n'
+            '    ios_setMiniRoot(documentsPath);\n'
             '    setenv("HOME", documentsPath.UTF8String, 1);\n'
             '    setenv("SSH_HOME", documentsPath.UTF8String, 1);\n'
             '    setenv("CURL_HOME", documentsPath.UTF8String, 1);\n'
